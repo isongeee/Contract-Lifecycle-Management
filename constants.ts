@@ -1,4 +1,4 @@
-import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet, UserNotificationSettings } from './types';
+import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet, UserNotificationSettings, CounterpartyType } from './types';
 import type { UserProfile, Counterparty, Property } from './types';
 
 export const STATUS_COLORS: Record<ContractStatus, string> = {
@@ -36,11 +36,11 @@ export const USERS: Record<string, FullUserProfile> = {
 };
 
 export const COUNTERPARTIES: Record<string, Counterparty> = {
-    'acme': { id: 'cp-1', name: 'Acme Corporation', address: '123 Main St, Anytown, USA' },
-    'globex': { id: 'cp-2', name: 'Globex Inc.', address: '456 Market St, Metropolis, USA' },
-    'stark': { id: 'cp-3', name: 'Stark Industries', address: '1 Stark Tower, New York, USA' },
-    'cyberdyne': { id: 'cp-5', name: 'Cyberdyne Systems', address: '18144 El Camino Real, Sunnyvale, CA' },
-    'wayne': { id: 'cp-6', name: 'Wayne Enterprises', address: '1007 Mountain Drive, Gotham City' },
+    'acme': { id: 'cp-1', name: 'Acme Corporation', type: CounterpartyType.VENDOR, addressLine1: '123 Main St', city: 'Anytown', state: 'CA', zipCode: '91234', country: 'USA' },
+    'globex': { id: 'cp-2', name: 'Globex Inc.', type: CounterpartyType.PARTNER, addressLine1: '456 Market St', city: 'Metropolis', state: 'NY', zipCode: '10001', country: 'USA' },
+    'stark': { id: 'cp-3', name: 'Stark Industries', type: CounterpartyType.SUPPLIER, addressLine1: '1 Stark Tower', city: 'New York', state: 'NY', zipCode: '10001', country: 'USA' },
+    'cyberdyne': { id: 'cp-5', name: 'Cyberdyne Systems', type: CounterpartyType.CUSTOMER, addressLine1: '18144 El Camino Real', city: 'Sunnyvale', state: 'CA', zipCode: '94087', country: 'USA' },
+    'wayne': { id: 'cp-6', name: 'Wayne Enterprises', type: CounterpartyType.PARTNER, addressLine1: '1007 Mountain Drive', city: 'Gotham City', state: 'NJ', zipCode: '07001', country: 'USA' },
 };
 
 export const MOCK_PROPERTIES: Record<string, Property> = {
@@ -171,7 +171,7 @@ export const MOCK_CONTRACTS: Contract[] = [
     type: ContractType.SAAS,
     status: ContractStatus.FULLY_SIGNED,
     riskLevel: RiskLevel.LOW,
-    counterparty: { id: 'cp-4', name: 'CloudService Pro', address: '789 Cloud Ave, Tech City, USA' },
+    counterparty: { id: 'cp-4', name: 'CloudService Pro', type: CounterpartyType.VENDOR, addressLine1: '789 Cloud Ave', city: 'Tech City', state: 'CA', zipCode: '94000', country: 'USA' },
     owner: USERS['alice'],
     startDate: '2024-06-01',
     endDate: '2025-05-31',

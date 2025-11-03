@@ -46,6 +46,14 @@ export enum ContractFrequency {
     SEASONAL = 'Seasonal',
 }
 
+export enum CounterpartyType {
+  CUSTOMER = 'Customer',
+  VENDOR = 'Vendor',
+  PARTNER = 'Partner',
+  SUPPLIER = 'Supplier',
+  CONTRACTOR = 'Contractor',
+}
+
 export interface UserProfile {
   id: string;
   firstName: string;
@@ -63,7 +71,13 @@ export interface UserProfile {
 export interface Counterparty {
   id: string;
   name:string;
-  address: string;
+  type: CounterpartyType;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
   contactName?: string;
   contactEmail?: string;
   contactPhone?: string;
