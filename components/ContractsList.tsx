@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { Contract } from '../types';
+import type { Contract, UserProfile } from '../types';
 import { ContractStatus, ContractType, RiskLevel } from '../types';
 import StatusTag from './StatusTag';
 import { SearchIcon, ChevronDownIcon, PlusIcon } from './icons';
@@ -9,6 +9,7 @@ interface ContractsListProps {
   onSelectContract: (contract: Contract) => void;
   onStartCreate: () => void;
   initialFilters?: { status?: string; riskLevels?: RiskLevel[]; ownerId?: string };
+  currentUser: UserProfile;
 }
 
 interface FilterOption {
@@ -36,7 +37,7 @@ const typeOptions = Object.values(ContractType).map(t => ({ value: t, label: t }
 const statusOptions = Object.values(ContractStatus).map(s => ({ value: s, label: s }));
 const riskOptions = Object.values(RiskLevel).map(r => ({ value: r, label: r }));
 
-export default function ContractsList({ contracts, onSelectContract, onStartCreate, initialFilters = {} }: ContractsListProps) {
+export default function ContractsList({ contracts, onSelectContract, onStartCreate, initialFilters = {}, currentUser }: ContractsListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState(initialFilters.status || '');
   const [typeFilter, setTypeFilter] = useState('');

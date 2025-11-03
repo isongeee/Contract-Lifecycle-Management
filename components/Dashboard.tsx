@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
-import type { Contract } from '../types';
+import type { Contract, UserProfile } from '../types';
 import { ContractStatus, RiskLevel } from '../types';
-import { STATUS_COLORS, USERS } from '../constants';
+import { STATUS_COLORS } from '../constants';
 import { FileTextIcon, UsersIcon, DollarSignIcon, AlertTriangleIcon, ClockIcon, UserIcon } from './icons';
 
 // A utility to format currency
@@ -103,14 +103,14 @@ const ExpiringContracts = ({ contracts }: { contracts: Contract[] }) => {
 };
 
 
-export default function Dashboard({ contracts, onMetricClick }: { contracts: Contract[]; onMetricClick: (metric: 'active' | 'pending' | 'high-risk' | 'my-contracts') => void; }) {
+export default function Dashboard({ contracts, onMetricClick, currentUser }: { contracts: Contract[]; onMetricClick: (metric: 'active' | 'pending' | 'high-risk' | 'my-contracts') => void; currentUser: UserProfile; }) {
 
     const metrics = useMemo(() => {
         const activeContracts = contracts.filter(c => c.status === ContractStatus.ACTIVE);
         const pendingApproval = contracts.filter(c => c.status === ContractStatus.PENDING_APPROVAL);
         const highRisk = contracts.filter(c => c.riskLevel === RiskLevel.HIGH || c.riskLevel === RiskLevel.CRITICAL);
         const totalValue = activeContracts.reduce((sum, c) => sum + c.value, 0);
-        const myContracts = contracts.filter(c => c.owner.id === USERS['alice'].id);
+        const myContracts = contracts.filter(c => c.owner.id === currentUser.id);
 
         return {
             activeCount: activeContracts.length,
@@ -119,13 +119,13 @@ export default function Dashboard({ contracts, onMetricClick }: { contracts: Con
             totalValue: totalValue,
             myContractsCount: myContracts.length,
         };
-    }, [contracts]);
+    }, [contracts, currentUser]);
 
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Contracts Dashboard</h1>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">An overview of your contract portfolio.</p>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Welcome back, {currentUser.firstName}!</h1>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Here's an overview of your contract portfolio.</p>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

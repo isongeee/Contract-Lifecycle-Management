@@ -32,9 +32,9 @@ export default function ApprovalRequestCard({ contract, onApprove, onReject, cur
                     </div>
                 </div>
                 <div className="mt-4 flex items-center space-x-3">
-                    <img className="h-8 w-8 rounded-full" src={contract.owner.avatarUrl} alt={contract.owner.name} />
+                    <img className="h-8 w-8 rounded-full" src={contract.owner.avatarUrl} alt={`${contract.owner.firstName} ${contract.owner.lastName}`} />
                     <div>
-                        <p className="text-sm font-medium text-gray-700">{contract.owner.name}</p>
+                        <p className="text-sm font-medium text-gray-700">{`${contract.owner.firstName} ${contract.owner.lastName}`}</p>
                         <p className="text-xs text-gray-500">Requested on {contract.versions[contract.versions.length - 1].createdAt}</p>
                     </div>
                 </div>

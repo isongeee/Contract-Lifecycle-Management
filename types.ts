@@ -48,10 +48,14 @@ export enum ContractFrequency {
 
 export interface UserProfile {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
+  phone?: string;
+  jobTitle?: string;
+  department?: string;
   avatarUrl: string;
-  role: string; // This would be a role ID in a real DB
+  role: string; // e.g. 'Admin', 'Legal Counsel'
   status: 'active' | 'inactive';
   lastLogin: string;
 }
@@ -160,4 +164,13 @@ export interface NotificationSetting {
   email: boolean;
   inApp: boolean;
   sms: boolean;
+}
+
+export interface UserNotificationSettings {
+  id: string;
+  userId: string;
+  renewals: { email: boolean; inApp: boolean };
+  approvals: { email: boolean; inApp: boolean };
+  tasks: { email: boolean; inApp: boolean };
+  system: { email: boolean; inApp: boolean };
 }

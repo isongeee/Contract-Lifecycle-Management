@@ -34,7 +34,7 @@ const ApprovalWidget = ({ steps }: { steps: Contract['approvalSteps']}) => (
                            {index + 1}
                         </span>
                         <div className="ml-2">
-                             <h4 className="flex items-center mb-1 text-md font-semibold text-gray-900">{step.approver.name}
+                             <h4 className="flex items-center mb-1 text-md font-semibold text-gray-900">{`${step.approver.firstName} ${step.approver.lastName}`}
                                 <span className={`ml-2 text-xs font-medium px-2 py-0.5 rounded-full ${APPROVAL_STATUS_COLORS[step.status]}`}>
                                     {step.status}
                                 </span>
@@ -62,11 +62,11 @@ const VersionHistory = ({ versions }: { versions: Contract['versions'] }) => (
             {versions.slice().reverse().map(v => (
                 <li key={v.id} className="flex items-start space-x-3">
                     <div className="flex-shrink-0">
-                        <img className="h-8 w-8 rounded-full" src={v.author.avatarUrl} alt={v.author.name} />
+                        <img className="h-8 w-8 rounded-full" src={v.author.avatarUrl} alt={`${v.author.firstName} ${v.author.lastName}`} />
                     </div>
                     <div>
                         <p className="text-sm font-medium text-gray-800">Version {v.versionNumber}</p>
-                        <p className="text-sm text-gray-500">by {v.author.name} on {v.createdAt}</p>
+                        <p className="text-sm text-gray-500">by {`${v.author.firstName} ${v.author.lastName}`} on {v.createdAt}</p>
                         <p className="text-xs text-gray-500 mt-1">
                           Value: <span className="font-semibold">{formatCurrency(v.value)}</span> | End Date: <span className="font-semibold">{v.endDate}</span>
                         </p>
@@ -215,8 +215,8 @@ export default function ContractDetail({ contract: initialContract, properties, 
                 )}
                 <DetailItem label="Owner" value={
                     <div className="flex items-center space-x-2">
-                        <img className="h-6 w-6 rounded-full" src={contract.owner.avatarUrl} alt={contract.owner.name} />
-                        <span>{contract.owner.name}</span>
+                        <img className="h-6 w-6 rounded-full" src={contract.owner.avatarUrl} alt={`${contract.owner.firstName} ${contract.owner.lastName}`} />
+                        <span>{`${contract.owner.firstName} ${contract.owner.lastName}`}</span>
                     </div>
                 } />
             </dl>

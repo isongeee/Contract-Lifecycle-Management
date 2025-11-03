@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import type { Contract, Counterparty, UserProfile, Property } from '../types';
 import { ContractType, ContractStatus, RiskLevel, ContractFrequency } from '../types';
@@ -9,6 +8,7 @@ interface CreateContractWorkflowProps {
   properties: Property[];
   onCancel: () => void;
   onFinish: (newContractData: Partial<Contract>) => void;
+  currentUser: UserProfile;
 }
 
 const STEPS = [
@@ -125,7 +125,7 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth }: St
                     </FormField>
                     <FormField label="Contract Owner" className="sm:col-span-full">
                         <SelectInput value={data.owner?.id} onChange={e => setData('owner', Object.values(USERS).find(u => u.id === e.target.value))}>
-                            {Object.values(USERS).map((user: UserProfile) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                            {Object.values(USERS).map((user: UserProfile) => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}
                         </SelectInput>
                     </FormField>
                     <FormField label="Start Date">
@@ -479,7 +479,7 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
                 <SummaryItem label="Counterparty" value={data.counterparty?.name} />
                 <SummaryItem label="Property Association" value={propertyDisplay()} />
                 <SummaryItem label="Contract Type" value={data.type} />
-                <SummaryItem label="Contract Owner" value={data.owner?.name} />
+                <SummaryItem label="Contract Owner" value={`${data.owner?.firstName} ${data.owner?.lastName}`} />
                 <SummaryItem label="Total Value" value={new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(data.value || 0)} />
                 <SummaryItem label="Start Date" value={data.startDate} />
                 <SummaryItem label="End Date" value={data.endDate} />
@@ -495,7 +495,7 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
 }
 
 
-export default function CreateContractWorkflow({ onCancel, onFinish, properties }: CreateContractWorkflowProps) {
+export default function CreateContractWorkflow({ onCancel, onFinish, properties, currentUser }: CreateContractWorkflowProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [newContractData, setNewContractData] = useState<Partial<Contract> & { propertyAllocations?: any[] }>({
       title: 'New Seasonal Contract',
@@ -503,7 +503,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties 
       status: ContractStatus.DRAFT,
       riskLevel: RiskLevel.LOW,
       value: 120000,
-      owner: USERS['alice'],
+      owner: currentUser,
       counterparty: Object.values(COUNTERPARTIES)[0],
       property: properties[0],
       startDate: new Date().toISOString().split('T')[0],
@@ -566,7 +566,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties 
         id: `v1-${Date.now()}`,
         versionNumber: 1,
         createdAt: new Date().toISOString().split('T')[0],
-        author: USERS['alice'],
+        author: currentUser,
         content: finalContent,
         value: newContractData.value || 0,
         startDate: newContractData.startDate || '',

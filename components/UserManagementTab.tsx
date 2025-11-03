@@ -19,7 +19,7 @@ export default function UserManagementTab({ users, roles, setUsers }: UserManage
     
     const filteredUsers = useMemo(() => {
         return users.filter(user => 
-            (user.name.toLowerCase().includes(searchTerm.toLowerCase()) || user.email.toLowerCase().includes(searchTerm.toLowerCase())) &&
+            ((`${user.firstName} ${user.lastName}`).toLowerCase().includes(searchTerm.toLowerCase()) || user.email.toLowerCase().includes(searchTerm.toLowerCase())) &&
             (roleFilter === '' || user.role === roleFilter) &&
             (statusFilter === '' || user.status === statusFilter)
         );
@@ -89,7 +89,7 @@ export default function UserManagementTab({ users, roles, setUsers }: UserManage
                                     <div className="flex items-center">
                                         <img className="h-8 w-8 rounded-full" src={user.avatarUrl} alt="" />
                                         <div className="ml-3">
-                                            <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                                            <div className="text-sm font-medium text-gray-900">{`${user.firstName} ${user.lastName}`}</div>
                                             <div className="text-sm text-gray-500">{user.email}</div>
                                         </div>
                                     </div>

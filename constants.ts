@@ -1,4 +1,4 @@
-import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet } from './types';
+import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet, UserNotificationSettings } from './types';
 import type { UserProfile, Counterparty, Property } from './types';
 
 export const STATUS_COLORS: Record<ContractStatus, string> = {
@@ -28,12 +28,11 @@ export const APPROVAL_STATUS_COLORS: Record<ApprovalStatus, string> = {
     [ApprovalStatus.APPROVED]: 'bg-green-100 text-green-800',
 };
 
-
-export const USERS: Record<string, UserProfile> = {
-    'alice': { id: 'user-1', name: 'Alice Johnson', email: 'alice.j@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-1', role: 'Legal Counsel', status: 'active', lastLogin: '2024-07-30' },
-    'bob': { id: 'user-2', name: 'Bob Williams', email: 'bob.w@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-2', role: 'Sales Director', status: 'active', lastLogin: '2024-07-29' },
-    'charlie': { id: 'user-3', name: 'Charlie Brown', email: 'charlie.b@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-3', role: 'Finance Manager', status: 'active', lastLogin: '2024-07-30' },
-    'diana': { id: 'user-4', name: 'Diana Prince', email: 'diana.p@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-4', role: 'Requestor', status: 'inactive', lastLogin: '2024-06-15' },
+export const USERS: Record<string, FullUserProfile> = {
+    'alice': { id: 'user-1', firstName: 'Alice', lastName: 'Johnson', email: 'alice.j@example.com', phone: '111-222-3333', jobTitle: 'Senior Counsel', department: 'Legal', avatarUrl: 'https://i.pravatar.cc/150?u=user-1', role: 'Admin', status: 'active', lastLogin: '2024-07-30' },
+    'bob': { id: 'user-2', firstName: 'Bob', lastName: 'Williams', email: 'bob.w@example.com', phone: '222-333-4444', jobTitle: 'Sales Director', department: 'Sales', avatarUrl: 'https://i.pravatar.cc/150?u=user-2', role: 'Sales Director', status: 'active', lastLogin: '2024-07-29' },
+    'charlie': { id: 'user-3', firstName: 'Charlie', lastName: 'Brown', email: 'charlie.b@example.com', phone: '333-444-5555', jobTitle: 'Finance Manager', department: 'Finance', avatarUrl: 'https://i.pravatar.cc/150?u=user-3', role: 'Finance Manager', status: 'active', lastLogin: '2024-07-30' },
+    'diana': { id: 'user-4', firstName: 'Diana', lastName: 'Prince', email: 'diana.p@example.com', phone: '444-555-6666', jobTitle: 'Procurement Specialist', department: 'Procurement', avatarUrl: 'https://i.pravatar.cc/150?u=user-4', role: 'Requestor', status: 'inactive', lastLogin: '2024-06-15' },
 };
 
 export const COUNTERPARTIES: Record<string, Counterparty> = {
@@ -307,14 +306,14 @@ export const MOCK_ROLES: Role[] = [
 
 export const MOCK_FULL_USER_LIST: FullUserProfile[] = [
     ...Object.values(USERS),
-    { id: 'user-5', name: 'Eve Adams', email: 'eve.a@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-5', role: 'Finance Manager', status: 'active', lastLogin: '2024-07-30' },
-    { id: 'user-6', name: 'Frank Miller', email: 'frank.m@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-6', role: 'Sales Director', status: 'active', lastLogin: '2024-07-28' },
-    { id: 'user-7', name: 'Grace Lee', email: 'grace.l@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-7', role: 'Requestor', status: 'active', lastLogin: '2024-07-29' },
-    { id: 'user-8', name: 'Henry Wilson', email: 'henry.w@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-8', role: 'Finance Manager', status: 'inactive', lastLogin: '2024-05-20' },
-    { id: 'user-9', name: 'Ivy Chen', email: 'ivy.c@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-9', role: 'Sales Director', status: 'active', lastLogin: '2024-07-25' },
-    { id: 'user-10', name: 'Jack Taylor', email: 'jack.t@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-10', role: 'Requestor', status: 'active', lastLogin: '2024-07-30' },
-    { id: 'user-11', name: 'Karen Rodriguez', email: 'karen.r@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-11', role: 'Finance Manager', status: 'active', lastLogin: '2024-07-29' },
-    { id: 'user-12', name: 'Leo Martinez', email: 'leo.m@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-12', role: 'Admin', status: 'active', lastLogin: '2024-07-30' },
+    { id: 'user-5', firstName: 'Eve', lastName: 'Adams', email: 'eve.a@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-5', role: 'Finance Manager', status: 'active', lastLogin: '2024-07-30' },
+    { id: 'user-6', firstName: 'Frank', lastName: 'Miller', email: 'frank.m@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-6', role: 'Sales Director', status: 'active', lastLogin: '2024-07-28' },
+    { id: 'user-7', firstName: 'Grace', lastName: 'Lee', email: 'grace.l@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-7', role: 'Requestor', status: 'active', lastLogin: '2024-07-29' },
+    { id: 'user-8', firstName: 'Henry', lastName: 'Wilson', email: 'henry.w@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-8', role: 'Finance Manager', status: 'inactive', lastLogin: '2024-05-20' },
+    { id: 'user-9', firstName: 'Ivy', lastName: 'Chen', email: 'ivy.c@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-9', role: 'Sales Director', status: 'active', lastLogin: '2024-07-25' },
+    { id: 'user-10', firstName: 'Jack', lastName: 'Taylor', email: 'jack.t@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-10', role: 'Requestor', status: 'active', lastLogin: '2024-07-30' },
+    { id: 'user-11', firstName: 'Karen', lastName: 'Rodriguez', email: 'karen.r@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-11', role: 'Finance Manager', status: 'active', lastLogin: '2024-07-29' },
+    { id: 'user-12', firstName: 'Leo', lastName: 'Martinez', email: 'leo.m@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-12', role: 'Admin', status: 'active', lastLogin: '2024-07-30' },
 ];
 
 export const MOCK_NOTIFICATION_SETTINGS: NotificationSetting[] = [
@@ -323,3 +322,12 @@ export const MOCK_NOTIFICATION_SETTINGS: NotificationSetting[] = [
     { id: 'notif-3', type: 'New User Signups', description: 'Admin-only notification for when a new user joins the organization.', email: true, inApp: false, sms: false },
     { id: 'notif-4', type: 'System Alerts', description: 'Receive important updates about system maintenance or new features.', email: false, inApp: true, sms: false },
 ];
+
+export const MOCK_USER_NOTIFICATION_SETTINGS: UserNotificationSettings = {
+    id: 'user-notif-1',
+    userId: 'user-1',
+    renewals: { email: true, inApp: true },
+    approvals: { email: true, inApp: true },
+    tasks: { email: false, inApp: true },
+    system: { email: false, inApp: true },
+};

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting } from './types';
+import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings } from './types';
 import { ContractStatus, RiskLevel, ApprovalStatus } from './types';
-import { MOCK_CONTRACTS, MOCK_TEMPLATES, USERS, COUNTERPARTIES, MOCK_PROPERTIES, MOCK_FULL_USER_LIST, MOCK_ROLES, MOCK_NOTIFICATION_SETTINGS } from './constants';
+import { MOCK_CONTRACTS, MOCK_TEMPLATES, USERS, COUNTERPARTIES, MOCK_PROPERTIES, MOCK_FULL_USER_LIST, MOCK_ROLES, MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import ContractsList from './components/ContractsList';
@@ -17,7 +17,7 @@ import CreateCounterpartyWorkflow from './components/CreateCounterpartyWorkflow'
 import PropertiesList from './components/PropertiesList';
 import CreatePropertyWorkflow from './components/CreatePropertyWorkflow';
 import PropertyDetail from './components/PropertyDetail';
-import SettingsPage from './components/SettingsPage';
+import ProfilePage from './components/ProfilePage';
 import LoginPage from './components/LoginPage';
 import OrgSignUpPage from './components/OrgSignUpPage';
 import UserSignUpPage from './components/UserSignUpPage';
@@ -25,7 +25,7 @@ import CompanySettingsPage from './components/CompanySettingsPage';
 
 
 // In a real app, this would come from an auth context
-const CURRENT_USER_ID = USERS['alice'].id;
+const currentUser = USERS['alice'];
 
 export default function App() {
   const [contracts, setContracts] = useState<Contract[]>(MOCK_CONTRACTS);
@@ -35,6 +35,8 @@ export default function App() {
   const [users, setUsers] = useState<UserProfile[]>(MOCK_FULL_USER_LIST);
   const [roles, setRoles] = useState<Role[]>(MOCK_ROLES);
   const [notificationSettings, setNotificationSettings] = useState<NotificationSetting[]>(MOCK_NOTIFICATION_SETTINGS);
+  const [userNotificationSettings, setUserNotificationSettings] = useState<UserNotificationSettings>(MOCK_USER_NOTIFICATION_SETTINGS);
+
 
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<ContractTemplate | null>(null);
@@ -123,7 +125,7 @@ export default function App() {
     } else if (metric === 'high-risk') {
         filters = { riskLevels: [RiskLevel.HIGH, RiskLevel.CRITICAL] };
     } else if (metric === 'my-contracts') {
-        filters = { ownerId: CURRENT_USER_ID };
+        filters = { ownerId: currentUser.id };
     }
     setInitialFilters(filters);
     setActiveView('contracts');
@@ -153,7 +155,7 @@ export default function App() {
         const firstVersion: Omit<ContractVersion, 'id'> = {
             versionNumber: 1,
             createdAt: new Date().toISOString().split('T')[0],
-            author: USERS['alice'],
+            author: currentUser,
             content: `This contract for ${newContractData.title || 'a new matter'} was created via the wizard.`,
             fileName: 'Initial_Draft.pdf',
             value: newContractData.value || 0,
@@ -216,7 +218,7 @@ export default function App() {
                   id: `v${latestVersionNumber + 1}-${Date.now()}`,
                   versionNumber: latestVersionNumber + 1,
                   createdAt: new Date().toISOString().split('T')[0],
-                  author: USERS['alice'], // Assuming current user
+                  author: currentUser,
               };
 
               updatedContract = {
@@ -252,7 +254,7 @@ export default function App() {
   const renderContent = () => {
     switch(activeView) {
       case 'dashboard':
-        return <Dashboard contracts={contracts} onMetricClick={handleMetricNavigation} />;
+        return <Dashboard contracts={contracts} onMetricClick={handleMetricNavigation} currentUser={currentUser} />;
       case 'contracts':
         return selectedContract ? (
           <ContractDetail 
@@ -268,10 +270,11 @@ export default function App() {
             onSelectContract={handleSelectContract} 
             onStartCreate={handleStartCreate}
             initialFilters={initialFilters}
+            currentUser={currentUser}
           />
         );
       case 'approvals':
-        return <ApprovalsPage contracts={contracts} setContracts={setContracts} />;
+        return <ApprovalsPage contracts={contracts} setContracts={setContracts} currentUser={currentUser} />;
       case 'templates':
         return selectedTemplate ? (
             <TemplateDetail template={selectedTemplate} onBack={handleBackToTemplatesList} />
@@ -310,8 +313,14 @@ export default function App() {
             onStartCreate={handleStartCreateProperty}
           />
         );
-      case 'settings':
-        return <SettingsPage currentTheme={theme} onThemeChange={handleThemeChange} />;
+      case 'profile':
+        return <ProfilePage 
+                    currentUser={currentUser} 
+                    theme={theme} 
+                    onThemeChange={handleThemeChange}
+                    notificationSettings={userNotificationSettings}
+                    setNotificationSettings={setUserNotificationSettings}
+                />;
       case 'company-settings':
         return <CompanySettingsPage 
                     users={users}
@@ -350,7 +359,7 @@ export default function App() {
     <div className="bg-gray-50 dark:bg-gray-900 min-h-screen font-sans text-gray-900 dark:text-gray-100 flex">
       <Sidebar activeView={activeView} onNavigate={handleNavigate} />
       <div className="flex-1 flex flex-col">
-        <Header onLogout={handleLogout} onNavigate={handleNavigate} />
+        <Header onLogout={handleLogout} onNavigate={handleNavigate} currentUser={currentUser} />
         <main className="flex-1 p-6 lg:p-8 overflow-y-auto">
           {renderContent()}
         </main>
@@ -360,6 +369,7 @@ export default function App() {
             properties={properties}
             onCancel={handleCancelCreate}
             onFinish={handleFinalizeCreate}
+            currentUser={currentUser}
         />
       )}
       {isCreatingCounterparty && (

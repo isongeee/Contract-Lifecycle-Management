@@ -1,17 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import type { Contract } from '../types';
+import type { Contract, UserProfile } from '../types';
 import { ContractStatus, ApprovalStatus } from '../types';
-import { USERS } from '../constants'; // To get current user
 import ApprovalRequestCard from './ApprovalRequestCard';
 import { CheckCircleIcon } from './icons';
 
 interface ApprovalsPageProps {
   contracts: Contract[];
   setContracts: React.Dispatch<React.SetStateAction<Contract[]>>;
+  currentUser: UserProfile;
 }
-
-// In a real app, this would come from an auth context
-const CURRENT_USER_ID = USERS['alice'].id;
 
 const Section = ({ title, children, count }: { title: string; children: React.ReactNode; count: number}) => (
     <div>
@@ -23,7 +20,7 @@ const Section = ({ title, children, count }: { title: string; children: React.Re
     </div>
 );
 
-export default function ApprovalsPage({ contracts, setContracts }: ApprovalsPageProps) {
+export default function ApprovalsPage({ contracts, setContracts, currentUser }: ApprovalsPageProps) {
 
     const { myPending, allPending } = useMemo(() => {
         const myPending: Contract[] = [];
@@ -33,7 +30,7 @@ export default function ApprovalsPage({ contracts, setContracts }: ApprovalsPage
             if (contract.status === ContractStatus.PENDING_APPROVAL) {
                 allPending.push(contract);
                 const hasPendingStepForMe = contract.approvalSteps.some(
-                    step => step.approver.id === CURRENT_USER_ID && step.status === ApprovalStatus.PENDING
+                    step => step.approver.id === currentUser.id && step.status === ApprovalStatus.PENDING
                 );
                 if (hasPendingStepForMe) {
                     myPending.push(contract);
@@ -41,7 +38,7 @@ export default function ApprovalsPage({ contracts, setContracts }: ApprovalsPage
             }
         });
         return { myPending, allPending };
-    }, [contracts]);
+    }, [contracts, currentUser.id]);
 
     const handleApprovalAction = (contractId: string, stepId: string, newStatus: ApprovalStatus.APPROVED | ApprovalStatus.REJECTED) => {
         setContracts(prevContracts => {
@@ -95,7 +92,7 @@ export default function ApprovalsPage({ contracts, setContracts }: ApprovalsPage
                             contract={contract} 
                             onApprove={handleApprove}
                             onReject={handleReject}
-                            currentUserApproverId={CURRENT_USER_ID}
+                            currentUserApproverId={currentUser.id}
                         />
                     ))
                 ) : (
@@ -114,7 +111,7 @@ export default function ApprovalsPage({ contracts, setContracts }: ApprovalsPage
                            <div>
                                <p className="font-semibold text-gray-800">{contract.title}</p>
                                <p className="text-sm text-gray-500">
-                                   Waiting on: {contract.approvalSteps.filter(s => s.status === ApprovalStatus.PENDING).map(s => s.approver.name).join(', ')}
+                                   Waiting on: {contract.approvalSteps.filter(s => s.status === ApprovalStatus.PENDING).map(s => `${s.approver.firstName} ${s.approver.lastName}`).join(', ')}
                                </p>
                            </div>
                            <span className="text-xs font-semibold px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full">
