@@ -49,8 +49,11 @@ export enum ContractFrequency {
 export interface UserProfile {
   id: string;
   name: string;
+  email: string;
   avatarUrl: string;
-  role: string;
+  role: string; // This would be a role ID in a real DB
+  status: 'active' | 'inactive';
+  lastLogin: string;
 }
 
 export interface Counterparty {
@@ -132,4 +135,29 @@ export interface ContractTemplate {
   description: string;
   type: ContractType;
   content: string;
+}
+
+export interface PermissionSet {
+  contracts: { view: boolean; edit: boolean; approve: boolean; delete: boolean; };
+  counterparties: { view: boolean; edit: boolean; };
+  properties: { view: boolean; edit: boolean; };
+  notifications: { view: boolean; configure: boolean; };
+  settings: { access: boolean; edit: boolean; };
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  description: string;
+  userCount: number;
+  permissions: PermissionSet;
+}
+
+export interface NotificationSetting {
+  id: string;
+  type: string;
+  description: string;
+  email: boolean;
+  inApp: boolean;
+  sms: boolean;
 }

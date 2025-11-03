@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion } from './types';
+import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting } from './types';
 import { ContractStatus, RiskLevel, ApprovalStatus } from './types';
-import { MOCK_CONTRACTS, MOCK_TEMPLATES, USERS, COUNTERPARTIES, MOCK_PROPERTIES } from './constants';
+import { MOCK_CONTRACTS, MOCK_TEMPLATES, USERS, COUNTERPARTIES, MOCK_PROPERTIES, MOCK_FULL_USER_LIST, MOCK_ROLES, MOCK_NOTIFICATION_SETTINGS } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import ContractsList from './components/ContractsList';
@@ -21,6 +21,8 @@ import SettingsPage from './components/SettingsPage';
 import LoginPage from './components/LoginPage';
 import OrgSignUpPage from './components/OrgSignUpPage';
 import UserSignUpPage from './components/UserSignUpPage';
+import CompanySettingsPage from './components/CompanySettingsPage';
+
 
 // In a real app, this would come from an auth context
 const CURRENT_USER_ID = USERS['alice'].id;
@@ -30,6 +32,10 @@ export default function App() {
   const [templates] = useState<ContractTemplate[]>(MOCK_TEMPLATES);
   const [counterparties, setCounterparties] = useState<Counterparty[]>(Object.values(COUNTERPARTIES));
   const [properties, setProperties] = useState<Property[]>(Object.values(MOCK_PROPERTIES));
+  const [users, setUsers] = useState<UserProfile[]>(MOCK_FULL_USER_LIST);
+  const [roles, setRoles] = useState<Role[]>(MOCK_ROLES);
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSetting[]>(MOCK_NOTIFICATION_SETTINGS);
+
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<ContractTemplate | null>(null);
   const [selectedCounterparty, setSelectedCounterparty] = useState<Counterparty | null>(null);
@@ -141,11 +147,13 @@ export default function App() {
         ...newContractData
     } as Contract;
     
-    // If workflow provided a full version, use it. Otherwise create a default one.
     if (newContract.versions && newContract.versions.length > 0) {
       // Data is already correctly formatted by the workflow
-    } else if (!newContract.versions || newContract.versions.length === 0) {
-        const firstVersion: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'> = {
+    } else {
+        const firstVersion: Omit<ContractVersion, 'id'> = {
+            versionNumber: 1,
+            createdAt: new Date().toISOString().split('T')[0],
+            author: USERS['alice'],
             content: `This contract for ${newContractData.title || 'a new matter'} was created via the wizard.`,
             fileName: 'Initial_Draft.pdf',
             value: newContractData.value || 0,
@@ -156,14 +164,7 @@ export default function App() {
             seasonalMonths: newContractData.seasonalMonths,
             property: newContractData.property,
         };
-        
-        newContract.versions = [{
-            ...firstVersion,
-            id: `v1-${Date.now()}`,
-            versionNumber: 1,
-            createdAt: new Date().toISOString().split('T')[0],
-            author: USERS['alice'],
-        }];
+        newContract.versions = [{ ...firstVersion, id: `v1-${Date.now()}` }];
     }
 
     setContracts(prev => [newContract, ...prev]);
@@ -220,7 +221,6 @@ export default function App() {
 
               updatedContract = {
                   ...c,
-                  // 1. Update top-level fields to match the new version
                   value: newVersion.value,
                   startDate: newVersion.startDate,
                   endDate: newVersion.endDate,
@@ -228,11 +228,7 @@ export default function App() {
                   frequency: newVersion.frequency,
                   seasonalMonths: newVersion.seasonalMonths,
                   property: newVersion.property,
-                  
-                  // 2. Add new version to history
                   versions: [...c.versions, newVersion],
-                  
-                  // 3. Reset status and approvals
                   status: ContractStatus.IN_REVIEW,
                   approvalSteps: c.approvalSteps.map(step => ({
                       ...step,
@@ -316,6 +312,15 @@ export default function App() {
         );
       case 'settings':
         return <SettingsPage currentTheme={theme} onThemeChange={handleThemeChange} />;
+      case 'company-settings':
+        return <CompanySettingsPage 
+                    users={users}
+                    roles={roles}
+                    notificationSettings={notificationSettings}
+                    setUsers={setUsers}
+                    setRoles={setRoles}
+                    setNotificationSettings={setNotificationSettings}
+                />;
       default:
         return <div className="p-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm"><h2 className="text-xl font-bold">{activeView.charAt(0).toUpperCase() + activeView.slice(1)}</h2><p className="mt-2 text-gray-500 dark:text-gray-400">This section is not yet implemented.</p></div>;
     }

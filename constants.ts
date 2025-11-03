@@ -1,6 +1,4 @@
-
-
-import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion } from './types';
+import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet } from './types';
 import type { UserProfile, Counterparty, Property } from './types';
 
 export const STATUS_COLORS: Record<ContractStatus, string> = {
@@ -32,10 +30,10 @@ export const APPROVAL_STATUS_COLORS: Record<ApprovalStatus, string> = {
 
 
 export const USERS: Record<string, UserProfile> = {
-    'alice': { id: 'user-1', name: 'Alice Johnson', avatarUrl: 'https://i.pravatar.cc/150?u=user-1', role: 'Legal Counsel' },
-    'bob': { id: 'user-2', name: 'Bob Williams', avatarUrl: 'https://i.pravatar.cc/150?u=user-2', role: 'Sales Director' },
-    'charlie': { id: 'user-3', name: 'Charlie Brown', avatarUrl: 'https://i.pravatar.cc/150?u=user-3', role: 'Finance Manager' },
-    'diana': { id: 'user-4', name: 'Diana Prince', avatarUrl: 'https://i.pravatar.cc/150?u=user-4', role: 'Requestor' },
+    'alice': { id: 'user-1', name: 'Alice Johnson', email: 'alice.j@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-1', role: 'Legal Counsel', status: 'active', lastLogin: '2024-07-30' },
+    'bob': { id: 'user-2', name: 'Bob Williams', email: 'bob.w@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-2', role: 'Sales Director', status: 'active', lastLogin: '2024-07-29' },
+    'charlie': { id: 'user-3', name: 'Charlie Brown', email: 'charlie.b@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-3', role: 'Finance Manager', status: 'active', lastLogin: '2024-07-30' },
+    'diana': { id: 'user-4', name: 'Diana Prince', email: 'diana.p@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-4', role: 'Requestor', status: 'inactive', lastLogin: '2024-06-15' },
 };
 
 export const COUNTERPARTIES: Record<string, Counterparty> = {
@@ -267,4 +265,61 @@ export const MOCK_TEMPLATES: ContractTemplate[] = [
     type: ContractType.VENDOR,
     content: DUMMY_CONTRACT_CONTENT_V1.replace('Master Services Agreement', 'Vendor Agreement'),
   }
+];
+
+const adminPermissions: PermissionSet = {
+    contracts: { view: true, edit: true, approve: true, delete: true },
+    counterparties: { view: true, edit: true },
+    properties: { view: true, edit: true },
+    notifications: { view: true, configure: true },
+    settings: { access: true, edit: true },
+};
+
+const legalPermissions: PermissionSet = {
+    ...adminPermissions,
+    settings: { access: true, edit: false },
+};
+
+const financePermissions: PermissionSet = {
+    contracts: { view: true, edit: false, approve: true, delete: false },
+    counterparties: { view: true, edit: false },
+    properties: { view: true, edit: false },
+    notifications: { view: true, configure: false },
+    settings: { access: false, edit: false },
+};
+
+const requestorPermissions: PermissionSet = {
+    contracts: { view: true, edit: false, approve: false, delete: false },
+    counterparties: { view: false, edit: false },
+    properties: { view: false, edit: false },
+    notifications: { view: false, configure: false },
+    settings: { access: false, edit: false },
+};
+
+
+export const MOCK_ROLES: Role[] = [
+    { id: 'role-1', name: 'Admin', description: 'Has full access to all system features.', userCount: 1, permissions: adminPermissions },
+    { id: 'role-2', name: 'Legal Counsel', description: 'Can manage contracts and approvals.', userCount: 1, permissions: legalPermissions },
+    { id: 'role-3', name: 'Finance Manager', description: 'Can view contracts and approve financial aspects.', userCount: 4, permissions: financePermissions },
+    { id: 'role-4', name: 'Sales Director', description: 'Can initiate and view sales-related contracts.', userCount: 8, permissions: requestorPermissions },
+    { id: 'role-5', name: 'Requestor', description: 'Can view contracts they own or are involved in.', userCount: 12, permissions: requestorPermissions },
+];
+
+export const MOCK_FULL_USER_LIST: FullUserProfile[] = [
+    ...Object.values(USERS),
+    { id: 'user-5', name: 'Eve Adams', email: 'eve.a@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-5', role: 'Finance Manager', status: 'active', lastLogin: '2024-07-30' },
+    { id: 'user-6', name: 'Frank Miller', email: 'frank.m@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-6', role: 'Sales Director', status: 'active', lastLogin: '2024-07-28' },
+    { id: 'user-7', name: 'Grace Lee', email: 'grace.l@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-7', role: 'Requestor', status: 'active', lastLogin: '2024-07-29' },
+    { id: 'user-8', name: 'Henry Wilson', email: 'henry.w@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-8', role: 'Finance Manager', status: 'inactive', lastLogin: '2024-05-20' },
+    { id: 'user-9', name: 'Ivy Chen', email: 'ivy.c@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-9', role: 'Sales Director', status: 'active', lastLogin: '2024-07-25' },
+    { id: 'user-10', name: 'Jack Taylor', email: 'jack.t@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-10', role: 'Requestor', status: 'active', lastLogin: '2024-07-30' },
+    { id: 'user-11', name: 'Karen Rodriguez', email: 'karen.r@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-11', role: 'Finance Manager', status: 'active', lastLogin: '2024-07-29' },
+    { id: 'user-12', name: 'Leo Martinez', email: 'leo.m@example.com', avatarUrl: 'https://i.pravatar.cc/150?u=user-12', role: 'Admin', status: 'active', lastLogin: '2024-07-30' },
+];
+
+export const MOCK_NOTIFICATION_SETTINGS: NotificationSetting[] = [
+    { id: 'notif-1', type: 'Contract Renewal Reminders', description: 'Get notified 90, 60, and 30 days before a contract expires.', email: true, inApp: true, sms: false },
+    { id: 'notif-2', type: 'Approval Requests', description: 'Receive an alert when your approval is required on a contract.', email: true, inApp: true, sms: true },
+    { id: 'notif-3', type: 'New User Signups', description: 'Admin-only notification for when a new user joins the organization.', email: true, inApp: false, sms: false },
+    { id: 'notif-4', type: 'System Alerts', description: 'Receive important updates about system maintenance or new features.', email: false, inApp: true, sms: false },
 ];

@@ -1,7 +1,5 @@
-
-
 import React from 'react';
-import { LayoutDashboardIcon, FileTextIcon, UsersIcon, BookTextIcon, CheckCircleIcon, SettingsIcon, HomeIcon } from './icons';
+import { LayoutDashboardIcon, FileTextIcon, UsersIcon, BookTextIcon, CheckCircleIcon, SettingsIcon, HomeIcon, BuildingOfficeIcon } from './icons';
 
 const NavItem = ({ icon, label, active = false, onClick }: { icon: React.ReactNode; label: string; active?: boolean; onClick: () => void; }) => (
   <button
@@ -44,10 +42,17 @@ export default function Sidebar({ activeView, onNavigate }: { activeView: string
             />
         ))}
       </nav>
-      <div className="px-4 py-6 border-t border-gray-200 dark:border-gray-700">
+      <div className="px-4 py-6 border-t border-gray-200 dark:border-gray-700 space-y-4">
+        <p className="px-4 text-xs font-semibold text-gray-400 uppercase">Settings</p>
+         <NavItem 
+            icon={<BuildingOfficeIcon className="h-5 w-5" />} 
+            label="Company Settings" 
+            onClick={() => onNavigate('company-settings')}
+            active={activeView === 'company-settings'}
+        />
          <NavItem 
             icon={<SettingsIcon className="h-5 w-5" />} 
-            label="Settings" 
+            label="Personal Settings" 
             onClick={() => onNavigate('settings')}
             active={activeView === 'settings'}
         />
