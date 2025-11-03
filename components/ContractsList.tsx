@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import type { Contract } from '../types';
 import { ContractStatus, ContractType, RiskLevel } from '../types';
@@ -10,7 +8,7 @@ interface ContractsListProps {
   contracts: Contract[];
   onSelectContract: (contract: Contract) => void;
   onStartCreate: () => void;
-  initialFilters?: { status?: string; riskLevels?: RiskLevel[] };
+  initialFilters?: { status?: string; riskLevels?: RiskLevel[]; ownerId?: string };
 }
 
 interface FilterOption {
@@ -43,15 +41,21 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
   const [statusFilter, setStatusFilter] = useState(initialFilters.status || '');
   const [typeFilter, setTypeFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
+  const [ownerFilter, setOwnerFilter] = useState(initialFilters.ownerId || '');
 
   useEffect(() => {
     setStatusFilter(initialFilters.status || '');
+    setOwnerFilter(initialFilters.ownerId || '');
     if (initialFilters.riskLevels?.includes(RiskLevel.HIGH) && initialFilters.riskLevels?.includes(RiskLevel.CRITICAL)) {
         setRiskFilter('HighAndCritical');
     } else {
         setRiskFilter('');
     }
-    setTypeFilter(''); // Reset other filters
+    // Reset other filters unless they are the primary one being set
+    if (!initialFilters.status) setStatusFilter('');
+    if (!initialFilters.ownerId) setOwnerFilter('');
+    if (!initialFilters.riskLevels) setRiskFilter('');
+    setTypeFilter('');
   }, [initialFilters]);
 
 
@@ -69,6 +73,7 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
        contract.counterparty.name.toLowerCase().includes(searchTerm.toLowerCase())) &&
       (statusFilter === '' || contract.status === statusFilter) &&
       (typeFilter === '' || contract.type === typeFilter) &&
+      (ownerFilter === '' || contract.owner.id === ownerFilter) &&
       riskMatch()
     );
   });
@@ -88,7 +93,9 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
         <div className="flex justify-between items-start">
             <div>
                 <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Contracts Repository</h1>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage, search, and review all organizational contracts.</p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  {ownerFilter ? 'Showing contracts assigned to you.' : 'Manage, search, and review all organizational contracts.'}
+                </p>
             </div>
             <button 
                 onClick={handleCreateNew}

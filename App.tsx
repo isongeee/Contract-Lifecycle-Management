@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType } from './types';
-import { ContractStatus, RiskLevel } from './types';
+import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion } from './types';
+import { ContractStatus, RiskLevel, ApprovalStatus } from './types';
 import { MOCK_CONTRACTS, MOCK_TEMPLATES, USERS, COUNTERPARTIES, MOCK_PROPERTIES } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -22,6 +22,8 @@ import LoginPage from './components/LoginPage';
 import OrgSignUpPage from './components/OrgSignUpPage';
 import UserSignUpPage from './components/UserSignUpPage';
 
+// In a real app, this would come from an auth context
+const CURRENT_USER_ID = USERS['alice'].id;
 
 export default function App() {
   const [contracts, setContracts] = useState<Contract[]>(MOCK_CONTRACTS);
@@ -36,7 +38,7 @@ export default function App() {
   const [isCreatingContract, setIsCreatingContract] = useState(false);
   const [isCreatingCounterparty, setIsCreatingCounterparty] = useState(false);
   const [isCreatingProperty, setIsCreatingProperty] = useState(false);
-  const [initialFilters, setInitialFilters] = useState<{ status?: ContractStatus; riskLevels?: RiskLevel[] }>({});
+  const [initialFilters, setInitialFilters] = useState<{ status?: ContractStatus; riskLevels?: RiskLevel[]; ownerId?: string }>({});
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authView, setAuthView] = useState<'login' | 'org-signup' | 'user-signup'>('login');
@@ -106,19 +108,23 @@ export default function App() {
     setInitialFilters({}); // Reset filters on direct navigation
   };
   
-  const handleMetricNavigation = (metric: 'active' | 'pending' | 'high-risk') => {
-    let filters: { status?: ContractStatus; riskLevels?: RiskLevel[] } = {};
+  const handleMetricNavigation = (metric: 'active' | 'pending' | 'high-risk' | 'my-contracts') => {
+    let filters: { status?: ContractStatus; riskLevels?: RiskLevel[]; ownerId?: string } = {};
     if (metric === 'active') {
         filters = { status: ContractStatus.ACTIVE };
     } else if (metric === 'pending') {
         filters = { status: ContractStatus.PENDING_APPROVAL };
     } else if (metric === 'high-risk') {
         filters = { riskLevels: [RiskLevel.HIGH, RiskLevel.CRITICAL] };
+    } else if (metric === 'my-contracts') {
+        filters = { ownerId: CURRENT_USER_ID };
     }
     setInitialFilters(filters);
     setActiveView('contracts');
     setSelectedContract(null);
     setSelectedTemplate(null);
+    setSelectedCounterparty(null);
+    setSelectedProperty(null);
   };
 
   const handleStartCreate = () => setIsCreatingContract(true);
@@ -129,17 +135,36 @@ export default function App() {
         id: `contract-${Date.now()}`,
         status: ContractStatus.DRAFT,
         riskLevel: RiskLevel.LOW,
-        versions: [{
-            id: `v1-${Date.now()}`,
-            versionNumber: 1,
-            createdAt: new Date().toISOString().split('T')[0],
-            author: USERS['alice'], // Assuming current user is Alice
-            content: `This contract for ${newContractData.title || 'a new matter'} was created via the wizard.`
-        }],
+        versions: [],
         approvalSteps: [],
         renewalDate: newContractData.endDate || '',
         ...newContractData
     } as Contract;
+    
+    // If workflow provided a full version, use it. Otherwise create a default one.
+    if (newContract.versions && newContract.versions.length > 0) {
+      // Data is already correctly formatted by the workflow
+    } else if (!newContract.versions || newContract.versions.length === 0) {
+        const firstVersion: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'> = {
+            content: `This contract for ${newContractData.title || 'a new matter'} was created via the wizard.`,
+            fileName: 'Initial_Draft.pdf',
+            value: newContractData.value || 0,
+            startDate: newContractData.startDate || '',
+            endDate: newContractData.endDate || '',
+            renewalDate: newContractData.renewalDate || '',
+            frequency: newContractData.frequency!,
+            seasonalMonths: newContractData.seasonalMonths,
+            property: newContractData.property,
+        };
+        
+        newContract.versions = [{
+            ...firstVersion,
+            id: `v1-${Date.now()}`,
+            versionNumber: 1,
+            createdAt: new Date().toISOString().split('T')[0],
+            author: USERS['alice'],
+        }];
+    }
 
     setContracts(prev => [newContract, ...prev]);
     setIsCreatingContract(false);
@@ -173,10 +198,58 @@ export default function App() {
         contract.id === contractId ? { ...contract, status: newStatus } : contract
       )
     );
-    // If we are in the detail view, we also need to update the selected contract
     if (selectedContract && selectedContract.id === contractId) {
         setSelectedContract(prev => prev ? { ...prev, status: newStatus } : null);
     }
+  };
+
+  const handleCreateNewVersion = (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => {
+      let updatedContract: Contract | null = null;
+      
+      const newContracts = contracts.map(c => {
+          if (c.id === contractId) {
+              const latestVersionNumber = c.versions.length > 0 ? Math.max(...c.versions.map(v => v.versionNumber)) : 0;
+              
+              const newVersion: ContractVersion = {
+                  ...newVersionData,
+                  id: `v${latestVersionNumber + 1}-${Date.now()}`,
+                  versionNumber: latestVersionNumber + 1,
+                  createdAt: new Date().toISOString().split('T')[0],
+                  author: USERS['alice'], // Assuming current user
+              };
+
+              updatedContract = {
+                  ...c,
+                  // 1. Update top-level fields to match the new version
+                  value: newVersion.value,
+                  startDate: newVersion.startDate,
+                  endDate: newVersion.endDate,
+                  renewalDate: newVersion.renewalDate,
+                  frequency: newVersion.frequency,
+                  seasonalMonths: newVersion.seasonalMonths,
+                  property: newVersion.property,
+                  
+                  // 2. Add new version to history
+                  versions: [...c.versions, newVersion],
+                  
+                  // 3. Reset status and approvals
+                  status: ContractStatus.IN_REVIEW,
+                  approvalSteps: c.approvalSteps.map(step => ({
+                      ...step,
+                      status: ApprovalStatus.PENDING,
+                      approvedAt: undefined,
+                      comment: undefined,
+                  })),
+              };
+              return updatedContract;
+          }
+          return c;
+      });
+
+      setContracts(newContracts);
+      if (updatedContract && selectedContract?.id === contractId) {
+          setSelectedContract(updatedContract);
+      }
   };
 
 
@@ -186,7 +259,13 @@ export default function App() {
         return <Dashboard contracts={contracts} onMetricClick={handleMetricNavigation} />;
       case 'contracts':
         return selectedContract ? (
-          <ContractDetail contract={selectedContract} onBack={handleBackToList} onUpdateStatus={handleUpdateContractStatus} />
+          <ContractDetail 
+            contract={selectedContract} 
+            properties={properties}
+            onBack={handleBackToList} 
+            onUpdateStatus={handleUpdateContractStatus}
+            onCreateNewVersion={handleCreateNewVersion}
+          />
         ) : (
           <ContractsList 
             contracts={contracts} 

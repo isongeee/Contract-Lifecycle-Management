@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import type { Contract } from '../types';
 import { ContractStatus, RiskLevel } from '../types';
-import { STATUS_COLORS } from '../constants';
-import { FileTextIcon, UsersIcon, DollarSignIcon, AlertTriangleIcon, ClockIcon } from './icons';
+import { STATUS_COLORS, USERS } from '../constants';
+import { FileTextIcon, UsersIcon, DollarSignIcon, AlertTriangleIcon, ClockIcon, UserIcon } from './icons';
 
 // A utility to format currency
 const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
@@ -103,19 +103,21 @@ const ExpiringContracts = ({ contracts }: { contracts: Contract[] }) => {
 };
 
 
-export default function Dashboard({ contracts, onMetricClick }: { contracts: Contract[]; onMetricClick: (metric: 'active' | 'pending' | 'high-risk') => void; }) {
+export default function Dashboard({ contracts, onMetricClick }: { contracts: Contract[]; onMetricClick: (metric: 'active' | 'pending' | 'high-risk' | 'my-contracts') => void; }) {
 
     const metrics = useMemo(() => {
         const activeContracts = contracts.filter(c => c.status === ContractStatus.ACTIVE);
         const pendingApproval = contracts.filter(c => c.status === ContractStatus.PENDING_APPROVAL);
         const highRisk = contracts.filter(c => c.riskLevel === RiskLevel.HIGH || c.riskLevel === RiskLevel.CRITICAL);
         const totalValue = activeContracts.reduce((sum, c) => sum + c.value, 0);
+        const myContracts = contracts.filter(c => c.owner.id === USERS['alice'].id);
 
         return {
             activeCount: activeContracts.length,
             pendingCount: pendingApproval.length,
             riskCount: highRisk.length,
             totalValue: totalValue,
+            myContractsCount: myContracts.length,
         };
     }, [contracts]);
 
@@ -134,19 +136,19 @@ export default function Dashboard({ contracts, onMetricClick }: { contracts: Con
                     value={metrics.activeCount}
                     color="bg-blue-100"
                 />
+                <MetricCard 
+                    onClick={() => onMetricClick('my-contracts')}
+                    icon={<UserIcon className="w-6 h-6 text-indigo-600" />}
+                    label="My Assigned Contracts"
+                    value={metrics.myContractsCount}
+                    color="bg-indigo-100"
+                />
                  <MetricCard 
                     onClick={() => onMetricClick('pending')}
                     icon={<UsersIcon className="w-6 h-6 text-yellow-600" />}
                     label="Pending Approval"
                     value={metrics.pendingCount}
                     color="bg-yellow-100"
-                />
-                 <MetricCard 
-                    onClick={() => onMetricClick('active')}
-                    icon={<DollarSignIcon className="w-6 h-6 text-green-600" />}
-                    label="Total Active Value"
-                    value={formatCurrency(metrics.totalValue)}
-                    color="bg-green-100"
                 />
                  <MetricCard 
                     onClick={() => onMetricClick('high-risk')}

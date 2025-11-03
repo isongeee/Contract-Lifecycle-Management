@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import type { Contract, Counterparty, UserProfile, Property } from '../types';
 import { ContractType, ContractStatus, RiskLevel, ContractFrequency } from '../types';
@@ -560,12 +561,20 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties 
     const finalContractData = { ...newContractData };
     
     // Set content and remove temporary allocation data
+    // FIX: Added missing required properties to the ContractVersion object to resolve the type error.
     finalContractData.versions = [{
         id: `v1-${Date.now()}`,
         versionNumber: 1,
         createdAt: new Date().toISOString().split('T')[0],
         author: USERS['alice'],
-        content: finalContent
+        content: finalContent,
+        value: newContractData.value || 0,
+        startDate: newContractData.startDate || '',
+        endDate: newContractData.endDate || '',
+        renewalDate: newContractData.endDate || '',
+        frequency: newContractData.frequency!,
+        seasonalMonths: newContractData.seasonalMonths,
+        property: newContractData.property,
     }];
     delete finalContractData.propertyAllocations;
 

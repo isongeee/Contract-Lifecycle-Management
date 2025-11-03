@@ -1,6 +1,6 @@
 
 
-import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency } from './types';
+import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion } from './types';
 import type { UserProfile, Counterparty, Property } from './types';
 
 export const STATUS_COLORS: Record<ContractStatus, string> = {
@@ -52,14 +52,18 @@ export const MOCK_PROPERTIES: Record<string, Property> = {
     'prop-3': { id: 'prop-3', name: 'London Bridge View', addressLine1: 'The Shard', addressLine2: '32 London Bridge St', city: 'London', state: 'N/A', country: 'UK', zipCode: 'SE1 9SG' },
 };
 
-const DUMMY_CONTRACT_CONTENT = `
+const DUMMY_CONTRACT_CONTENT_V1 = `
 This Master Services Agreement ("Agreement") is made and entered into as of the Effective Date by and between Client and Service Provider.
 1. SERVICES. Service Provider shall perform the services described in each Statement of Work ("SOW").
 2. TERM AND TERMINATION. This Agreement shall commence on the Effective Date and continue until terminated. Either party may terminate this Agreement for convenience upon thirty (30) days' written notice.
-3. FEES AND PAYMENT. Client shall pay Service Provider the fees set forth in the applicable SOW. Invoices are due within thirty (30) days of receipt.
+3. FEES AND PAYMENT. Client shall pay Service Provider the fees set forth in the applicable SOW. Invoices are due within thirty (30) days of receipt. Total value is $240,000.
 4. CONFIDENTIALITY. Each party agrees to maintain the confidentiality of the other's proprietary information.
 5. LIMITATION OF LIABILITY. IN NO EVENT SHALL EITHER PARTY BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES.
 `;
+
+const DUMMY_CONTRACT_CONTENT_V2 = DUMMY_CONTRACT_CONTENT_V1
+    .replace('thirty (30)', 'sixty (60)')
+    .replace('$240,000', '$250,000');
 
 
 export const MOCK_CONTRACTS: Contract[] = [
@@ -72,15 +76,21 @@ export const MOCK_CONTRACTS: Contract[] = [
     counterparty: COUNTERPARTIES['acme'],
     property: MOCK_PROPERTIES['prop-1'],
     owner: USERS['alice'],
+    // Terms from latest version (v2)
     startDate: '2023-01-15',
     endDate: '2025-01-14',
     renewalDate: '2025-01-14',
     value: 250000,
-    // FIX: Added missing 'frequency' property.
     frequency: ContractFrequency.ANNUALLY,
     versions: [
-      { id: 'v1-1', versionNumber: 1, createdAt: '2023-01-05', author: USERS['alice'], content: DUMMY_CONTRACT_CONTENT },
-      { id: 'v1-2', versionNumber: 2, createdAt: '2023-01-10', author: USERS['bob'], content: DUMMY_CONTRACT_CONTENT.replace('thirty (30)', 'sixty (60)') },
+      { 
+        id: 'v1-1', versionNumber: 1, createdAt: '2023-01-05', author: USERS['alice'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'ACME_MSA_v1.pdf',
+        value: 240000, startDate: '2023-01-15', endDate: '2025-01-14', renewalDate: '2025-01-14', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
+      },
+      { 
+        id: 'v1-2', versionNumber: 2, createdAt: '2023-01-10', author: USERS['bob'], content: DUMMY_CONTRACT_CONTENT_V2, fileName: 'ACME_MSA_v2_redline.pdf',
+        value: 250000, startDate: '2023-01-15', endDate: '2025-01-14', renewalDate: '2025-01-14', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
+      },
     ],
     approvalSteps: [
       { id: 'app-1-1', approver: USERS['bob'], status: ApprovalStatus.APPROVED, approvedAt: '2023-01-12' },
@@ -100,10 +110,12 @@ export const MOCK_CONTRACTS: Contract[] = [
     endDate: '2025-02-01',
     renewalDate: '2025-02-01',
     value: 75000,
-    // FIX: Added missing 'frequency' property.
     frequency: ContractFrequency.MONTHLY,
     versions: [
-        { id: 'v2-1', versionNumber: 1, createdAt: '2024-07-20', author: USERS['diana'], content: DUMMY_CONTRACT_CONTENT }
+        { 
+            id: 'v2-1', versionNumber: 1, createdAt: '2024-07-20', author: USERS['diana'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'Globex_SOW_v1.pdf',
+            value: 75000, startDate: '2024-08-01', endDate: '2025-02-01', renewalDate: '2025-02-01', frequency: ContractFrequency.MONTHLY, property: MOCK_PROPERTIES['prop-2']
+        }
     ],
     approvalSteps: [
       { id: 'app-2-1', approver: USERS['alice'], status: ApprovalStatus.PENDING },
@@ -123,10 +135,12 @@ export const MOCK_CONTRACTS: Contract[] = [
     endDate: '2025-08-31',
     renewalDate: '2025-08-31',
     value: 120000,
-    // FIX: Added missing 'frequency' property.
     frequency: ContractFrequency.ANNUALLY,
     versions: [
-        { id: 'v5-1', versionNumber: 1, createdAt: '2024-07-28', author: USERS['diana'], content: DUMMY_CONTRACT_CONTENT }
+        { 
+            id: 'v5-1', versionNumber: 1, createdAt: '2024-07-28', author: USERS['diana'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'Cyberdyne_Vendor_Initial_Draft.pdf',
+            value: 120000, startDate: '2024-09-01', endDate: '2025-08-31', renewalDate: '2025-08-31', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
+        }
     ],
     approvalSteps: [
       { id: 'app-5-1', approver: USERS['alice'], status: ApprovalStatus.PENDING },
@@ -145,10 +159,12 @@ export const MOCK_CONTRACTS: Contract[] = [
     endDate: '2026-07-24',
     renewalDate: '2026-07-24',
     value: 0,
-    // FIX: Added missing 'frequency' property.
     frequency: ContractFrequency.ANNUALLY,
     versions: [
-        { id: 'v3-1', versionNumber: 1, createdAt: '2024-07-25', author: USERS['diana'], content: 'This is a standard Non-Disclosure Agreement...' }
+        { 
+            id: 'v3-1', versionNumber: 1, createdAt: '2024-07-25', author: USERS['diana'], content: 'This is a standard Non-Disclosure Agreement...',
+            value: 0, startDate: '2024-07-25', endDate: '2026-07-24', renewalDate: '2026-07-24', frequency: ContractFrequency.ANNUALLY
+        }
     ],
     approvalSteps: [],
   },
@@ -164,10 +180,12 @@ export const MOCK_CONTRACTS: Contract[] = [
     endDate: '2025-05-31',
     renewalDate: '2025-05-31',
     value: 12000,
-    // FIX: Added missing 'frequency' property.
     frequency: ContractFrequency.ANNUALLY,
     versions: [
-      { id: 'v4-1', versionNumber: 1, createdAt: '2024-05-20', author: USERS['alice'], content: DUMMY_CONTRACT_CONTENT },
+      { 
+        id: 'v4-1', versionNumber: 1, createdAt: '2024-05-20', author: USERS['alice'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'CloudService_SaaS_Agreement.pdf',
+        value: 12000, startDate: '2024-06-01', endDate: '2025-05-31', renewalDate: '2025-05-31', frequency: ContractFrequency.ANNUALLY
+      },
     ],
     approvalSteps: [
        { id: 'app-4-1', approver: USERS['charlie'], status: ApprovalStatus.APPROVED, approvedAt: '2024-05-25' },
@@ -186,10 +204,12 @@ export const MOCK_CONTRACTS: Contract[] = [
     endDate: '2029-09-30',
     renewalDate: '2029-09-30',
     value: 5000000,
-    // FIX: Added missing 'frequency' property.
     frequency: ContractFrequency.MONTHLY,
     versions: [
-        { id: 'v6-1', versionNumber: 1, createdAt: '2024-07-29', author: USERS['charlie'], content: DUMMY_CONTRACT_CONTENT }
+        { 
+            id: 'v6-1', versionNumber: 1, createdAt: '2024-07-29', author: USERS['charlie'], content: DUMMY_CONTRACT_CONTENT_V1,
+            value: 5000000, startDate: '2024-10-01', endDate: '2029-09-30', renewalDate: '2029-09-30', frequency: ContractFrequency.MONTHLY, property: MOCK_PROPERTIES['prop-3']
+        }
     ],
     approvalSteps: [
       { id: 'app-6-1', approver: USERS['bob'], status: ApprovalStatus.PENDING },
@@ -231,7 +251,7 @@ export const MOCK_TEMPLATES: ContractTemplate[] = [
     name: 'Master Services Agreement (MSA)',
     description: 'A comprehensive agreement that sets out the terms and conditions for one party to provide services to another.',
     type: ContractType.MSA,
-    content: DUMMY_CONTRACT_CONTENT,
+    content: DUMMY_CONTRACT_CONTENT_V1,
   },
   {
     id: 'template-003',
@@ -245,6 +265,6 @@ export const MOCK_TEMPLATES: ContractTemplate[] = [
     name: 'Standard Vendor Agreement',
     description: 'A general-purpose template for onboarding new vendors, covering payment terms, deliverables, and liabilities.',
     type: ContractType.VENDOR,
-    content: DUMMY_CONTRACT_CONTENT.replace('Master Services Agreement', 'Vendor Agreement'),
+    content: DUMMY_CONTRACT_CONTENT_V1.replace('Master Services Agreement', 'Vendor Agreement'),
   }
 ];

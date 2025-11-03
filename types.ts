@@ -87,6 +87,15 @@ export interface ContractVersion {
   createdAt: string;
   author: UserProfile;
   content: string;
+  fileName?: string;
+  // Snapshot of commercial terms for this version
+  value: number;
+  startDate: string;
+  endDate: string;
+  renewalDate: string;
+  frequency: ContractFrequency;
+  seasonalMonths?: string[];
+  property?: Property;
 }
 
 export interface Clause {
