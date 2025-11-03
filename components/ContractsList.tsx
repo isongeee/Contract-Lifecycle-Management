@@ -1,0 +1,136 @@
+import React, { useState } from 'react';
+import type { Contract } from '../types';
+import { ContractStatus, ContractType } from '../types';
+import StatusTag from './StatusTag';
+import { SearchIcon, ChevronDownIcon, PlusIcon } from './icons';
+
+interface ContractsListProps {
+  contracts: Contract[];
+  onSelectContract: (contract: Contract) => void;
+  onStartCreate: () => void;
+}
+
+const FilterDropdown = ({ label, options, selected, onChange }: { label: string; options: string[]; selected: string; onChange: (value: string) => void; }) => (
+    <div className="relative">
+        <select 
+            className="appearance-none w-full bg-white border border-gray-300 rounded-md py-2 pl-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            value={selected}
+            onChange={(e) => onChange(e.target.value)}
+        >
+            <option value="">All {label}</option>
+            {options.map(option => <option key={option} value={option}>{option}</option>)}
+        </select>
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+            <ChevronDownIcon className="h-4 w-4" />
+        </div>
+    </div>
+);
+
+export default function ContractsList({ contracts, onSelectContract, onStartCreate }: ContractsListProps) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+
+  const filteredContracts = contracts.filter(contract => {
+    return (
+      (contract.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+       contract.counterparty.name.toLowerCase().includes(searchTerm.toLowerCase())) &&
+      (statusFilter === '' || contract.status === statusFilter) &&
+      (typeFilter === '' || contract.type === typeFilter)
+    );
+  });
+
+  const handleCreateNew = () => {
+    onStartCreate();
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm">
+      <div className="p-4 border-b border-gray-200">
+        <div className="flex justify-between items-start">
+            <div>
+                <h1 className="text-xl font-bold text-gray-900">Contracts Repository</h1>
+                <p className="mt-1 text-sm text-gray-500">Manage, search, and review all organizational contracts.</p>
+            </div>
+            <button 
+                onClick={handleCreateNew}
+                className="flex items-center px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 whitespace-nowrap">
+                <PlusIcon className="w-5 h-5 mr-2" />
+                Create new Contract
+            </button>
+        </div>
+        
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="relative md:col-span-2 lg:col-span-2">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                    <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                    id="contract-search"
+                    type="search"
+                    placeholder="Search by title or counterparty..."
+                    autoComplete="off"
+                    className="block w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#BDAD49]/60 focus:border-[#BDAD49]
+                              dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700 dark:placeholder-gray-400"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+            </div>
+             <FilterDropdown 
+                label="Types"
+                options={Object.values(ContractType)} 
+                selected={typeFilter} 
+                onChange={setTypeFilter}
+            />
+            <FilterDropdown 
+                label="Statuses"
+                options={Object.values(ContractStatus)} 
+                selected={statusFilter} 
+                onChange={setStatusFilter}
+            />
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Title</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Counterparty</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Value</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">End Date</th>
+              <th scope="col" className="relative px-6 py-3"><span className="sr-only">View</span></th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {filteredContracts.map((contract) => (
+              <tr key={contract.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => onSelectContract(contract)}>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm font-semibold text-gray-900">{contract.title}</div>
+                  <div className="text-xs text-gray-500">{contract.type}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{contract.counterparty.name}</td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <StatusTag type="contract" status={contract.status} />
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(contract.value)}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{contract.endDate}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <a href="#" className="text-primary-600 hover:text-primary-900">View</a>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+       {filteredContracts.length === 0 && (
+          <div className="text-center py-12">
+            <h3 className="text-lg font-medium text-gray-900">No contracts found</h3>
+            <p className="mt-1 text-sm text-gray-500">Try adjusting your search or filter criteria.</p>
+          </div>
+        )}
+    </div>
+  );
+}

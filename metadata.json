@@ -1,0 +1,5 @@
+{
+  "name": "Enterprise Contract Lifecycle Management (CLM)",
+  "description": "A comprehensive, enterprise-grade Contract Lifecycle Management (CLM) system built with React, Tailwind CSS, and powered by the Gemini API for intelligent document analysis and drafting.",
+  "requestFramePermissions": []
+}

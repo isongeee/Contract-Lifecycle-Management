@@ -1,0 +1,70 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-g" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Enterprise CLM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: {
+                DEFAULT: '#BDAD49',
+                '50': '#F9F7E9',
+                '100': '#F3EFD3',
+                '200': '#E8E0A8',
+                '300': '#DCCF7C',
+                '400': '#D0BE51',
+                '500': '#BDAD49',
+                '600': '#9F923E',
+                '700': '#817633',
+                '800': '#635B28',
+                '900': '#453F1D',
+              },
+              gray: {
+                '50': '#F8F9FA',
+                '100': '#F1F3F5',
+                '200': '#E9ECEF',
+                '300': '#DEE2E6',
+                '400': '#CED4DA',
+                '500': '#ADB5BD',
+                '600': '#868E96',
+                '700': '#495057',
+                '800': '#343A40',
+                '900': '#212529',
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+          }
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <style>
+      body {
+        font-feature-settings: 'cv11';
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
