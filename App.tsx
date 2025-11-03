@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import type { Contract, ContractTemplate } from './types';
+import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType } from './types';
 import { ContractStatus, RiskLevel } from './types';
-import { MOCK_CONTRACTS, MOCK_TEMPLATES, USERS } from './constants';
+import { MOCK_CONTRACTS, MOCK_TEMPLATES, USERS, COUNTERPARTIES, MOCK_PROPERTIES } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import ContractsList from './components/ContractsList';
@@ -12,14 +12,23 @@ import TemplatesList from './components/TemplatesList';
 import TemplateDetail from './components/TemplateDetail';
 import CounterpartiesList from './components/CounterpartiesList';
 import CreateContractWorkflow from './components/CreateContractWorkflow';
+import CreateCounterpartyWorkflow from './components/CreateCounterpartyWorkflow';
+import PropertiesList from './components/PropertiesList';
+import CreatePropertyWorkflow from './components/CreatePropertyWorkflow';
 
 export default function App() {
   const [contracts, setContracts] = useState<Contract[]>(MOCK_CONTRACTS);
   const [templates] = useState<ContractTemplate[]>(MOCK_TEMPLATES);
+  const [counterparties, setCounterparties] = useState<Counterparty[]>(Object.values(COUNTERPARTIES));
+  const [properties, setProperties] = useState<Property[]>(Object.values(MOCK_PROPERTIES));
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<ContractTemplate | null>(null);
   const [activeView, setActiveView] = useState('dashboard');
   const [isCreatingContract, setIsCreatingContract] = useState(false);
+  const [isCreatingCounterparty, setIsCreatingCounterparty] = useState(false);
+  const [isCreatingProperty, setIsCreatingProperty] = useState(false);
+  const [initialFilters, setInitialFilters] = useState<{ status?: ContractStatus; riskLevels?: RiskLevel[] }>({});
+
 
   const handleSelectContract = (contract: Contract) => {
     setSelectedContract(contract);
@@ -41,8 +50,24 @@ export default function App() {
     setActiveView(view);
     setSelectedContract(null);
     setSelectedTemplate(null);
+    setInitialFilters({}); // Reset filters on direct navigation
   };
   
+  const handleMetricNavigation = (metric: 'active' | 'pending' | 'high-risk') => {
+    let filters: { status?: ContractStatus; riskLevels?: RiskLevel[] } = {};
+    if (metric === 'active') {
+        filters = { status: ContractStatus.ACTIVE };
+    } else if (metric === 'pending') {
+        filters = { status: ContractStatus.PENDING_APPROVAL };
+    } else if (metric === 'high-risk') {
+        filters = { riskLevels: [RiskLevel.HIGH, RiskLevel.CRITICAL] };
+    }
+    setInitialFilters(filters);
+    setActiveView('contracts');
+    setSelectedContract(null);
+    setSelectedTemplate(null);
+  };
+
   const handleStartCreate = () => setIsCreatingContract(true);
   const handleCancelCreate = () => setIsCreatingContract(false);
 
@@ -67,16 +92,55 @@ export default function App() {
     setIsCreatingContract(false);
   };
 
+  const handleStartCreateCounterparty = () => setIsCreatingCounterparty(true);
+  const handleCancelCreateCounterparty = () => setIsCreatingCounterparty(false);
+  const handleFinalizeCreateCounterparty = (newCounterpartyData: Omit<Counterparty, 'id'>) => {
+    const newCounterparty: Counterparty = {
+        id: `cp-${Date.now()}`,
+        ...newCounterpartyData,
+    };
+    setCounterparties(prev => [...prev, newCounterparty]);
+    setIsCreatingCounterparty(false);
+  };
+  
+  const handleStartCreateProperty = () => setIsCreatingProperty(true);
+  const handleCancelCreateProperty = () => setIsCreatingProperty(false);
+  const handleFinalizeCreateProperty = (newPropertyData: Omit<Property, 'id'>) => {
+    const newProperty: Property = {
+        id: `prop-${Date.now()}`,
+        ...newPropertyData,
+    };
+    setProperties(prev => [...prev, newProperty]);
+    setIsCreatingProperty(false);
+  };
+
+  const handleUpdateContractStatus = (contractId: string, newStatus: ContractStatusType) => {
+    setContracts(prevContracts =>
+      prevContracts.map(contract =>
+        contract.id === contractId ? { ...contract, status: newStatus } : contract
+      )
+    );
+    // If we are in the detail view, we also need to update the selected contract
+    if (selectedContract && selectedContract.id === contractId) {
+        setSelectedContract(prev => prev ? { ...prev, status: newStatus } : null);
+    }
+  };
+
 
   const renderContent = () => {
     switch(activeView) {
       case 'dashboard':
-        return <Dashboard contracts={contracts} />;
+        return <Dashboard contracts={contracts} onMetricClick={handleMetricNavigation} />;
       case 'contracts':
         return selectedContract ? (
-          <ContractDetail contract={selectedContract} onBack={handleBackToList} />
+          <ContractDetail contract={selectedContract} onBack={handleBackToList} onUpdateStatus={handleUpdateContractStatus} />
         ) : (
-          <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={handleStartCreate} />
+          <ContractsList 
+            contracts={contracts} 
+            onSelectContract={handleSelectContract} 
+            onStartCreate={handleStartCreate}
+            initialFilters={initialFilters}
+          />
         );
       case 'approvals':
         return <ApprovalsPage contracts={contracts} setContracts={setContracts} />;
@@ -87,7 +151,9 @@ export default function App() {
             <TemplatesList templates={templates} onSelectTemplate={handleSelectTemplate} />
         );
       case 'counterparties':
-        return <CounterpartiesList contracts={contracts} />;
+        return <CounterpartiesList contracts={contracts} counterparties={counterparties} onStartCreate={handleStartCreateCounterparty} />;
+      case 'properties':
+        return <PropertiesList properties={properties} onStartCreate={handleStartCreateProperty} />;
       default:
         return <div className="p-8 bg-white rounded-xl shadow-sm"><h2 className="text-xl font-bold">{activeView.charAt(0).toUpperCase() + activeView.slice(1)}</h2><p className="mt-2 text-gray-500">This section is not yet implemented.</p></div>;
     }
@@ -104,8 +170,21 @@ export default function App() {
       </div>
       {isCreatingContract && (
         <CreateContractWorkflow
+            properties={properties}
             onCancel={handleCancelCreate}
             onFinish={handleFinalizeCreate}
+        />
+      )}
+      {isCreatingCounterparty && (
+        <CreateCounterpartyWorkflow
+            onCancel={handleCancelCreateCounterparty}
+            onFinish={handleFinalizeCreateCounterparty}
+        />
+      )}
+      {isCreatingProperty && (
+        <CreatePropertyWorkflow
+            onCancel={handleCancelCreateProperty}
+            onFinish={handleFinalizeCreateProperty}
         />
       )}
     </div>

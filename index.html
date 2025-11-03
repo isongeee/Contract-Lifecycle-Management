@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -49,6 +48,15 @@
     <style>
       body {
         font-feature-settings: 'cv11';
+      }
+      /* Hide arrows from number inputs */
+      .no-spinner::-webkit-outer-spin-button,
+      .no-spinner::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      .no-spinner {
+        -moz-appearance: textfield;
       }
     </style>
   <script type="importmap">

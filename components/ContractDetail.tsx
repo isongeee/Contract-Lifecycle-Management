@@ -1,15 +1,16 @@
-
-import React, { useState, useCallback } from 'react';
-import type { Contract, Clause } from '../types';
+import React, { useState, useCallback, useEffect } from 'react';
+import type { Contract, Clause, Property, ContractStatus } from '../types';
 import { ApprovalStatus } from '../types';
 import StatusTag from './StatusTag';
 import { ArrowLeftIcon, SparklesIcon, LoaderIcon } from './icons';
 import { APPROVAL_STATUS_COLORS } from '../constants';
 import { summarizeContractRisk, extractClauses } from '../services/geminiService';
+import UpdateStatusModal from './UpdateStatusModal';
 
 interface ContractDetailProps {
   contract: Contract;
   onBack: () => void;
+  onUpdateStatus: (contractId: string, newStatus: ContractStatus) => void;
 }
 
 const DetailItem = ({ label, value }: { label: string; value: React.ReactNode }) => (
@@ -129,8 +130,27 @@ const AiAnalysis = ({ contract, setContract }: { contract: Contract, setContract
     );
 };
 
-export default function ContractDetail({ contract: initialContract, onBack }: ContractDetailProps) {
+const formatPropertyAddress = (property: Property) => {
+    return [
+        property.addressLine1,
+        property.addressLine2,
+        `${property.city}, ${property.state} ${property.zipCode}`,
+        property.country
+    ].filter(Boolean).join(', ');
+}
+
+export default function ContractDetail({ contract: initialContract, onBack, onUpdateStatus }: ContractDetailProps) {
   const [contract, setContract] = useState(initialContract);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  useEffect(() => {
+    setContract(initialContract);
+  }, [initialContract]);
+
+  const handleStatusUpdate = (newStatus: ContractStatus) => {
+    onUpdateStatus(contract.id, newStatus);
+    setIsUpdatingStatus(false);
+  };
   
   return (
     <div>
@@ -148,7 +168,7 @@ export default function ContractDetail({ contract: initialContract, onBack }: Co
                         <StatusTag type="risk" status={contract.riskLevel} />
                     </div>
                 </div>
-                 <button className="px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary-600">
+                 <button onClick={() => setIsUpdatingStatus(true)} className="px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary-600">
                     Update Status
                 </button>
             </div>
@@ -157,6 +177,14 @@ export default function ContractDetail({ contract: initialContract, onBack }: Co
                 <DetailItem label="Contract Value" value={new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(contract.value)} />
                 <DetailItem label="Start Date" value={contract.startDate} />
                 <DetailItem label="End Date" value={contract.endDate} />
+                {contract.property && (
+                    <DetailItem label="Property" value={
+                        <span>
+                            {contract.property.name}
+                            <p className="text-xs text-gray-500">{formatPropertyAddress(contract.property)}</p>
+                        </span>
+                    } />
+                )}
                 <DetailItem label="Owner" value={
                     <div className="flex items-center space-x-2">
                         <img className="h-6 w-6 rounded-full" src={contract.owner.avatarUrl} alt={contract.owner.name} />
@@ -181,6 +209,13 @@ export default function ContractDetail({ contract: initialContract, onBack }: Co
                 <VersionHistory versions={contract.versions} />
             </div>
         </div>
+        {isUpdatingStatus && (
+            <UpdateStatusModal 
+                contract={contract}
+                onClose={() => setIsUpdatingStatus(false)}
+                onUpdate={handleStatusUpdate}
+            />
+        )}
     </div>
   );
 }

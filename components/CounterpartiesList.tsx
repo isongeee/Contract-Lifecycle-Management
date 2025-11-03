@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import type { Contract, Counterparty } from '../types';
 import { ContractStatus } from '../types';
@@ -10,6 +11,8 @@ interface CounterpartyWithMeta extends Counterparty {
 
 interface CounterpartiesListProps {
   contracts: Contract[];
+  counterparties: Counterparty[];
+  onStartCreate: () => void;
 }
 
 const CounterpartyCard = ({ counterparty }: { counterparty: CounterpartyWithMeta }) => (
@@ -44,29 +47,21 @@ const CounterpartyCard = ({ counterparty }: { counterparty: CounterpartyWithMeta
 );
 
 
-export default function CounterpartiesList({ contracts }: CounterpartiesListProps) {
+export default function CounterpartiesList({ contracts, counterparties, onStartCreate }: CounterpartiesListProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
-  const counterparties = useMemo<CounterpartyWithMeta[]>(() => {
-    const counterpartyMap = new Map<string, CounterpartyWithMeta>();
+  const counterpartiesWithMeta = useMemo<CounterpartyWithMeta[]>(() => {
+    return counterparties.map(cp => {
+        const relatedContracts = contracts.filter(c => c.counterparty.id === cp.id);
+        return {
+            ...cp,
+            activeContracts: relatedContracts.filter(c => c.status === ContractStatus.ACTIVE).length,
+            totalContracts: relatedContracts.length,
+        };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [contracts, counterparties]);
 
-    contracts.forEach(contract => {
-        const { id, name, address } = contract.counterparty;
-        if (!counterpartyMap.has(id)) {
-            counterpartyMap.set(id, { id, name, address, activeContracts: 0, totalContracts: 0 });
-        }
-        
-        const cp = counterpartyMap.get(id)!;
-        cp.totalContracts += 1;
-        if (contract.status === ContractStatus.ACTIVE) {
-            cp.activeContracts += 1;
-        }
-    });
-
-    return Array.from(counterpartyMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [contracts]);
-
-  const filteredCounterparties = counterparties.filter(cp => 
+  const filteredCounterparties = counterpartiesWithMeta.filter(cp => 
     cp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     cp.address.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -78,7 +73,9 @@ export default function CounterpartiesList({ contracts }: CounterpartiesListProp
                 <h1 className="text-2xl font-bold text-gray-900">Counterparties</h1>
                 <p className="mt-1 text-sm text-gray-500">Manage all external organizations and partners you do business with.</p>
             </div>
-            <button className="flex items-center px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+            <button 
+                onClick={onStartCreate}
+                className="flex items-center px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
                 <PlusIcon className="w-5 h-5 mr-2" />
                 Add Counterparty
             </button>
@@ -92,7 +89,7 @@ export default function CounterpartiesList({ contracts }: CounterpartiesListProp
                 type="search"
                 placeholder="Search by name or address..."
                 autoComplete="off"
-                className="block w-full max-w-lg rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary"
+                className="block w-full max-w-lg rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-[#9ca3af] shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
             />

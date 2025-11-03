@@ -1,6 +1,7 @@
 
+
 import React from 'react';
-import { LayoutDashboardIcon, FileTextIcon, UsersIcon, BookTextIcon, CheckCircleIcon, SettingsIcon } from './icons';
+import { LayoutDashboardIcon, FileTextIcon, UsersIcon, BookTextIcon, CheckCircleIcon, SettingsIcon, HomeIcon } from './icons';
 
 const NavItem = ({ icon, label, active = false, onClick }: { icon: React.ReactNode; label: string; active?: boolean; onClick: () => void; }) => (
   <button
@@ -20,6 +21,7 @@ const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboardIcon className="h-5 w-5" /> },
     { id: 'contracts', label: 'Contracts', icon: <FileTextIcon className="h-5 w-5" /> },
     { id: 'counterparties', label: 'Counterparties', icon: <UsersIcon className="h-5 w-5" /> },
+    { id: 'properties', label: 'Properties', icon: <HomeIcon className="h-5 w-5" /> },
     { id: 'templates', label: 'Templates', icon: <BookTextIcon className="h-5 w-5" /> },
     { id: 'approvals', label: 'Approvals', icon: <CheckCircleIcon className="h-5 w-5" /> },
 ];

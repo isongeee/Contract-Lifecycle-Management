@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import type { Contract } from '../types';
-import { ContractStatus, ContractType } from '../types';
+import { ContractStatus, ContractType, RiskLevel } from '../types';
 import StatusTag from './StatusTag';
 import { SearchIcon, ChevronDownIcon, PlusIcon } from './icons';
 
@@ -8,9 +9,15 @@ interface ContractsListProps {
   contracts: Contract[];
   onSelectContract: (contract: Contract) => void;
   onStartCreate: () => void;
+  initialFilters?: { status?: string; riskLevels?: RiskLevel[] };
 }
 
-const FilterDropdown = ({ label, options, selected, onChange }: { label: string; options: string[]; selected: string; onChange: (value: string) => void; }) => (
+interface FilterOption {
+  value: string;
+  label: string;
+}
+
+const FilterDropdown = ({ label, options, selected, onChange }: { label: string; options: FilterOption[]; selected: string; onChange: (value: string) => void; }) => (
     <div className="relative">
         <select 
             className="appearance-none w-full bg-white border border-gray-300 rounded-md py-2 pl-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -18,7 +25,7 @@ const FilterDropdown = ({ label, options, selected, onChange }: { label: string;
             onChange={(e) => onChange(e.target.value)}
         >
             <option value="">All {label}</option>
-            {options.map(option => <option key={option} value={option}>{option}</option>)}
+            {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
             <ChevronDownIcon className="h-4 w-4" />
@@ -26,23 +33,53 @@ const FilterDropdown = ({ label, options, selected, onChange }: { label: string;
     </div>
 );
 
-export default function ContractsList({ contracts, onSelectContract, onStartCreate }: ContractsListProps) {
+const typeOptions = Object.values(ContractType).map(t => ({ value: t, label: t }));
+const statusOptions = Object.values(ContractStatus).map(s => ({ value: s, label: s }));
+const riskOptions = Object.values(RiskLevel).map(r => ({ value: r, label: r }));
+
+export default function ContractsList({ contracts, onSelectContract, onStartCreate, initialFilters = {} }: ContractsListProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(initialFilters.status || '');
   const [typeFilter, setTypeFilter] = useState('');
+  const [riskFilter, setRiskFilter] = useState('');
+
+  useEffect(() => {
+    setStatusFilter(initialFilters.status || '');
+    if (initialFilters.riskLevels?.includes(RiskLevel.HIGH) && initialFilters.riskLevels?.includes(RiskLevel.CRITICAL)) {
+        setRiskFilter('HighAndCritical');
+    } else {
+        setRiskFilter('');
+    }
+    setTypeFilter(''); // Reset other filters
+  }, [initialFilters]);
+
 
   const filteredContracts = contracts.filter(contract => {
+    const riskMatch = () => {
+        if (riskFilter === '') return true;
+        if (riskFilter === 'HighAndCritical') {
+            return contract.riskLevel === RiskLevel.HIGH || contract.riskLevel === RiskLevel.CRITICAL;
+        }
+        return contract.riskLevel === riskFilter;
+    };
+    
     return (
       (contract.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
        contract.counterparty.name.toLowerCase().includes(searchTerm.toLowerCase())) &&
       (statusFilter === '' || contract.status === statusFilter) &&
-      (typeFilter === '' || contract.type === typeFilter)
+      (typeFilter === '' || contract.type === typeFilter) &&
+      riskMatch()
     );
   });
 
   const handleCreateNew = () => {
     onStartCreate();
   };
+  
+  const specialRiskOptions = [
+      ...riskOptions,
+      { value: 'HighAndCritical', label: 'High / Critical' }
+  ];
 
   return (
     <div className="bg-white rounded-xl shadow-sm">
@@ -60,8 +97,8 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
             </button>
         </div>
         
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="relative md:col-span-2 lg:col-span-2">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div className="relative md:col-span-6 lg:col-span-3">
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                     <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                 </div>
@@ -70,23 +107,28 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
                     type="search"
                     placeholder="Search by title or counterparty..."
                     autoComplete="off"
-                    className="block w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#BDAD49]/60 focus:border-[#BDAD49]
-                              dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700 dark:placeholder-gray-400"
+                    className="block w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-[#9ca3af] shadow-sm focus:outline-none focus:ring-2 focus:ring-[#BDAD49]/60 focus:border-[#BDAD49]"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
             </div>
              <FilterDropdown 
                 label="Types"
-                options={Object.values(ContractType)} 
+                options={typeOptions} 
                 selected={typeFilter} 
                 onChange={setTypeFilter}
             />
             <FilterDropdown 
                 label="Statuses"
-                options={Object.values(ContractStatus)} 
+                options={statusOptions} 
                 selected={statusFilter} 
                 onChange={setStatusFilter}
+            />
+            <FilterDropdown 
+                label="Risk Levels"
+                options={specialRiskOptions} 
+                selected={riskFilter} 
+                onChange={setRiskFilter}
             />
         </div>
       </div>

@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import type { Contract } from '../types';
 import { ContractStatus, RiskLevel } from '../types';
@@ -16,8 +15,11 @@ const daysUntil = (dateStr: string) => {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
-const MetricCard = ({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string | number, color: string; }) => (
-    <div className="bg-white p-5 rounded-xl shadow-sm flex items-start space-x-4">
+const MetricCard = ({ icon, label, value, color, onClick }: { icon: React.ReactNode; label: string; value: string | number, color: string; onClick: () => void; }) => (
+    <button 
+        onClick={onClick}
+        className="w-full text-left bg-white p-5 rounded-xl shadow-sm flex items-start space-x-4 hover:shadow-md hover:border-primary-300 transition-all duration-200 border border-transparent focus:outline-none focus:ring-2 focus:ring-primary"
+    >
         <div className={`flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-lg ${color}`}>
             {icon}
         </div>
@@ -25,7 +27,7 @@ const MetricCard = ({ icon, label, value, color }: { icon: React.ReactNode; labe
             <p className="text-sm font-medium text-gray-500">{label}</p>
             <p className="text-2xl font-bold text-gray-900">{value}</p>
         </div>
-    </div>
+    </button>
 );
 
 const ContractsByStatus = ({ contracts }: { contracts: Contract[] }) => {
@@ -101,7 +103,7 @@ const ExpiringContracts = ({ contracts }: { contracts: Contract[] }) => {
 };
 
 
-export default function Dashboard({ contracts }: { contracts: Contract[] }) {
+export default function Dashboard({ contracts, onMetricClick }: { contracts: Contract[]; onMetricClick: (metric: 'active' | 'pending' | 'high-risk') => void; }) {
 
     const metrics = useMemo(() => {
         const activeContracts = contracts.filter(c => c.status === ContractStatus.ACTIVE);
@@ -126,24 +128,28 @@ export default function Dashboard({ contracts }: { contracts: Contract[] }) {
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <MetricCard 
+                    onClick={() => onMetricClick('active')}
                     icon={<FileTextIcon className="w-6 h-6 text-blue-600" />}
                     label="Active Contracts"
                     value={metrics.activeCount}
                     color="bg-blue-100"
                 />
                  <MetricCard 
+                    onClick={() => onMetricClick('pending')}
                     icon={<UsersIcon className="w-6 h-6 text-yellow-600" />}
                     label="Pending Approval"
                     value={metrics.pendingCount}
                     color="bg-yellow-100"
                 />
                  <MetricCard 
+                    onClick={() => onMetricClick('active')}
                     icon={<DollarSignIcon className="w-6 h-6 text-green-600" />}
                     label="Total Active Value"
                     value={formatCurrency(metrics.totalValue)}
                     color="bg-green-100"
                 />
                  <MetricCard 
+                    onClick={() => onMetricClick('high-risk')}
                     icon={<AlertTriangleIcon className="w-6 h-6 text-red-600" />}
                     label="High-Risk Contracts"
                     value={metrics.riskCount}

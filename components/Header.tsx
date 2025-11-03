@@ -14,7 +14,7 @@ export default function Header() {
           <input
             type="text"
             placeholder="Search contracts..."
-            className="w-64 pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+            className="w-64 pl-10 pr-4 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:ring-primary focus:border-primary placeholder-[#9ca3af]"
           />
         </div>
         <div className="flex items-center space-x-3">

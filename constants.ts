@@ -1,5 +1,7 @@
-import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate } from './types';
-import type { UserProfile, Counterparty } from './types';
+
+
+import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency } from './types';
+import type { UserProfile, Counterparty, Property } from './types';
 
 export const STATUS_COLORS: Record<ContractStatus, string> = {
   [ContractStatus.DRAFT]: 'bg-gray-200 text-gray-800',
@@ -44,6 +46,12 @@ export const COUNTERPARTIES: Record<string, Counterparty> = {
     'wayne': { id: 'cp-6', name: 'Wayne Enterprises', address: '1007 Mountain Drive, Gotham City' },
 };
 
+export const MOCK_PROPERTIES: Record<string, Property> = {
+    'prop-1': { id: 'prop-1', name: 'Downtown SF Office', addressLine1: '123 Market St', city: 'San Francisco', state: 'CA', country: 'USA', zipCode: '94105' },
+    'prop-2': { id: 'prop-2', name: 'Manhattan HQ', addressLine1: '555 5th Ave', addressLine2: 'Suite 2100', city: 'New York', state: 'NY', country: 'USA', zipCode: '10017' },
+    'prop-3': { id: 'prop-3', name: 'London Bridge View', addressLine1: 'The Shard', addressLine2: '32 London Bridge St', city: 'London', state: 'N/A', country: 'UK', zipCode: 'SE1 9SG' },
+};
+
 const DUMMY_CONTRACT_CONTENT = `
 This Master Services Agreement ("Agreement") is made and entered into as of the Effective Date by and between Client and Service Provider.
 1. SERVICES. Service Provider shall perform the services described in each Statement of Work ("SOW").
@@ -62,11 +70,14 @@ export const MOCK_CONTRACTS: Contract[] = [
     status: ContractStatus.ACTIVE,
     riskLevel: RiskLevel.MEDIUM,
     counterparty: COUNTERPARTIES['acme'],
+    property: MOCK_PROPERTIES['prop-1'],
     owner: USERS['alice'],
     startDate: '2023-01-15',
     endDate: '2025-01-14',
     renewalDate: '2025-01-14',
     value: 250000,
+    // FIX: Added missing 'frequency' property.
+    frequency: ContractFrequency.ANNUALLY,
     versions: [
       { id: 'v1-1', versionNumber: 1, createdAt: '2023-01-05', author: USERS['alice'], content: DUMMY_CONTRACT_CONTENT },
       { id: 'v1-2', versionNumber: 2, createdAt: '2023-01-10', author: USERS['bob'], content: DUMMY_CONTRACT_CONTENT.replace('thirty (30)', 'sixty (60)') },
@@ -83,11 +94,14 @@ export const MOCK_CONTRACTS: Contract[] = [
     status: ContractStatus.PENDING_APPROVAL,
     riskLevel: RiskLevel.HIGH,
     counterparty: COUNTERPARTIES['globex'],
+    property: MOCK_PROPERTIES['prop-2'],
     owner: USERS['bob'],
     startDate: '2024-08-01',
     endDate: '2025-02-01',
     renewalDate: '2025-02-01',
     value: 75000,
+    // FIX: Added missing 'frequency' property.
+    frequency: ContractFrequency.MONTHLY,
     versions: [
         { id: 'v2-1', versionNumber: 1, createdAt: '2024-07-20', author: USERS['diana'], content: DUMMY_CONTRACT_CONTENT }
     ],
@@ -103,11 +117,14 @@ export const MOCK_CONTRACTS: Contract[] = [
     status: ContractStatus.PENDING_APPROVAL,
     riskLevel: RiskLevel.MEDIUM,
     counterparty: COUNTERPARTIES['cyberdyne'],
+    property: MOCK_PROPERTIES['prop-1'],
     owner: USERS['diana'],
     startDate: '2024-09-01',
     endDate: '2025-08-31',
     renewalDate: '2025-08-31',
     value: 120000,
+    // FIX: Added missing 'frequency' property.
+    frequency: ContractFrequency.ANNUALLY,
     versions: [
         { id: 'v5-1', versionNumber: 1, createdAt: '2024-07-28', author: USERS['diana'], content: DUMMY_CONTRACT_CONTENT }
     ],
@@ -128,6 +145,8 @@ export const MOCK_CONTRACTS: Contract[] = [
     endDate: '2026-07-24',
     renewalDate: '2026-07-24',
     value: 0,
+    // FIX: Added missing 'frequency' property.
+    frequency: ContractFrequency.ANNUALLY,
     versions: [
         { id: 'v3-1', versionNumber: 1, createdAt: '2024-07-25', author: USERS['diana'], content: 'This is a standard Non-Disclosure Agreement...' }
     ],
@@ -145,6 +164,8 @@ export const MOCK_CONTRACTS: Contract[] = [
     endDate: '2025-05-31',
     renewalDate: '2025-05-31',
     value: 12000,
+    // FIX: Added missing 'frequency' property.
+    frequency: ContractFrequency.ANNUALLY,
     versions: [
       { id: 'v4-1', versionNumber: 1, createdAt: '2024-05-20', author: USERS['alice'], content: DUMMY_CONTRACT_CONTENT },
     ],
@@ -159,11 +180,14 @@ export const MOCK_CONTRACTS: Contract[] = [
     status: ContractStatus.PENDING_APPROVAL,
     riskLevel: RiskLevel.HIGH,
     counterparty: COUNTERPARTIES['wayne'],
+    property: MOCK_PROPERTIES['prop-3'],
     owner: USERS['charlie'],
     startDate: '2024-10-01',
     endDate: '2029-09-30',
     renewalDate: '2029-09-30',
     value: 5000000,
+    // FIX: Added missing 'frequency' property.
+    frequency: ContractFrequency.MONTHLY,
     versions: [
         { id: 'v6-1', versionNumber: 1, createdAt: '2024-07-29', author: USERS['charlie'], content: DUMMY_CONTRACT_CONTENT }
     ],

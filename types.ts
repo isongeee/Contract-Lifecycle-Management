@@ -1,3 +1,5 @@
+import { GoogleGenAI } from "@google/genai";
+import React from 'react';
 
 export enum ContractType {
   NDA = 'NDA',
@@ -37,6 +39,13 @@ export enum RiskLevel {
   CRITICAL = 'Critical',
 }
 
+export enum ContractFrequency {
+    MONTHLY = 'Monthly',
+    QUARTERLY = 'Quarterly',
+    ANNUALLY = 'Annually',
+    SEASONAL = 'Seasonal',
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -48,6 +57,20 @@ export interface Counterparty {
   id: string;
   name:string;
   address: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+}
+
+export interface Property {
+  id: string;
+  name: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  country: string;
+  zipCode: string;
 }
 
 export interface ApprovalStep {
@@ -80,11 +103,14 @@ export interface Contract {
   status: ContractStatus;
   riskLevel: RiskLevel;
   counterparty: Counterparty;
+  property?: Property;
   owner: UserProfile;
   startDate: string;
   endDate: string;
   renewalDate: string;
   value: number;
+  frequency: ContractFrequency;
+  seasonalMonths?: string[];
   versions: ContractVersion[];
   approvalSteps: ApprovalStep[];
   extractedClauses?: Clause[];

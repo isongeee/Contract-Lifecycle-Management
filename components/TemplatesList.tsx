@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import type { ContractTemplate } from '../types';
 import { ContractType } from '../types';
@@ -57,7 +58,7 @@ export default function TemplatesList({ templates, onSelectTemplate }: Templates
                 type="search"
                 placeholder="Search templates..."
                 autoComplete="off"
-                className="block w-full max-w-lg rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary"
+                className="block w-full max-w-lg rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-[#9ca3af] shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
             />
