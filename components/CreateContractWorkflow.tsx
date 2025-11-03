@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { Contract, Counterparty, UserProfile, Property } from '../types';
 import { ContractType, ContractStatus, RiskLevel, ContractFrequency } from '../types';
 import { COUNTERPARTIES, USERS } from '../constants';
-import { UploadCloudIcon, XIcon } from './icons';
+import { UploadCloudIcon, XIcon, PlusIcon, Trash2Icon } from './icons';
 
 interface CreateContractWorkflowProps {
   properties: Property[];
@@ -13,7 +13,7 @@ interface CreateContractWorkflowProps {
 const STEPS = [
   { id: 1, name: 'Upload Documents' },
   { id: 2, name: 'Contract Information' },
-  { id: 3, name: 'Cost Allocations' },
+  { id: 3, name: 'Property & Cost Allocation' },
   { id: 4, name: 'Summary' },
 ];
 
@@ -83,9 +83,8 @@ const Stage1_Upload = ({ onNext }: { onNext: () => void }) => {
     );
 };
 
-interface StageProps {
+interface Stage2Props {
     data: Partial<Contract>;
-    properties: Property[];
     setData: (field: keyof Contract, value: any) => void;
     onBack: () => void;
     onNext: () => void;
@@ -103,7 +102,7 @@ const TextInput = (props: React.ComponentProps<'input'>) => <input {...props} cl
 const SelectInput = (props: React.ComponentProps<'select'>) => <select {...props} className="block w-full rounded-md border-0 py-1.5 px-3 bg-white text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" />
 
 
-const Stage2_Information = ({ data, setData, properties, onBack, onNext, onToggleMonth }: StageProps) => {
+const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth }: Stage2Props) => {
     return (
         <div>
             <h2 className="text-lg font-semibold text-gray-800">Contract Information</h2>
@@ -118,17 +117,12 @@ const Stage2_Information = ({ data, setData, properties, onBack, onNext, onToggl
                             {Object.values(COUNTERPARTIES).map((cp: Counterparty) => <option key={cp.id} value={cp.id}>{cp.name}</option>)}
                         </SelectInput>
                     </FormField>
-                    <FormField label="Property">
-                         <SelectInput value={data.property?.id} onChange={e => setData('property', properties.find(p => p.id === e.target.value))}>
-                            {properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </SelectInput>
-                    </FormField>
                     <FormField label="Contract Type">
                         <SelectInput value={data.type} onChange={e => setData('type', e.target.value as ContractType)}>
                             {Object.values(ContractType).map(type => <option key={type} value={type}>{type}</option>)}
                         </SelectInput>
                     </FormField>
-                    <FormField label="Contract Owner">
+                    <FormField label="Contract Owner" className="sm:col-span-full">
                         <SelectInput value={data.owner?.id} onChange={e => setData('owner', Object.values(USERS).find(u => u.id === e.target.value))}>
                             {Object.values(USERS).map((user: UserProfile) => <option key={user.id} value={user.id}>{user.name}</option>)}
                         </SelectInput>
@@ -180,29 +174,130 @@ const Stage2_Information = ({ data, setData, properties, onBack, onNext, onToggl
     );
 };
 
-const Stage3_Cost = ({ data, setData, onBack, onNext }: Omit<StageProps, 'onToggleMonth' | 'properties'>) => {
+type AllocationType = 'single' | 'multi' | 'portfolio';
+type Allocation = { id: number; propertyId: string; value: number };
+
+const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: any) => {
+    const [allocationType, setAllocationType] = useState<AllocationType>(
+      !data.property && (!data.propertyAllocations || data.propertyAllocations.length === 0) ? 'portfolio' :
+      data.propertyAllocations?.length > 1 ? 'multi' : 'single'
+    );
+    const [singlePropertyId, setSinglePropertyId] = useState(data.property?.id || (properties.length > 0 ? properties[0].id : ''));
+    const [multiAllocations, setMultiAllocations] = useState<Allocation[]>(() => {
+        if (data.propertyAllocations && data.propertyAllocations.length > 0) {
+            return data.propertyAllocations.map((a: any) => ({ ...a, id: Math.random() }));
+        }
+        return [{ id: Date.now(), propertyId: properties.length > 0 ? properties[0].id : '', value: data.value || 0 }];
+    });
+
+    const handleAddRow = () => {
+        setMultiAllocations(prev => [...prev, { id: Date.now(), propertyId: properties[0]?.id || '', value: 0 }]);
+    };
+    const handleDeleteRow = (id: number) => {
+        setMultiAllocations(prev => prev.filter(row => row.id !== id));
+    };
+    const handleAllocationChange = (id: number, field: 'propertyId' | 'value', value: string | number) => {
+        setMultiAllocations(prev => prev.map(row => row.id === id ? { ...row, [field]: value } : row));
+    };
+
+    const handleProceed = () => {
+        if (allocationType === 'single') {
+            setData('property', properties.find((p: Property) => p.id === singlePropertyId));
+            setData('propertyAllocations', null);
+        } else if (allocationType === 'multi') {
+            const primaryProperty = properties.find((p: Property) => p.id === multiAllocations[0].propertyId);
+            setData('property', primaryProperty);
+            setData('propertyAllocations', multiAllocations.map(({ id, ...rest }) => rest));
+        } else {
+            setData('property', null);
+            setData('propertyAllocations', null);
+        }
+        onNext();
+    };
+
+    const totalAllocated = multiAllocations.reduce((sum, alloc) => sum + Number(alloc.value || 0), 0);
+    const remainingValue = (data.value || 0) - totalAllocated;
+
     return (
         <div>
-            <h2 className="text-lg font-semibold text-gray-800">Cost Allocations</h2>
-            <p className="mt-1 text-sm text-gray-500">Specify the financial details of the contract.</p>
-             <div className="mt-6 space-y-6">
-                <FormRow>
-                    <FormField label="Total Contract Value (USD)" className="sm:col-span-3">
-                        <div className="relative rounded-md shadow-sm">
-                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                <span className="text-gray-500 sm:text-sm">$</span>
+            <h2 className="text-lg font-semibold text-gray-800">Property & Cost Allocation</h2>
+            <p className="mt-1 text-sm text-gray-500">Specify the financial details and associate properties.</p>
+            <div className="mt-6 space-y-6">
+                <FormField label="Total Contract Value (USD)" className="sm:col-span-3">
+                    <div className="relative rounded-md shadow-sm">
+                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                            <span className="text-gray-500 sm:text-sm">$</span>
+                        </div>
+                        <input type="number" value={data.value} onChange={e => setData('value', Number(e.target.value))} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 pr-12 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-[#9ca3af] focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" placeholder="0.00" />
+                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                            <span className="text-gray-500 sm:text-sm">USD</span>
+                        </div>
+                    </div>
+                </FormField>
+
+                <div className="sm:col-span-6">
+                    <label className="block text-sm font-medium leading-6 text-gray-900">Allocation Type</label>
+                    <fieldset className="mt-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            {(['Property-specific Contract', 'Multi-property Contract', 'Portfolio-wide Contract'] as const).map((label, idx) => {
+                                const type = (['single', 'multi', 'portfolio'] as const)[idx];
+                                return (
+                                <label key={type} className={`relative flex cursor-pointer rounded-lg border bg-white p-4 shadow-sm focus:outline-none ${allocationType === type ? 'border-primary ring-2 ring-primary' : 'border-gray-300'}`}>
+                                    <input type="radio" name="allocation-type" value={type} className="sr-only" checked={allocationType === type} onChange={() => setAllocationType(type)} />
+                                    <span className="flex flex-1"><span className="flex flex-col"><span className="block text-sm font-medium text-gray-900">{label}</span></span></span>
+                                </label>
+                                );
+                            })}
+                        </div>
+                    </fieldset>
+                </div>
+
+                {allocationType === 'single' && (
+                    <FormField label="Property" className="sm:col-span-3">
+                        <SelectInput value={singlePropertyId} onChange={e => setSinglePropertyId(e.target.value)}>
+                            {properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </SelectInput>
+                    </FormField>
+                )}
+
+                {allocationType === 'multi' && (
+                    <div className="sm:col-span-6 space-y-3">
+                        {multiAllocations.map((alloc, index) => (
+                            <div key={alloc.id} className="grid grid-cols-12 gap-x-4 items-center">
+                                <div className="col-span-6">
+                                    <SelectInput value={alloc.propertyId} onChange={e => handleAllocationChange(alloc.id, 'propertyId', e.target.value)}>
+                                        <option value="">Select property...</option>
+                                        {properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </SelectInput>
+                                </div>
+                                <div className="col-span-5">
+                                     <div className="relative rounded-md shadow-sm">
+                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div>
+                                        <input type="number" value={alloc.value} onChange={e => handleAllocationChange(alloc.id, 'value', e.target.value)} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm"/>
+                                    </div>
+                                </div>
+                                <div className="col-span-1">
+                                    {multiAllocations.length > 1 && <button type="button" onClick={() => handleDeleteRow(alloc.id)} className="text-gray-400 hover:text-red-600"><Trash2Icon className="w-5 h-5"/></button>}
+                                </div>
                             </div>
-                            <input type="number" value={data.value} onChange={e => setData('value', Number(e.target.value))} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 pr-12 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-[#9ca3af] focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" placeholder="0.00" />
-                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
-                                <span className="text-gray-500 sm:text-sm">USD</span>
+                        ))}
+                        <div className="flex justify-between items-center pt-2">
+                             <button type="button" onClick={handleAddRow} className="flex items-center text-sm font-semibold text-primary hover:text-primary-600">
+                                <PlusIcon className="w-4 h-4 mr-1"/> Add Property
+                            </button>
+                             <div className="text-sm font-medium">
+                                <span className={remainingValue !== 0 ? 'text-red-600' : 'text-green-600'}>
+                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(remainingValue)}
+                                </span>
+                                <span className="text-gray-600"> unallocated</span>
                             </div>
                         </div>
-                    </FormField>
-                </FormRow>
+                    </div>
+                )}
             </div>
             <div className="mt-8 flex justify-between">
                 <button onClick={onBack} type="button" className="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Back</button>
-                <button onClick={onNext} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Next</button>
+                <button onClick={handleProceed} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Next</button>
             </div>
         </div>
     );
@@ -211,15 +306,25 @@ const Stage3_Cost = ({ data, setData, onBack, onNext }: Omit<StageProps, 'onTogg
 const SummaryItem = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div className="flex flex-col rounded-lg bg-gray-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <dt className="text-sm font-medium text-gray-500">{label}</dt>
-        <dd className="mt-1 text-sm font-semibold text-gray-900 sm:mt-0">{value}</dd>
+        <dd className="mt-1 text-sm font-semibold text-gray-900 sm:mt-0 text-right">{value}</dd>
     </div>
 );
 
 
-const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract>, onBack: () => void, onFinish: () => void }) => {
+const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & { propertyAllocations?: any[] }, onBack: () => void, onFinish: () => void }) => {
     const frequencyDisplay = data.frequency === ContractFrequency.SEASONAL
         ? `Seasonal (${(data.seasonalMonths || []).join(', ') || 'No months selected'})`
         : data.frequency;
+        
+    const propertyDisplay = () => {
+        if (data.propertyAllocations && data.propertyAllocations.length > 1) {
+            return `Multi-property (${data.propertyAllocations.length} locations)`;
+        }
+        if (data.property) {
+            return data.property.name;
+        }
+        return "Portfolio-wide Contract";
+    };
         
     return (
         <div>
@@ -228,7 +333,7 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract>, o
             <dl className="mt-6 space-y-3">
                 <SummaryItem label="Contract Title" value={data.title} />
                 <SummaryItem label="Counterparty" value={data.counterparty?.name} />
-                <SummaryItem label="Property" value={data.property ? data.property.name : 'N/A'} />
+                <SummaryItem label="Property Association" value={propertyDisplay()} />
                 <SummaryItem label="Contract Type" value={data.type} />
                 <SummaryItem label="Contract Owner" value={data.owner?.name} />
                 <SummaryItem label="Total Value" value={new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(data.value || 0)} />
@@ -248,12 +353,12 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract>, o
 
 export default function CreateContractWorkflow({ onCancel, onFinish, properties }: CreateContractWorkflowProps) {
   const [currentStep, setCurrentStep] = useState(1);
-  const [newContractData, setNewContractData] = useState<Partial<Contract>>({
+  const [newContractData, setNewContractData] = useState<Partial<Contract> & { propertyAllocations?: any[] }>({
       title: '',
       type: ContractType.MSA,
       status: ContractStatus.DRAFT,
       riskLevel: RiskLevel.LOW,
-      value: 0,
+      value: 100000,
       owner: USERS['alice'],
       counterparty: Object.values(COUNTERPARTIES)[0],
       property: properties[0],
@@ -261,12 +366,13 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties 
       endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
       frequency: ContractFrequency.ANNUALLY,
       seasonalMonths: [],
+      propertyAllocations: [],
   });
 
   const handleNext = () => setCurrentStep(prev => Math.min(prev + 1, 4));
   const handleBack = () => setCurrentStep(prev => Math.max(prev - 1, 1));
   
-  const updateData = (field: keyof Contract, value: any) => {
+  const updateData = (field: keyof typeof newContractData, value: any) => {
       setNewContractData(prev => ({...prev, [field]: value }));
   };
 
@@ -279,17 +385,46 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties 
         return { ...prev, seasonalMonths: newMonths };
     });
   };
+  
+  const handleFinalize = () => {
+    let finalContent = `This contract for ${newContractData.title || 'a new matter'} was created via the wizard.`;
+    
+    if (newContractData.propertyAllocations && newContractData.propertyAllocations.length > 1) {
+        const totalValue = newContractData.value || 0;
+        const allocationDetails = newContractData.propertyAllocations.map(alloc => {
+            const prop = properties.find(p => p.id === alloc.propertyId);
+            const percentage = totalValue > 0 ? ((alloc.value / totalValue) * 100).toFixed(2) : 0;
+            return `- ${prop?.name || 'Unknown Property'}: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(alloc.value)} (${percentage}%)`;
+        }).join('\n');
+        finalContent += `\n\n--- MULTI-PROPERTY COST ALLOCATION ---\n${allocationDetails}`;
+    }
+
+    const finalContractData = { ...newContractData };
+    
+    // Set content and remove temporary allocation data
+    finalContractData.versions = [{
+        id: `v1-${Date.now()}`,
+        versionNumber: 1,
+        createdAt: new Date().toISOString().split('T')[0],
+        author: USERS['alice'],
+        content: finalContent
+    }];
+    delete finalContractData.propertyAllocations;
+
+    onFinish(finalContractData);
+  };
+
 
   const renderStep = () => {
       switch (currentStep) {
           case 1:
               return <Stage1_Upload onNext={handleNext} />;
           case 2:
-              return <Stage2_Information data={newContractData} setData={updateData} properties={properties} onBack={handleBack} onNext={handleNext} onToggleMonth={handleToggleMonth} />;
+              return <Stage2_Information data={newContractData} setData={updateData} onBack={handleBack} onNext={handleNext} onToggleMonth={handleToggleMonth} />;
           case 3:
-              return <Stage3_Cost data={newContractData} setData={updateData} onBack={handleBack} onNext={handleNext} />;
+              return <Stage3_PropertyAndCost data={newContractData} setData={updateData} properties={properties} onBack={handleBack} onNext={handleNext} />;
           case 4:
-              return <Stage4_Summary data={newContractData} onBack={handleBack} onFinish={() => onFinish(newContractData)} />;
+              return <Stage4_Summary data={newContractData} onBack={handleBack} onFinish={handleFinalize} />;
           default:
               return null;
       }

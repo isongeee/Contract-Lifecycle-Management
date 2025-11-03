@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType } from './types';
 import { ContractStatus, RiskLevel } from './types';
 import { MOCK_CONTRACTS, MOCK_TEMPLATES, USERS, COUNTERPARTIES, MOCK_PROPERTIES } from './constants';
@@ -18,6 +17,11 @@ import CreateCounterpartyWorkflow from './components/CreateCounterpartyWorkflow'
 import PropertiesList from './components/PropertiesList';
 import CreatePropertyWorkflow from './components/CreatePropertyWorkflow';
 import PropertyDetail from './components/PropertyDetail';
+import SettingsPage from './components/SettingsPage';
+import LoginPage from './components/LoginPage';
+import OrgSignUpPage from './components/OrgSignUpPage';
+import UserSignUpPage from './components/UserSignUpPage';
+
 
 export default function App() {
   const [contracts, setContracts] = useState<Contract[]>(MOCK_CONTRACTS);
@@ -33,7 +37,32 @@ export default function App() {
   const [isCreatingCounterparty, setIsCreatingCounterparty] = useState(false);
   const [isCreatingProperty, setIsCreatingProperty] = useState(false);
   const [initialFilters, setInitialFilters] = useState<{ status?: ContractStatus; riskLevels?: RiskLevel[] }>({});
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authView, setAuthView] = useState<'login' | 'org-signup' | 'user-signup'>('login');
 
+  useEffect(() => {
+    const root = window.document.documentElement;
+    const isDark =
+      theme === 'dark' ||
+      (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    
+    root.classList.toggle('dark', isDark);
+  }, [theme]);
+
+  const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
+    setTheme(newTheme);
+  };
+
+  const handleLogin = () => {
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setActiveView('dashboard'); // Reset to default view on logout
+    setAuthView('login');
+  };
 
   const handleSelectContract = (contract: Contract) => {
     setSelectedContract(contract);
@@ -206,16 +235,38 @@ export default function App() {
             onStartCreate={handleStartCreateProperty}
           />
         );
+      case 'settings':
+        return <SettingsPage currentTheme={theme} onThemeChange={handleThemeChange} />;
       default:
-        return <div className="p-8 bg-white rounded-xl shadow-sm"><h2 className="text-xl font-bold">{activeView.charAt(0).toUpperCase() + activeView.slice(1)}</h2><p className="mt-2 text-gray-500">This section is not yet implemented.</p></div>;
+        return <div className="p-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm"><h2 className="text-xl font-bold">{activeView.charAt(0).toUpperCase() + activeView.slice(1)}</h2><p className="mt-2 text-gray-500 dark:text-gray-400">This section is not yet implemented.</p></div>;
     }
   };
 
+  if (!isAuthenticated) {
+    const renderAuthContent = () => {
+        switch (authView) {
+            case 'login':
+                return <LoginPage onLogin={handleLogin} onNavigate={setAuthView} />;
+            case 'org-signup':
+                return <OrgSignUpPage onSignUp={() => setAuthView('login')} onNavigate={setAuthView} />;
+            case 'user-signup':
+                 return <UserSignUpPage onSignUp={() => setAuthView('login')} onNavigate={setAuthView} />;
+            default:
+                return <LoginPage onLogin={handleLogin} onNavigate={setAuthView} />;
+        }
+    }
+    return (
+        <div className="bg-gray-50 dark:bg-gray-900 min-h-screen font-sans text-gray-900 dark:text-gray-100 flex items-center justify-center p-4">
+            {renderAuthContent()}
+        </div>
+    );
+  }
+
   return (
-    <div className="bg-gray-50 min-h-screen font-sans text-gray-900 flex">
+    <div className="bg-gray-50 dark:bg-gray-900 min-h-screen font-sans text-gray-900 dark:text-gray-100 flex">
       <Sidebar activeView={activeView} onNavigate={handleNavigate} />
       <div className="flex-1 flex flex-col">
-        <Header />
+        <Header onLogout={handleLogout} onNavigate={handleNavigate} />
         <main className="flex-1 p-6 lg:p-8 overflow-y-auto">
           {renderContent()}
         </main>

@@ -8,8 +8,8 @@ const NavItem = ({ icon, label, active = false, onClick }: { icon: React.ReactNo
     onClick={onClick}
     className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 text-left ${
       active
-        ? 'bg-primary-100 text-primary-900'
-        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+        ? 'bg-primary-100 dark:bg-primary-900/20 text-primary-900 dark:text-primary-100'
+        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
     }`}
   >
     {icon}
@@ -28,10 +28,10 @@ const navItems = [
 
 export default function Sidebar({ activeView, onNavigate }: { activeView: string; onNavigate: (view: string) => void; }) {
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex-shrink-0 hidden md:flex flex-col">
-      <div className="h-16 flex items-center px-6 border-b border-gray-200">
+    <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 hidden md:flex flex-col">
+      <div className="h-16 flex items-center px-6 border-b border-gray-200 dark:border-gray-700">
         <FileTextIcon className="h-8 w-8 text-primary" />
-        <span className="ml-2 text-xl font-bold text-gray-800">CLM System</span>
+        <span className="ml-2 text-xl font-bold text-gray-800 dark:text-gray-200">CLM System</span>
       </div>
       <nav className="flex-1 px-4 py-6 space-y-2">
         {navItems.map(item => (
@@ -44,7 +44,7 @@ export default function Sidebar({ activeView, onNavigate }: { activeView: string
             />
         ))}
       </nav>
-      <div className="px-4 py-6 border-t border-gray-200">
+      <div className="px-4 py-6 border-t border-gray-200 dark:border-gray-700">
          <NavItem 
             icon={<SettingsIcon className="h-5 w-5" />} 
             label="Settings" 
