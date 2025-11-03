@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType } from './types';
 import { ContractStatus, RiskLevel } from './types';
@@ -16,6 +17,7 @@ import CreateContractWorkflow from './components/CreateContractWorkflow';
 import CreateCounterpartyWorkflow from './components/CreateCounterpartyWorkflow';
 import PropertiesList from './components/PropertiesList';
 import CreatePropertyWorkflow from './components/CreatePropertyWorkflow';
+import PropertyDetail from './components/PropertyDetail';
 
 export default function App() {
   const [contracts, setContracts] = useState<Contract[]>(MOCK_CONTRACTS);
@@ -25,6 +27,7 @@ export default function App() {
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<ContractTemplate | null>(null);
   const [selectedCounterparty, setSelectedCounterparty] = useState<Counterparty | null>(null);
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [activeView, setActiveView] = useState('dashboard');
   const [isCreatingContract, setIsCreatingContract] = useState(false);
   const [isCreatingCounterparty, setIsCreatingCounterparty] = useState(false);
@@ -56,12 +59,21 @@ export default function App() {
   const handleBackToCounterpartiesList = () => {
     setSelectedCounterparty(null);
   };
+  
+  const handleSelectProperty = (property: Property) => {
+    setSelectedProperty(property);
+  };
+
+  const handleBackToPropertiesList = () => {
+    setSelectedProperty(null);
+  };
 
   const handleNavigate = (view: string) => {
     setActiveView(view);
     setSelectedContract(null);
     setSelectedTemplate(null);
     setSelectedCounterparty(null);
+    setSelectedProperty(null);
     setInitialFilters({}); // Reset filters on direct navigation
   };
   
@@ -179,7 +191,21 @@ export default function App() {
             />
         );
       case 'properties':
-        return <PropertiesList properties={properties} onStartCreate={handleStartCreateProperty} />;
+        return selectedProperty ? (
+          <PropertyDetail
+            property={selectedProperty}
+            contracts={contracts.filter(c => c.property?.id === selectedProperty.id)}
+            onBack={handleBackToPropertiesList}
+            onSelectContract={handleSelectContract}
+          />
+        ) : (
+          <PropertiesList
+            properties={properties}
+            contracts={contracts}
+            onSelectProperty={handleSelectProperty}
+            onStartCreate={handleStartCreateProperty}
+          />
+        );
       default:
         return <div className="p-8 bg-white rounded-xl shadow-sm"><h2 className="text-xl font-bold">{activeView.charAt(0).toUpperCase() + activeView.slice(1)}</h2><p className="mt-2 text-gray-500">This section is not yet implemented.</p></div>;
     }

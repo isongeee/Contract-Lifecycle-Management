@@ -1,10 +1,16 @@
 
-import React, { useState } from 'react';
-import type { Property } from '../types';
-import { SearchIcon, HomeIcon, PlusIcon } from './icons';
+import React, { useState, useMemo } from 'react';
+import type { Property, Contract } from '../types';
+import { SearchIcon, HomeIcon, PlusIcon, FileTextIcon } from './icons';
+
+interface PropertyWithMeta extends Property {
+    contractCount: number;
+}
 
 interface PropertiesListProps {
   properties: Property[];
+  contracts: Contract[];
+  onSelectProperty: (property: Property) => void;
   onStartCreate: () => void;
 }
 
@@ -13,21 +19,31 @@ const formatAddress = (property: Property) => {
     return `${property.addressLine1}, ${line2}${property.city}, ${property.state} ${property.zipCode}, ${property.country}`;
 };
 
-const PropertyCard = ({ property }: { property: Property }) => (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary-300 transition-all duration-200 flex flex-col p-5">
-        <div className="flex items-start space-x-4">
-            <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-gray-100 rounded-lg">
-                <HomeIcon className="w-6 h-6 text-gray-500" />
-            </div>
-            <div>
-                <h3 className="font-bold text-gray-800 text-md">{property.name}</h3>
-                <p className="text-sm text-gray-500">{property.addressLine1}</p>
-                <p className="text-sm text-gray-500">{`${property.city}, ${property.state} ${property.zipCode}`}</p>
-                <p className="text-sm text-gray-500">{property.country}</p>
+const PropertyCard = ({ property, onSelect }: { property: PropertyWithMeta, onSelect: () => void }) => (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary-300 transition-all duration-200 flex flex-col h-full">
+        <div className="p-5 flex-grow">
+            <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-gray-100 rounded-lg">
+                    <HomeIcon className="w-6 h-6 text-gray-500" />
+                </div>
+                <div>
+                    <h3 className="font-bold text-gray-800 text-md">{property.name}</h3>
+                    <p className="text-sm text-gray-500">{property.addressLine1}</p>
+                    <p className="text-sm text-gray-500">{`${property.city}, ${property.state} ${property.zipCode}`}</p>
+                    <p className="text-sm text-gray-500">{property.country}</p>
+                </div>
             </div>
         </div>
-        <div className="mt-4 pt-3 border-t border-gray-100 text-right">
-             <button className="text-sm font-semibold text-primary-600 hover:text-primary-800">
+         <div className="border-t border-gray-200 px-5 py-3">
+             <div className="flex items-center space-x-2">
+                <FileTextIcon className="w-4 h-4 text-gray-400" />
+                <span className="text-sm text-gray-600">
+                    <span className="font-bold text-gray-800">{property.contractCount}</span> associated contract{property.contractCount !== 1 ? 's' : ''}
+                </span>
+            </div>
+        </div>
+        <div className="bg-gray-50 p-3 text-right">
+             <button onClick={onSelect} className="text-sm font-semibold text-primary-600 hover:text-primary-800">
                 View Details &rarr;
             </button>
         </div>
@@ -35,10 +51,20 @@ const PropertyCard = ({ property }: { property: Property }) => (
 );
 
 
-export default function PropertiesList({ properties, onStartCreate }: PropertiesListProps) {
+export default function PropertiesList({ properties, contracts, onSelectProperty, onStartCreate }: PropertiesListProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredProperties = properties.filter(p => 
+  const propertiesWithMeta = useMemo<PropertyWithMeta[]>(() => {
+    return properties.map(p => {
+        const relatedContracts = contracts.filter(c => c.property?.id === p.id);
+        return {
+            ...p,
+            contractCount: relatedContracts.length,
+        };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [contracts, properties]);
+
+  const filteredProperties = propertiesWithMeta.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     formatAddress(p).toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -74,7 +100,7 @@ export default function PropertiesList({ properties, onStartCreate }: Properties
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProperties.map(p => (
-                <PropertyCard key={p.id} property={p} />
+                <PropertyCard key={p.id} property={p} onSelect={() => onSelectProperty(p)} />
             ))}
         </div>
         
