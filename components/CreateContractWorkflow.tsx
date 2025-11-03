@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Contract, Counterparty, UserProfile, Property } from '../types';
 import { ContractType, ContractStatus, RiskLevel, ContractFrequency } from '../types';
 import { COUNTERPARTIES, USERS } from '../constants';
@@ -175,47 +175,162 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth }: St
 };
 
 type AllocationType = 'single' | 'multi' | 'portfolio';
-type Allocation = { id: number; propertyId: string; value: number };
+
+type MonthlyAllocation = {
+    id: number;
+    propertyId: string;
+    monthlyValues: { [month: string]: number };
+    manualEdits: { [month: string]: boolean };
+};
 
 const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: any) => {
+    const isSeasonal = data.frequency === ContractFrequency.SEASONAL && data.seasonalMonths?.length > 0;
     const [allocationType, setAllocationType] = useState<AllocationType>(
       !data.property && (!data.propertyAllocations || data.propertyAllocations.length === 0) ? 'portfolio' :
       data.propertyAllocations?.length > 1 ? 'multi' : 'single'
     );
+    
+    // Non-seasonal state
     const [singlePropertyId, setSinglePropertyId] = useState(data.property?.id || (properties.length > 0 ? properties[0].id : ''));
-    const [multiAllocations, setMultiAllocations] = useState<Allocation[]>(() => {
-        if (data.propertyAllocations && data.propertyAllocations.length > 0) {
-            return data.propertyAllocations.map((a: any) => ({ ...a, id: Math.random() }));
+    const [multiAllocations, setMultiAllocations] = useState(() => (data.propertyAllocations && !isSeasonal ? data.propertyAllocations : [{ id: Date.now(), propertyId: properties[0]?.id || '', value: data.value || 0 }]));
+
+    // Seasonal state
+    const [seasonalAllocations, setSeasonalAllocations] = useState<MonthlyAllocation[]>([]);
+
+    useEffect(() => {
+        if (isSeasonal) {
+            const initialMonthlyValues = data.seasonalMonths.reduce((acc: any, month: string) => {
+                acc[month] = 0;
+                return acc;
+            }, {});
+            const initialManualEdits = { ...initialMonthlyValues };
+             Object.keys(initialManualEdits).forEach(k => initialManualEdits[k] = false);
+
+            if (allocationType === 'single') {
+                setSeasonalAllocations([{ id: Date.now(), propertyId: singlePropertyId, monthlyValues: initialMonthlyValues, manualEdits: initialManualEdits }]);
+            } else if (allocationType === 'multi') {
+                const existingProps = multiAllocations.map((a: any) => a.propertyId).filter(Boolean);
+                if (existingProps.length === 0 && properties.length > 0) existingProps.push(properties[0].id);
+                setSeasonalAllocations(existingProps.map((propId: string, idx: number) => ({ id: Date.now() + idx, propertyId: propId, monthlyValues: { ...initialMonthlyValues }, manualEdits: { ...initialManualEdits }})));
+            } else if (allocationType === 'portfolio') {
+                setSeasonalAllocations([{ id: Date.now(), propertyId: 'portfolio', monthlyValues: initialMonthlyValues, manualEdits: initialManualEdits }]);
+            }
+        } else {
+            setSeasonalAllocations([]);
         }
-        return [{ id: Date.now(), propertyId: properties.length > 0 ? properties[0].id : '', value: data.value || 0 }];
-    });
+    }, [isSeasonal, data.seasonalMonths, allocationType, singlePropertyId, multiAllocations, properties]);
+
 
     const handleAddRow = () => {
-        setMultiAllocations(prev => [...prev, { id: Date.now(), propertyId: properties[0]?.id || '', value: 0 }]);
+        if(isSeasonal) {
+            const initialMonthlyValues = data.seasonalMonths.reduce((acc: any, month: string) => ({ ...acc, [month]: 0 }), {});
+            const initialManualEdits = { ...initialMonthlyValues };
+            Object.keys(initialManualEdits).forEach(k => initialManualEdits[k] = false);
+            setSeasonalAllocations(prev => [...prev, { id: Date.now(), propertyId: properties[0]?.id || '', monthlyValues: initialMonthlyValues, manualEdits: initialManualEdits }]);
+        } else {
+             setMultiAllocations((prev: any) => [...prev, { id: Date.now(), propertyId: properties[0]?.id || '', value: 0 }]);
+        }
     };
+    
     const handleDeleteRow = (id: number) => {
-        setMultiAllocations(prev => prev.filter(row => row.id !== id));
+        if (isSeasonal) {
+            setSeasonalAllocations(prev => prev.filter(row => row.id !== id));
+        } else {
+             setMultiAllocations((prev: any) => prev.filter((row: any) => row.id !== id));
+        }
     };
-    const handleAllocationChange = (id: number, field: 'propertyId' | 'value', value: string | number) => {
-        setMultiAllocations(prev => prev.map(row => row.id === id ? { ...row, [field]: value } : row));
+
+    const handleAllocationChange = (id: number, field: 'propertyId' | 'value' | string, value: string | number) => {
+        if(isSeasonal) {
+            setSeasonalAllocations(prev => prev.map(row => {
+                if (row.id === id) {
+                    if (field === 'propertyId') {
+                        return { ...row, propertyId: String(value) };
+                    }
+                    // It's a month field
+                    return { 
+                        ...row, 
+                        monthlyValues: { ...row.monthlyValues, [field]: Number(value) },
+                        manualEdits: { ...row.manualEdits, [field]: true }
+                    };
+                }
+                return row;
+            }));
+        } else {
+            setMultiAllocations((prev: any) => prev.map((row: any) => row.id === id ? { ...row, [field]: value } : row));
+        }
+    };
+    
+    const handleCalculateAllocation = () => {
+        if (!isSeasonal) return;
+
+        let totalManualAllocation = 0;
+        let unallocatedCellCount = 0;
+
+        seasonalAllocations.forEach(row => {
+            data.seasonalMonths.forEach((month: string) => {
+                if (row.manualEdits[month]) {
+                    totalManualAllocation += row.monthlyValues[month] || 0;
+                } else {
+                    unallocatedCellCount++;
+                }
+            });
+        });
+        
+        const remainingValue = (data.value || 0) - totalManualAllocation;
+        const valuePerCell = unallocatedCellCount > 0 ? remainingValue / unallocatedCellCount : 0;
+
+        setSeasonalAllocations(prev => prev.map(row => {
+            const newMonthlyValues = { ...row.monthlyValues };
+            data.seasonalMonths.forEach((month: string) => {
+                if (!row.manualEdits[month]) {
+                    newMonthlyValues[month] = Math.max(0, valuePerCell); // Ensure non-negative
+                }
+            });
+            return { ...row, monthlyValues: newMonthlyValues };
+        }));
     };
 
     const handleProceed = () => {
         if (allocationType === 'single') {
             setData('property', properties.find((p: Property) => p.id === singlePropertyId));
-            setData('propertyAllocations', null);
+            if (isSeasonal) {
+                setData('propertyAllocations', seasonalAllocations.map(({ id, ...rest }) => ({...rest, propertyId: singlePropertyId})));
+            } else {
+                 setData('propertyAllocations', null);
+            }
         } else if (allocationType === 'multi') {
-            const primaryProperty = properties.find((p: Property) => p.id === multiAllocations[0].propertyId);
+            const primaryProperty = properties.find((p: Property) => p.id === (isSeasonal ? seasonalAllocations[0]?.propertyId : multiAllocations[0]?.propertyId));
             setData('property', primaryProperty);
-            setData('propertyAllocations', multiAllocations.map(({ id, ...rest }) => rest));
-        } else {
+            if (isSeasonal) {
+                setData('propertyAllocations', seasonalAllocations.map(({ id, ...rest }) => rest));
+            } else {
+                 setData('propertyAllocations', multiAllocations.map(({ id, ...rest }: any) => rest));
+            }
+        } else { // Portfolio
             setData('property', null);
-            setData('propertyAllocations', null);
+            if (isSeasonal) {
+                setData('propertyAllocations', seasonalAllocations.map(({ id, ...rest }) => rest));
+            } else {
+                setData('propertyAllocations', null);
+            }
         }
         onNext();
     };
 
-    const totalAllocated = multiAllocations.reduce((sum, alloc) => sum + Number(alloc.value || 0), 0);
+    // Calculate totals for display
+    let totalAllocated = 0;
+    if (isSeasonal) {
+        totalAllocated = seasonalAllocations.reduce((sum, alloc) => {
+            return sum + Object.values(alloc.monthlyValues).reduce((monthSum, val) => monthSum + Number(val || 0), 0);
+        }, 0);
+    } else {
+         if (allocationType === 'multi') {
+            totalAllocated = multiAllocations.reduce((sum: number, alloc: any) => sum + Number(alloc.value || 0), 0);
+        } else {
+            totalAllocated = data.value || 0;
+        }
+    }
     const remainingValue = (data.value || 0) - totalAllocated;
 
     return (
@@ -225,13 +340,9 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
             <div className="mt-6 space-y-6">
                 <FormField label="Total Contract Value (USD)" className="sm:col-span-3">
                     <div className="relative rounded-md shadow-sm">
-                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                            <span className="text-gray-500 sm:text-sm">$</span>
-                        </div>
+                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div>
                         <input type="number" value={data.value} onChange={e => setData('value', Number(e.target.value))} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 pr-12 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-[#9ca3af] focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" placeholder="0.00" />
-                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
-                            <span className="text-gray-500 sm:text-sm">USD</span>
-                        </div>
+                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3"><span className="text-gray-500 sm:text-sm">USD</span></div>
                     </div>
                 </FormField>
 
@@ -243,7 +354,7 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                                 const type = (['single', 'multi', 'portfolio'] as const)[idx];
                                 return (
                                 <label key={type} className={`relative flex cursor-pointer rounded-lg border bg-white p-4 shadow-sm focus:outline-none ${allocationType === type ? 'border-primary ring-2 ring-primary' : 'border-gray-300'}`}>
-                                    <input type="radio" name="allocation-type" value={type} className="sr-only" checked={allocationType === type} onChange={() => setAllocationType(type)} />
+                                    <input type="radio" name="allocation-type" value={type} className="sr-only" checked={allocationType === type} onChange={(e) => setAllocationType(e.target.value as AllocationType)} />
                                     <span className="flex flex-1"><span className="flex flex-col"><span className="block text-sm font-medium text-gray-900">{label}</span></span></span>
                                 </label>
                                 );
@@ -251,45 +362,77 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                         </div>
                     </fieldset>
                 </div>
-
-                {allocationType === 'single' && (
+                
+                {/* NON-SEASONAL UI */}
+                {!isSeasonal && allocationType === 'single' && (
                     <FormField label="Property" className="sm:col-span-3">
                         <SelectInput value={singlePropertyId} onChange={e => setSinglePropertyId(e.target.value)}>
                             {properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </SelectInput>
                     </FormField>
                 )}
-
-                {allocationType === 'multi' && (
-                    <div className="sm:col-span-6 space-y-3">
-                        {multiAllocations.map((alloc, index) => (
+                {!isSeasonal && allocationType === 'multi' && (
+                     <div className="sm:col-span-6 space-y-3">
+                        {multiAllocations.map((alloc: any, index: number) => (
                             <div key={alloc.id} className="grid grid-cols-12 gap-x-4 items-center">
-                                <div className="col-span-6">
-                                    <SelectInput value={alloc.propertyId} onChange={e => handleAllocationChange(alloc.id, 'propertyId', e.target.value)}>
-                                        <option value="">Select property...</option>
-                                        {properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                    </SelectInput>
-                                </div>
-                                <div className="col-span-5">
-                                     <div className="relative rounded-md shadow-sm">
-                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div>
-                                        <input type="number" value={alloc.value} onChange={e => handleAllocationChange(alloc.id, 'value', e.target.value)} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm"/>
-                                    </div>
-                                </div>
-                                <div className="col-span-1">
-                                    {multiAllocations.length > 1 && <button type="button" onClick={() => handleDeleteRow(alloc.id)} className="text-gray-400 hover:text-red-600"><Trash2Icon className="w-5 h-5"/></button>}
-                                </div>
+                                <div className="col-span-6"><SelectInput value={alloc.propertyId} onChange={e => handleAllocationChange(alloc.id, 'propertyId', e.target.value)}><option value="">Select property...</option>{properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}</SelectInput></div>
+                                <div className="col-span-5"><div className="relative rounded-md shadow-sm"><div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div><input type="number" value={alloc.value} onChange={e => handleAllocationChange(alloc.id, 'value', e.target.value)} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm"/></div></div>
+                                <div className="col-span-1">{multiAllocations.length > 1 && <button type="button" onClick={() => handleDeleteRow(alloc.id)} className="text-gray-400 hover:text-red-600"><Trash2Icon className="w-5 h-5"/></button>}</div>
                             </div>
                         ))}
+                        <div className="flex justify-between items-center pt-2"><button type="button" onClick={handleAddRow} className="flex items-center text-sm font-semibold text-primary hover:text-primary-600"><PlusIcon className="w-4 h-4 mr-1"/> Add Property</button><div className="text-sm font-medium"><span className={remainingValue !== 0 ? 'text-red-600' : 'text-green-600'}>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(remainingValue)}</span><span className="text-gray-600"> unallocated</span></div></div>
+                    </div>
+                )}
+                
+                {/* SEASONAL UI */}
+                {isSeasonal && (allocationType === 'single' || allocationType === 'multi' || allocationType === 'portfolio') && (
+                    <div className="sm:col-span-6 space-y-4">
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{allocationType !== 'portfolio' ? 'Property' : 'Allocation'}</th>
+                                        {data.seasonalMonths.map((month: string) => <th key={month} className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">{month}</th>)}
+                                        {allocationType === 'multi' && <th className="w-10"></th>}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {seasonalAllocations.map(alloc => (
+                                        <tr key={alloc.id} className="border-b">
+                                            <td className="py-2 px-3">
+                                                {allocationType === 'single' ? 
+                                                    (<SelectInput value={singlePropertyId} onChange={e => setSinglePropertyId(e.target.value)}>
+                                                        {properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                                    </SelectInput>) :
+                                                allocationType === 'multi' ?
+                                                    (<SelectInput value={alloc.propertyId} onChange={e => handleAllocationChange(alloc.id, 'propertyId', e.target.value)}>{properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}</SelectInput>) :
+                                                    (<span className="text-sm font-medium text-gray-700">Portfolio-wide</span>)
+                                                }
+                                            </td>
+                                            {data.seasonalMonths.map((month: string) => (
+                                                <td key={month} className="py-2 px-3">
+                                                     <div className="relative rounded-md shadow-sm">
+                                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div>
+                                                        <input type="number" value={alloc.monthlyValues[month] || ''} onChange={e => handleAllocationChange(alloc.id, month, e.target.value)} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm"/>
+                                                    </div>
+                                                </td>
+                                            ))}
+                                            {allocationType === 'multi' && <td>{seasonalAllocations.length > 1 && <button type="button" onClick={() => handleDeleteRow(alloc.id)} className="text-gray-400 hover:text-red-600 ml-2"><Trash2Icon className="w-5 h-5"/></button>}</td>}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                         <div className="flex justify-between items-center pt-2">
-                             <button type="button" onClick={handleAddRow} className="flex items-center text-sm font-semibold text-primary hover:text-primary-600">
-                                <PlusIcon className="w-4 h-4 mr-1"/> Add Property
-                            </button>
-                             <div className="text-sm font-medium">
-                                <span className={remainingValue !== 0 ? 'text-red-600' : 'text-green-600'}>
-                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(remainingValue)}
-                                </span>
-                                <span className="text-gray-600"> unallocated</span>
+                            <div>
+                                {allocationType === 'multi' && <button type="button" onClick={handleAddRow} className="flex items-center text-sm font-semibold text-primary hover:text-primary-600"><PlusIcon className="w-4 h-4 mr-1"/> Add Property</button>}
+                            </div>
+                            <div className="flex items-center space-x-4">
+                                <button onClick={handleCalculateAllocation} type="button" className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Calculate Allocation</button>
+                                <div className="text-sm font-medium">
+                                    <span className={remainingValue.toFixed(2) !== '0.00' ? 'text-red-600' : 'text-green-600'}>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(remainingValue)}</span>
+                                    <span className="text-gray-600"> unallocated</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -354,18 +497,18 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
 export default function CreateContractWorkflow({ onCancel, onFinish, properties }: CreateContractWorkflowProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [newContractData, setNewContractData] = useState<Partial<Contract> & { propertyAllocations?: any[] }>({
-      title: '',
+      title: 'New Seasonal Contract',
       type: ContractType.MSA,
       status: ContractStatus.DRAFT,
       riskLevel: RiskLevel.LOW,
-      value: 100000,
+      value: 120000,
       owner: USERS['alice'],
       counterparty: Object.values(COUNTERPARTIES)[0],
       property: properties[0],
       startDate: new Date().toISOString().split('T')[0],
       endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
-      frequency: ContractFrequency.ANNUALLY,
-      seasonalMonths: [],
+      frequency: ContractFrequency.SEASONAL,
+      seasonalMonths: ['Jan', 'Feb', 'Mar', 'Apr'],
       propertyAllocations: [],
   });
 
@@ -388,16 +531,31 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties 
   
   const handleFinalize = () => {
     let finalContent = `This contract for ${newContractData.title || 'a new matter'} was created via the wizard.`;
+    const isSeasonal = newContractData.frequency === ContractFrequency.SEASONAL;
     
-    if (newContractData.propertyAllocations && newContractData.propertyAllocations.length > 1) {
-        const totalValue = newContractData.value || 0;
-        const allocationDetails = newContractData.propertyAllocations.map(alloc => {
-            const prop = properties.find(p => p.id === alloc.propertyId);
-            const percentage = totalValue > 0 ? ((alloc.value / totalValue) * 100).toFixed(2) : 0;
-            return `- ${prop?.name || 'Unknown Property'}: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(alloc.value)} (${percentage}%)`;
-        }).join('\n');
-        finalContent += `\n\n--- MULTI-PROPERTY COST ALLOCATION ---\n${allocationDetails}`;
+    if (newContractData.propertyAllocations && newContractData.propertyAllocations.length > 0) {
+        let allocationDetails = '';
+        if (isSeasonal) {
+            allocationDetails = newContractData.propertyAllocations.map(alloc => {
+                const prop = properties.find(p => p.id === alloc.propertyId);
+                const propName = prop?.name || (alloc.propertyId === 'portfolio' ? 'Portfolio-wide Total' : 'Unknown Property');
+                const monthlyDetails = Object.entries(alloc.monthlyValues)
+                    .map(([month, value]) => `    - ${month}: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value as number)}`)
+                    .join('\n');
+                return `- ${propName}:\n${monthlyDetails}`;
+            }).join('\n');
+            finalContent += `\n\n--- SEASONAL COST ALLOCATION ---\n${allocationDetails}`;
+        } else if (newContractData.propertyAllocations.length > 1) {
+            const totalValue = newContractData.value || 0;
+            allocationDetails = newContractData.propertyAllocations.map(alloc => {
+                const prop = properties.find(p => p.id === alloc.propertyId);
+                const percentage = totalValue > 0 ? ((alloc.value / totalValue) * 100).toFixed(2) : 0;
+                return `- ${prop?.name || 'Unknown Property'}: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(alloc.value)} (${percentage}%)`;
+            }).join('\n');
+            finalContent += `\n\n--- MULTI-PROPERTY COST ALLOCATION ---\n${allocationDetails}`;
+        }
     }
+
 
     const finalContractData = { ...newContractData };
     
@@ -436,7 +594,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties 
 
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
             <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-                <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-3xl">
+                <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-4xl">
                     <div className="absolute top-0 right-0 hidden pt-4 pr-4 sm:block">
                         <button type="button" onClick={onCancel} className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
                             <span className="sr-only">Close</span>
