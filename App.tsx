@@ -11,6 +11,7 @@ import ApprovalsPage from './components/ApprovalsPage';
 import TemplatesList from './components/TemplatesList';
 import TemplateDetail from './components/TemplateDetail';
 import CounterpartiesList from './components/CounterpartiesList';
+import CounterpartyDetail from './components/CounterpartyDetail';
 import CreateContractWorkflow from './components/CreateContractWorkflow';
 import CreateCounterpartyWorkflow from './components/CreateCounterpartyWorkflow';
 import PropertiesList from './components/PropertiesList';
@@ -23,6 +24,7 @@ export default function App() {
   const [properties, setProperties] = useState<Property[]>(Object.values(MOCK_PROPERTIES));
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<ContractTemplate | null>(null);
+  const [selectedCounterparty, setSelectedCounterparty] = useState<Counterparty | null>(null);
   const [activeView, setActiveView] = useState('dashboard');
   const [isCreatingContract, setIsCreatingContract] = useState(false);
   const [isCreatingCounterparty, setIsCreatingCounterparty] = useState(false);
@@ -32,6 +34,7 @@ export default function App() {
 
   const handleSelectContract = (contract: Contract) => {
     setSelectedContract(contract);
+    setActiveView('contracts');
   };
 
   const handleBackToList = () => {
@@ -45,11 +48,20 @@ export default function App() {
   const handleBackToTemplatesList = () => {
     setSelectedTemplate(null);
   };
+  
+  const handleSelectCounterparty = (counterparty: Counterparty) => {
+    setSelectedCounterparty(counterparty);
+  };
+  
+  const handleBackToCounterpartiesList = () => {
+    setSelectedCounterparty(null);
+  };
 
   const handleNavigate = (view: string) => {
     setActiveView(view);
     setSelectedContract(null);
     setSelectedTemplate(null);
+    setSelectedCounterparty(null);
     setInitialFilters({}); // Reset filters on direct navigation
   };
   
@@ -151,7 +163,21 @@ export default function App() {
             <TemplatesList templates={templates} onSelectTemplate={handleSelectTemplate} />
         );
       case 'counterparties':
-        return <CounterpartiesList contracts={contracts} counterparties={counterparties} onStartCreate={handleStartCreateCounterparty} />;
+        return selectedCounterparty ? (
+            <CounterpartyDetail 
+                counterparty={selectedCounterparty}
+                contracts={contracts.filter(c => c.counterparty.id === selectedCounterparty.id)}
+                onBack={handleBackToCounterpartiesList}
+                onSelectContract={handleSelectContract}
+            />
+        ) : (
+            <CounterpartiesList 
+                counterparties={counterparties} 
+                contracts={contracts} 
+                onSelectCounterparty={handleSelectCounterparty}
+                onStartCreate={handleStartCreateCounterparty} 
+            />
+        );
       case 'properties':
         return <PropertiesList properties={properties} onStartCreate={handleStartCreateProperty} />;
       default:

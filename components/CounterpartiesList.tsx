@@ -12,10 +12,11 @@ interface CounterpartyWithMeta extends Counterparty {
 interface CounterpartiesListProps {
   contracts: Contract[];
   counterparties: Counterparty[];
+  onSelectCounterparty: (counterparty: Counterparty) => void;
   onStartCreate: () => void;
 }
 
-const CounterpartyCard = ({ counterparty }: { counterparty: CounterpartyWithMeta }) => (
+const CounterpartyCard = ({ counterparty, onSelect }: { counterparty: CounterpartyWithMeta; onSelect: () => void; }) => (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary-300 transition-all duration-200 flex flex-col">
         <div className="p-5">
             <div className="flex items-center space-x-4">
@@ -39,7 +40,7 @@ const CounterpartyCard = ({ counterparty }: { counterparty: CounterpartyWithMeta
             </div>
         </div>
         <div className="bg-gray-50 p-3 text-right mt-auto">
-            <button className="text-sm font-semibold text-primary-600 hover:text-primary-800">
+            <button onClick={onSelect} className="text-sm font-semibold text-primary-600 hover:text-primary-800">
                 View Details &rarr;
             </button>
         </div>
@@ -47,7 +48,7 @@ const CounterpartyCard = ({ counterparty }: { counterparty: CounterpartyWithMeta
 );
 
 
-export default function CounterpartiesList({ contracts, counterparties, onStartCreate }: CounterpartiesListProps) {
+export default function CounterpartiesList({ contracts, counterparties, onSelectCounterparty, onStartCreate }: CounterpartiesListProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const counterpartiesWithMeta = useMemo<CounterpartyWithMeta[]>(() => {
@@ -97,7 +98,7 @@ export default function CounterpartiesList({ contracts, counterparties, onStartC
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCounterparties.map(cp => (
-                <CounterpartyCard key={cp.id} counterparty={cp} />
+                <CounterpartyCard key={cp.id} counterparty={cp} onSelect={() => onSelectCounterparty(cp)} />
             ))}
         </div>
         
