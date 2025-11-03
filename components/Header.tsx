@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SearchIcon, ChevronDownIcon, UserIcon, SettingsIcon, LogOutIcon } from './icons';
+import { ChevronDownIcon, UserIcon, SettingsIcon, LogOutIcon } from './icons';
 
 interface HeaderProps {
     onLogout: () => void;
@@ -37,15 +37,7 @@ export default function Header({ onLogout, onNavigate }: HeaderProps) {
       <div className="flex items-center">
         {/* Can be used for breadcrumbs or page title */}
       </div>
-      <div className="flex items-center space-x-6">
-        <div className="relative">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search contracts..."
-            className="w-64 pl-10 pr-4 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary focus:border-primary placeholder-[#9ca3af] dark:placeholder-gray-400 text-gray-900 dark:text-gray-200"
-          />
-        </div>
+      <div className="flex items-center">
         <div className="relative" ref={menuRef}>
           <button onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} className="flex items-center space-x-3 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
             <img
