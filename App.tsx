@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings } from './types';
+import React, { useState, useEffect, useCallback } from 'react';
+import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType } from './types';
 import { ContractStatus, RiskLevel, ApprovalStatus } from './types';
-import { MOCK_CONTRACTS, MOCK_TEMPLATES, USERS, COUNTERPARTIES, MOCK_PROPERTIES, MOCK_FULL_USER_LIST, MOCK_ROLES, MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS } from './constants';
+import { MOCK_TEMPLATES, MOCK_ROLES, MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS, USERS } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import ContractsList from './components/ContractsList';
@@ -22,23 +22,24 @@ import LoginPage from './components/LoginPage';
 import OrgSignUpPage from './components/OrgSignUpPage';
 import UserSignUpPage from './components/UserSignUpPage';
 import CompanySettingsPage from './components/CompanySettingsPage';
-import AuthGate from '@/components/AuthGate';
+import { supabase } from './lib/supabaseClient';
+import { LoaderIcon } from './components/icons';
 
 
 // In a real app, this would come from an auth context
 const currentUser = USERS['alice'];
 
 export default function App() {
-  const [contracts, setContracts] = useState<Contract[]>(MOCK_CONTRACTS);
+  const [contracts, setContracts] = useState<Contract[]>([]);
   const [templates] = useState<ContractTemplate[]>(MOCK_TEMPLATES);
-  const [counterparties, setCounterparties] = useState<Counterparty[]>(Object.values(COUNTERPARTIES));
-  const [properties, setProperties] = useState<Property[]>(Object.values(MOCK_PROPERTIES));
-  const [users, setUsers] = useState<UserProfile[]>(MOCK_FULL_USER_LIST);
+  const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [roles, setRoles] = useState<Role[]>(MOCK_ROLES);
   const [notificationSettings, setNotificationSettings] = useState<NotificationSetting[]>(MOCK_NOTIFICATION_SETTINGS);
   const [userNotificationSettings, setUserNotificationSettings] = useState<UserNotificationSettings>(MOCK_USER_NOTIFICATION_SETTINGS);
 
-
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<ContractTemplate | null>(null);
   const [selectedCounterparty, setSelectedCounterparty] = useState<Counterparty | null>(null);
@@ -49,8 +50,141 @@ export default function App() {
   const [isCreatingProperty, setIsCreatingProperty] = useState(false);
   const [initialFilters, setInitialFilters] = useState<{ status?: ContractStatus; riskLevels?: RiskLevel[]; ownerId?: string }>({});
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true); // Auto-login for dev
   const [authView, setAuthView] = useState<'login' | 'org-signup' | 'user-signup'>('login');
+
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+
+    // Fetch lookups
+    const { data: rolesData } = await supabase.from('roles').select('*');
+    const rolesMap = new Map((rolesData || []).map(r => [r.id, r.name]));
+
+    const { data: usersData } = await supabase.from('users').select('*');
+    const usersMap = new Map((usersData || []).map(u => [u.id, { 
+      ...u, 
+      firstName: u.first_name, 
+      lastName: u.last_name, 
+      jobTitle: u.job_title,
+      avatarUrl: u.avatar_url,
+      lastLogin: u.last_login,
+      role: rolesMap.get(u.role_id) || 'Unknown' 
+    }]));
+    setUsers(Array.from(usersMap.values()));
+    
+    const { data: counterpartiesData } = await supabase.from('counterparties').select('*');
+    const counterpartiesMap = new Map((counterpartiesData || []).map(c => [c.id, {
+        ...c,
+        addressLine1: c.address_line1,
+        addressLine2: c.address_line2,
+        zipCode: c.zip_code,
+        contactName: c.contact_name,
+        contactEmail: c.contact_email,
+        contactPhone: c.contact_phone
+    }]));
+    setCounterparties(counterpartiesData ? counterpartiesData.map(c => ({
+        ...c,
+        addressLine1: c.address_line1,
+        addressLine2: c.address_line2,
+        zipCode: c.zip_code,
+        contactName: c.contact_name,
+        contactEmail: c.contact_email,
+        contactPhone: c.contact_phone
+    })) : []);
+
+    const { data: propertiesData } = await supabase.from('properties').select('*');
+    const propertiesMap = new Map((propertiesData || []).map(p => [p.id, {
+        ...p,
+        addressLine1: p.address_line1,
+        addressLine2: p.address_line2,
+        zipCode: p.zip_code
+    }]));
+    setProperties(propertiesData ? propertiesData.map(p => ({
+         ...p,
+        addressLine1: p.address_line1,
+        addressLine2: p.address_line2,
+        zipCode: p.zip_code
+    })) : []);
+
+    // Fetch contract-related data
+    const { data: contractsData } = await supabase.from('contracts').select('*');
+    const { data: versionsData } = await supabase.from('contract_versions').select('*');
+    const { data: approvalsData } = await supabase.from('approval_steps').select('*');
+    const { data: allocationsData } = await supabase.from('contract_property_allocations').select('*');
+    
+    // Join on client
+    const contractsById = new Map();
+    for (const contract of (contractsData || [])) {
+      contractsById.set(contract.id, {
+        ...contract,
+        riskLevel: contract.risk_level,
+        startDate: contract.start_date,
+        endDate: contract.end_date,
+        renewalDate: contract.renewal_date,
+        seasonalMonths: contract.seasonal_months,
+        owner: usersMap.get(contract.owner_id),
+        counterparty: counterpartiesMap.get(contract.counterparty_id),
+        property: propertiesMap.get(contract.property_id),
+        versions: [],
+        approvalSteps: [],
+        propertyAllocations: [],
+      });
+    }
+
+    for (const version of (versionsData || [])) {
+        const contract = contractsById.get(version.contract_id);
+        if (contract) {
+            contract.versions.push({
+                ...version,
+                versionNumber: version.version_number,
+                createdAt: version.created_at,
+                fileName: version.file_name,
+                startDate: version.start_date,
+                endDate: version.end_date,
+                renewalDate: version.renewal_date,
+                seasonalMonths: version.seasonal_months,
+                author: usersMap.get(version.author_id),
+                property: propertiesMap.get(version.property_id),
+            });
+        }
+    }
+    
+    for (const approval of (approvalsData || [])) {
+        const contract = contractsById.get(approval.contract_id);
+        if (contract) {
+            contract.approvalSteps.push({
+                ...approval,
+                approvedAt: approval.approved_at,
+                approver: usersMap.get(approval.approver_id),
+            });
+        }
+    }
+
+    for (const allocation of (allocationsData || [])) {
+        const contract = contractsById.get(allocation.contract_id);
+        if (contract) {
+            contract.propertyAllocations.push({
+                ...allocation,
+                propertyId: allocation.property_id,
+                allocatedValue: allocation.allocated_value,
+                monthlyValues: allocation.monthly_values,
+                manualEdits: allocation.manual_edits,
+            });
+        }
+    }
+
+    for (const contract of contractsById.values()) {
+        contract.versions.sort((a: ContractVersion, b: ContractVersion) => a.versionNumber - b.versionNumber);
+    }
+    
+    setContracts(Array.from(contractsById.values()));
+    setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -139,64 +273,138 @@ export default function App() {
   const handleStartCreate = () => setIsCreatingContract(true);
   const handleCancelCreate = () => setIsCreatingContract(false);
 
-  const handleFinalizeCreate = (newContractData: Partial<Contract>) => {
-    const newContract: Contract = {
-        id: `contract-${Date.now()}`,
-        status: ContractStatus.DRAFT,
-        riskLevel: RiskLevel.LOW,
-        versions: [],
-        approvalSteps: [],
-        renewalDate: newContractData.endDate || '',
-        ...newContractData
-    } as Contract;
+  const handleFinalizeCreate = async (newContractData: Partial<Contract> & { propertyAllocations?: any[] }) => {
+    // 1. Prepare and insert main contract record
+    const contractRecord = {
+      title: newContractData.title,
+      type: newContractData.type,
+      status: ContractStatus.DRAFT,
+      risk_level: newContractData.riskLevel,
+      counterparty_id: newContractData.counterparty?.id,
+      property_id: newContractData.property?.id,
+      owner_id: newContractData.owner?.id,
+      start_date: newContractData.startDate,
+      end_date: newContractData.endDate,
+      renewal_date: newContractData.renewalDate,
+      value: newContractData.value,
+      frequency: newContractData.frequency,
+      seasonal_months: newContractData.seasonalMonths,
+      allocation: newContractData.allocation,
+    };
     
-    if (newContract.versions && newContract.versions.length > 0) {
-      // Data is already correctly formatted by the workflow
-    } else {
-        const firstVersion: Omit<ContractVersion, 'id'> = {
-            versionNumber: 1,
-            createdAt: new Date().toISOString().split('T')[0],
-            author: currentUser,
-            content: `This contract for ${newContractData.title || 'a new matter'} was created via the wizard.`,
-            fileName: 'Initial_Draft.pdf',
-            value: newContractData.value || 0,
-            startDate: newContractData.startDate || '',
-            endDate: newContractData.endDate || '',
-            renewalDate: newContractData.renewalDate || '',
-            frequency: newContractData.frequency!,
-            seasonalMonths: newContractData.seasonalMonths,
-            property: newContractData.property,
-        };
-        newContract.versions = [{ ...firstVersion, id: `v1-${Date.now()}` }];
+    const { data: insertedContract, error: contractError } = await supabase.from('contracts').insert(contractRecord).select().single();
+    if (contractError) {
+      console.error("Error creating contract:", contractError);
+      return;
     }
 
-    setContracts(prev => [newContract, ...prev]);
+    // 2. Prepare and insert first version
+    const versionData = newContractData.versions![0];
+    const versionRecord = {
+      contract_id: insertedContract.id,
+      version_number: 1,
+      author_id: versionData.author.id,
+      content: versionData.content,
+      value: versionData.value,
+      start_date: versionData.startDate,
+      end_date: versionData.endDate,
+      renewal_date: versionData.renewalDate,
+      frequency: versionData.frequency,
+      seasonal_months: versionData.seasonalMonths,
+      property_id: versionData.property?.id,
+    };
+    const { error: versionError } = await supabase.from('contract_versions').insert(versionRecord);
+     if (versionError) {
+      console.error("Error creating version:", versionError);
+      return;
+    }
+    
+    // 3. Prepare and insert property allocations if they exist
+    if (newContractData.propertyAllocations && newContractData.propertyAllocations.length > 0) {
+      const allocationRecords = newContractData.propertyAllocations.map(alloc => ({
+        contract_id: insertedContract.id,
+        property_id: alloc.propertyId === 'portfolio' ? null : alloc.propertyId,
+        monthly_values: alloc.monthlyValues,
+        manual_edits: alloc.manualEdits,
+        // FIX: Use 'allocatedValue' to match the type definition
+        allocated_value: alloc.allocatedValue,
+      }));
+      const { error: allocationError } = await supabase.from('contract_property_allocations').insert(allocationRecords);
+      if (allocationError) {
+        console.error("Error creating allocations:", allocationError);
+        return;
+      }
+    }
+    
+    await fetchData(); // Refetch all data to get the new contract
     setIsCreatingContract(false);
   };
 
   const handleStartCreateCounterparty = () => setIsCreatingCounterparty(true);
   const handleCancelCreateCounterparty = () => setIsCreatingCounterparty(false);
-  const handleFinalizeCreateCounterparty = (newCounterpartyData: Omit<Counterparty, 'id'>) => {
-    const newCounterparty: Counterparty = {
-        id: `cp-${Date.now()}`,
-        ...newCounterpartyData,
-    };
-    setCounterparties(prev => [...prev, newCounterparty]);
+  const handleFinalizeCreateCounterparty = async (newCounterpartyData: Omit<Counterparty, 'id'>) => {
+    const { data: insertedCounterparty, error } = await supabase.from('counterparties').insert({
+        name: newCounterpartyData.name,
+        type: newCounterpartyData.type,
+        address_line1: newCounterpartyData.addressLine1,
+        address_line2: newCounterpartyData.addressLine2,
+        city: newCounterpartyData.city,
+        state: newCounterpartyData.state,
+        zip_code: newCounterpartyData.zipCode,
+        country: newCounterpartyData.country,
+        contact_name: newCounterpartyData.contactName,
+        contact_email: newCounterpartyData.contactEmail,
+        contact_phone: newCounterpartyData.contactPhone
+    }).select().single();
+    
+    if (error) {
+        console.error("Error creating counterparty:", error);
+    } else if (insertedCounterparty) {
+        setCounterparties(prev => [...prev, {
+            ...insertedCounterparty,
+            addressLine1: insertedCounterparty.address_line1,
+            addressLine2: insertedCounterparty.address_line2,
+            zipCode: insertedCounterparty.zip_code,
+            contactName: insertedCounterparty.contact_name,
+            contactEmail: insertedCounterparty.contact_email,
+            contactPhone: insertedCounterparty.contact_phone
+        }]);
+    }
     setIsCreatingCounterparty(false);
   };
   
   const handleStartCreateProperty = () => setIsCreatingProperty(true);
   const handleCancelCreateProperty = () => setIsCreatingProperty(false);
-  const handleFinalizeCreateProperty = (newPropertyData: Omit<Property, 'id'>) => {
-    const newProperty: Property = {
-        id: `prop-${Date.now()}`,
-        ...newPropertyData,
-    };
-    setProperties(prev => [...prev, newProperty]);
+  const handleFinalizeCreateProperty = async (newPropertyData: Omit<Property, 'id'>) => {
+    const { data: insertedProperty, error } = await supabase.from('properties').insert({
+        name: newPropertyData.name,
+        address_line1: newPropertyData.addressLine1,
+        address_line2: newPropertyData.addressLine2,
+        city: newPropertyData.city,
+        state: newPropertyData.state,
+        zip_code: newPropertyData.zipCode,
+        country: newPropertyData.country
+    }).select().single();
+
+     if (error) {
+        console.error("Error creating property:", error);
+    } else if (insertedProperty) {
+        setProperties(prev => [...prev, {
+            ...insertedProperty,
+            addressLine1: insertedProperty.address_line1,
+            addressLine2: insertedProperty.address_line2,
+            zipCode: insertedProperty.zip_code,
+        }]);
+    }
     setIsCreatingProperty(false);
   };
 
-  const handleUpdateContractStatus = (contractId: string, newStatus: ContractStatusType) => {
+  const handleUpdateContractStatus = async (contractId: string, newStatus: ContractStatusType) => {
+    const { error } = await supabase.from('contracts').update({ status: newStatus }).eq('id', contractId);
+    if (error) {
+        console.error("Error updating status:", error);
+        return;
+    }
     setContracts(prevContracts =>
       prevContracts.map(contract =>
         contract.id === contractId ? { ...contract, status: newStatus } : contract
@@ -207,52 +415,61 @@ export default function App() {
     }
   };
 
-  const handleCreateNewVersion = (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => {
-      let updatedContract: Contract | null = null;
+  const handleCreateNewVersion = async (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => {
+      let contractToUpdate = contracts.find(c => c.id === contractId);
+      if (!contractToUpdate) return;
       
-      const newContracts = contracts.map(c => {
-          if (c.id === contractId) {
-              const latestVersionNumber = c.versions.length > 0 ? Math.max(...c.versions.map(v => v.versionNumber)) : 0;
-              
-              const newVersion: ContractVersion = {
-                  ...newVersionData,
-                  id: `v${latestVersionNumber + 1}-${Date.now()}`,
-                  versionNumber: latestVersionNumber + 1,
-                  createdAt: new Date().toISOString().split('T')[0],
-                  author: currentUser,
-              };
+      const latestVersionNumber = contractToUpdate.versions.length > 0 ? Math.max(...contractToUpdate.versions.map(v => v.versionNumber)) : 0;
+      
+      // Insert new version
+      const { data: insertedVersion, error: versionError } = await supabase.from('contract_versions').insert({
+          contract_id: contractId,
+          version_number: latestVersionNumber + 1,
+          author_id: currentUser.id,
+          content: newVersionData.content,
+          file_name: newVersionData.fileName,
+          value: newVersionData.value,
+          start_date: newVersionData.startDate,
+          end_date: newVersionData.endDate,
+          renewal_date: newVersionData.renewalDate,
+          frequency: newVersionData.frequency,
+          seasonal_months: newVersionData.seasonalMonths,
+          property_id: newVersionData.property?.id,
+      }).select().single();
+      
+      if (versionError) { console.error("Error creating new version:", versionError); return; }
 
-              updatedContract = {
-                  ...c,
-                  value: newVersion.value,
-                  startDate: newVersion.startDate,
-                  endDate: newVersion.endDate,
-                  renewalDate: newVersion.renewalDate,
-                  frequency: newVersion.frequency,
-                  seasonalMonths: newVersion.seasonalMonths,
-                  property: newVersion.property,
-                  versions: [...c.versions, newVersion],
-                  status: ContractStatus.IN_REVIEW,
-                  approvalSteps: c.approvalSteps.map(step => ({
-                      ...step,
-                      status: ApprovalStatus.PENDING,
-                      approvedAt: undefined,
-                      comment: undefined,
-                  })),
-              };
-              return updatedContract;
-          }
-          return c;
-      });
+      // Update contract's main fields and status
+      const { error: contractUpdateError } = await supabase.from('contracts').update({
+          value: newVersionData.value,
+          start_date: newVersionData.startDate,
+          end_date: newVersionData.endDate,
+          renewal_date: newVersionData.renewalDate,
+          frequency: newVersionData.frequency,
+          seasonal_months: newVersionData.seasonalMonths,
+          property_id: newVersionData.property?.id,
+          status: ContractStatus.IN_REVIEW,
+      }).eq('id', contractId);
 
-      setContracts(newContracts);
-      if (updatedContract && selectedContract?.id === contractId) {
-          setSelectedContract(updatedContract);
-      }
+      if (contractUpdateError) { console.error("Error updating contract:", contractUpdateError); return; }
+
+      // Reset approval steps for this contract
+      const { error: approvalError } = await supabase.from('approval_steps').update({ status: ApprovalStatus.PENDING }).eq('contract_id', contractId);
+      if (approvalError) { console.error("Error resetting approvals:", approvalError); return; }
+
+      await fetchData(); // Easiest way to sync state
   };
 
 
   const renderContent = () => {
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <LoaderIcon className="w-12 h-12 text-primary" />
+                <span className="ml-4 text-lg font-semibold text-gray-700">Loading Data...</span>
+            </div>
+        )
+    }
     switch(activeView) {
       case 'dashboard':
         return <Dashboard contracts={contracts} onMetricClick={handleMetricNavigation} currentUser={currentUser} />;
@@ -368,6 +585,8 @@ export default function App() {
       {isCreatingContract && (
         <CreateContractWorkflow
             properties={properties}
+            counterparties={counterparties}
+            users={users}
             onCancel={handleCancelCreate}
             onFinish={handleFinalizeCreate}
             currentUser={currentUser}

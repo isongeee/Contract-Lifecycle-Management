@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import type { Contract, Counterparty, UserProfile, Property } from '../types';
+import type { Contract, Counterparty, UserProfile, Property, AllocationType } from '../types';
 import { ContractType, ContractStatus, RiskLevel, ContractFrequency } from '../types';
-import { COUNTERPARTIES, USERS } from '../constants';
 import { UploadCloudIcon, XIcon, PlusIcon, Trash2Icon } from './icons';
 
 interface CreateContractWorkflowProps {
   properties: Property[];
+  counterparties: Counterparty[];
+  users: UserProfile[];
   onCancel: () => void;
-  onFinish: (newContractData: Partial<Contract>) => void;
+  onFinish: (newContractData: Partial<Contract> & { propertyAllocations?: any[] }) => void;
   currentUser: UserProfile;
 }
 
@@ -90,6 +91,8 @@ interface Stage2Props {
     onBack: () => void;
     onNext: () => void;
     onToggleMonth: (month: string) => void;
+    counterparties: Counterparty[];
+    users: UserProfile[];
 }
 
 const FormRow = ({ children }: { children: React.ReactNode }) => <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-6">{children}</div>
@@ -103,7 +106,7 @@ const TextInput = (props: React.ComponentProps<'input'>) => <input {...props} cl
 const SelectInput = (props: React.ComponentProps<'select'>) => <select {...props} className="block w-full rounded-md border-0 py-1.5 px-3 bg-white text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" />
 
 
-const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth }: Stage2Props) => {
+const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, counterparties, users }: Stage2Props) => {
     return (
         <div>
             <h2 className="text-lg font-semibold text-gray-800">Contract Information</h2>
@@ -114,8 +117,8 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth }: St
                         <TextInput type="text" value={data.title} onChange={e => setData('title', e.target.value)} placeholder="e.g., Master Services Agreement" />
                     </FormField>
                     <FormField label="Counterparty">
-                         <SelectInput value={data.counterparty?.id} onChange={e => setData('counterparty', Object.values(COUNTERPARTIES).find(c => c.id === e.target.value))}>
-                            {Object.values(COUNTERPARTIES).map((cp: Counterparty) => <option key={cp.id} value={cp.id}>{cp.name}</option>)}
+                         <SelectInput value={data.counterparty?.id} onChange={e => setData('counterparty', counterparties.find(c => c.id === e.target.value))}>
+                            {counterparties.map((cp: Counterparty) => <option key={cp.id} value={cp.id}>{cp.name}</option>)}
                         </SelectInput>
                     </FormField>
                     <FormField label="Contract Type">
@@ -124,8 +127,8 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth }: St
                         </SelectInput>
                     </FormField>
                     <FormField label="Contract Owner" className="sm:col-span-full">
-                        <SelectInput value={data.owner?.id} onChange={e => setData('owner', Object.values(USERS).find(u => u.id === e.target.value))}>
-                            {Object.values(USERS).map((user: UserProfile) => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}
+                        <SelectInput value={data.owner?.id} onChange={e => setData('owner', users.find(u => u.id === e.target.value))}>
+                            {users.map((user: UserProfile) => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}
                         </SelectInput>
                     </FormField>
                     <FormField label="Start Date">
@@ -175,8 +178,6 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth }: St
     );
 };
 
-type AllocationType = 'single' | 'multi' | 'portfolio';
-
 type MonthlyAllocation = {
     id: number;
     propertyId: string;
@@ -193,7 +194,8 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
     
     // Non-seasonal state
     const [singlePropertyId, setSinglePropertyId] = useState(data.property?.id || (properties.length > 0 ? properties[0].id : ''));
-    const [multiAllocations, setMultiAllocations] = useState(() => (data.propertyAllocations && !isSeasonal ? data.propertyAllocations : [{ id: Date.now(), propertyId: properties[0]?.id || '', value: data.value || 0 }]));
+    // FIX: Use 'allocatedValue' to match type definition
+    const [multiAllocations, setMultiAllocations] = useState(() => (data.propertyAllocations && !isSeasonal ? data.propertyAllocations : [{ id: Date.now(), propertyId: properties[0]?.id || '', allocatedValue: data.value || 0 }]));
 
     // Seasonal state
     const [seasonalAllocations, setSeasonalAllocations] = useState<MonthlyAllocation[]>([]);
@@ -229,7 +231,8 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
             Object.keys(initialManualEdits).forEach(k => initialManualEdits[k] = false);
             setSeasonalAllocations(prev => [...prev, { id: Date.now(), propertyId: properties[0]?.id || '', monthlyValues: initialMonthlyValues, manualEdits: initialManualEdits }]);
         } else {
-             setMultiAllocations((prev: any) => [...prev, { id: Date.now(), propertyId: properties[0]?.id || '', value: 0 }]);
+            // FIX: Use 'allocatedValue' to match type definition
+             setMultiAllocations((prev: any) => [...prev, { id: Date.now(), propertyId: properties[0]?.id || '', allocatedValue: 0 }]);
         }
     };
     
@@ -241,7 +244,8 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
         }
     };
 
-    const handleAllocationChange = (id: number, field: 'propertyId' | 'value' | string, value: string | number) => {
+    // FIX: Use 'allocatedValue' and ensure it's a number
+    const handleAllocationChange = (id: number, field: 'propertyId' | 'allocatedValue' | string, value: string | number) => {
         if(isSeasonal) {
             setSeasonalAllocations(prev => prev.map(row => {
                 if (row.id === id) {
@@ -258,7 +262,12 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                 return row;
             }));
         } else {
-            setMultiAllocations((prev: any) => prev.map((row: any) => row.id === id ? { ...row, [field]: value } : row));
+            setMultiAllocations((prev: any) => prev.map((row: any) => {
+                if (row.id === id) {
+                    return { ...row, [field]: field === 'allocatedValue' ? Number(value) : value };
+                }
+                return row;
+            }));
         }
     };
     
@@ -293,6 +302,7 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
     };
 
     const handleProceed = () => {
+        setData('allocation', allocationType);
         if (allocationType === 'single') {
             setData('property', properties.find((p: Property) => p.id === singlePropertyId));
             if (isSeasonal) {
@@ -327,7 +337,8 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
         }, 0);
     } else {
          if (allocationType === 'multi') {
-            totalAllocated = multiAllocations.reduce((sum: number, alloc: any) => sum + Number(alloc.value || 0), 0);
+            // FIX: Use 'allocatedValue' to match type definition
+            totalAllocated = multiAllocations.reduce((sum: number, alloc: any) => sum + Number(alloc.allocatedValue || 0), 0);
         } else {
             totalAllocated = data.value || 0;
         }
@@ -377,7 +388,8 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                         {multiAllocations.map((alloc: any, index: number) => (
                             <div key={alloc.id} className="grid grid-cols-12 gap-x-4 items-center">
                                 <div className="col-span-6"><SelectInput value={alloc.propertyId} onChange={e => handleAllocationChange(alloc.id, 'propertyId', e.target.value)}><option value="">Select property...</option>{properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}</SelectInput></div>
-                                <div className="col-span-5"><div className="relative rounded-md shadow-sm"><div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div><input type="number" value={alloc.value} onChange={e => handleAllocationChange(alloc.id, 'value', e.target.value)} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm"/></div></div>
+                                {/* FIX: Use 'allocatedValue' to match type definition */}
+                                <div className="col-span-5"><div className="relative rounded-md shadow-sm"><div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div><input type="number" value={alloc.allocatedValue} onChange={e => handleAllocationChange(alloc.id, 'allocatedValue', e.target.value)} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm"/></div></div>
                                 <div className="col-span-1">{multiAllocations.length > 1 && <button type="button" onClick={() => handleDeleteRow(alloc.id)} className="text-gray-400 hover:text-red-600"><Trash2Icon className="w-5 h-5"/></button>}</div>
                             </div>
                         ))}
@@ -461,10 +473,10 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
         : data.frequency;
         
     const propertyDisplay = () => {
-        if (data.propertyAllocations && data.propertyAllocations.length > 1) {
-            return `Multi-property (${data.propertyAllocations.length} locations)`;
+        if (data.allocation === 'multi') {
+             return `Multi-property (${data.propertyAllocations?.length || 0} locations)`;
         }
-        if (data.property) {
+        if (data.allocation === 'single' && data.property) {
             return data.property.name;
         }
         return "Portfolio-wide Contract";
@@ -495,7 +507,7 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
 }
 
 
-export default function CreateContractWorkflow({ onCancel, onFinish, properties, currentUser }: CreateContractWorkflowProps) {
+export default function CreateContractWorkflow({ onCancel, onFinish, properties, counterparties, users, currentUser }: CreateContractWorkflowProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [newContractData, setNewContractData] = useState<Partial<Contract> & { propertyAllocations?: any[] }>({
       title: 'New Seasonal Contract',
@@ -504,7 +516,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
       riskLevel: RiskLevel.LOW,
       value: 120000,
       owner: currentUser,
-      counterparty: Object.values(COUNTERPARTIES)[0],
+      counterparty: counterparties[0],
       property: properties[0],
       startDate: new Date().toISOString().split('T')[0],
       endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
@@ -550,8 +562,9 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
             const totalValue = newContractData.value || 0;
             allocationDetails = newContractData.propertyAllocations.map(alloc => {
                 const prop = properties.find(p => p.id === alloc.propertyId);
-                const percentage = totalValue > 0 ? ((alloc.value / totalValue) * 100).toFixed(2) : 0;
-                return `- ${prop?.name || 'Unknown Property'}: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(alloc.value)} (${percentage}%)`;
+                // FIX: Use 'allocatedValue' to match type definition
+                const percentage = totalValue > 0 ? ((alloc.allocatedValue / totalValue) * 100).toFixed(2) : 0;
+                return `- ${prop?.name || 'Unknown Property'}: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(alloc.allocatedValue)} (${percentage}%)`;
             }).join('\n');
             finalContent += `\n\n--- MULTI-PROPERTY COST ALLOCATION ---\n${allocationDetails}`;
         }
@@ -560,8 +573,6 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
 
     const finalContractData = { ...newContractData };
     
-    // Set content and remove temporary allocation data
-    // FIX: Added missing required properties to the ContractVersion object to resolve the type error.
     finalContractData.versions = [{
         id: `v1-${Date.now()}`,
         versionNumber: 1,
@@ -576,7 +587,6 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
         seasonalMonths: newContractData.seasonalMonths,
         property: newContractData.property,
     }];
-    delete finalContractData.propertyAllocations;
 
     onFinish(finalContractData);
   };
@@ -587,7 +597,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
           case 1:
               return <Stage1_Upload onNext={handleNext} />;
           case 2:
-              return <Stage2_Information data={newContractData} setData={updateData} onBack={handleBack} onNext={handleNext} onToggleMonth={handleToggleMonth} />;
+              return <Stage2_Information data={newContractData} setData={updateData} onBack={handleBack} onNext={handleNext} onToggleMonth={handleToggleMonth} counterparties={counterparties} users={users} />;
           case 3:
               return <Stage3_PropertyAndCost data={newContractData} setData={updateData} properties={properties} onBack={handleBack} onNext={handleNext} />;
           case 4:

@@ -54,6 +54,8 @@ export enum CounterpartyType {
   CONTRACTOR = 'Contractor',
 }
 
+export type AllocationType = 'single' | 'multi' | 'portfolio';
+
 export interface UserProfile {
   id: string;
   firstName: string;
@@ -64,6 +66,7 @@ export interface UserProfile {
   department?: string;
   avatarUrl: string;
   role: string; // e.g. 'Admin', 'Legal Counsel'
+  roleId?: string;
   status: 'active' | 'inactive';
   lastLogin: string;
 }
@@ -126,6 +129,14 @@ export interface Clause {
   summary: string;
 }
 
+export interface ContractPropertyAllocation {
+    id: string;
+    propertyId?: string;
+    allocatedValue: number;
+    monthlyValues?: { [month: string]: number };
+    manualEdits?: { [month: string]: boolean };
+}
+
 export interface Contract {
   id: string;
   title: string;
@@ -145,6 +156,8 @@ export interface Contract {
   approvalSteps: ApprovalStep[];
   extractedClauses?: Clause[];
   riskSummary?: string;
+  allocation: AllocationType;
+  propertyAllocations?: ContractPropertyAllocation[];
 }
 
 export interface ContractTemplate {

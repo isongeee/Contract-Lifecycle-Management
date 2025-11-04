@@ -55,51 +55,47 @@ const ApprovalWidget = ({ steps }: { steps: Contract['approvalSteps']}) => (
 
 const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
-const VersionHistory = ({ versions }: { versions: Contract['versions'] }) => (
+const VersionHistory = ({ versions, selectedVersionId, onSelectVersion }: { versions: Contract['versions']; selectedVersionId: string; onSelectVersion: (id: string) => void; }) => (
     <div className="bg-white p-6 rounded-lg shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Version History</h3>
-        <ul className="space-y-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Version History</h3>
+        <p className="text-sm text-gray-500 mb-4">Select a version to view its details and content.</p>
+        <ul className="space-y-1 -mx-2">
             {versions.slice().reverse().map(v => (
-                <li key={v.id} className="flex items-start space-x-3">
-                    <div className="flex-shrink-0">
-                        <img className="h-8 w-8 rounded-full" src={v.author.avatarUrl} alt={`${v.author.firstName} ${v.author.lastName}`} />
-                    </div>
-                    <div>
-                        <p className="text-sm font-medium text-gray-800">Version {v.versionNumber}</p>
-                        <p className="text-sm text-gray-500">by {`${v.author.firstName} ${v.author.lastName}`} on {v.createdAt}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Value: <span className="font-semibold">{formatCurrency(v.value)}</span> | End Date: <span className="font-semibold">{v.endDate}</span>
-                        </p>
-                         {v.fileName && (
-                            <div className="mt-1 flex items-center text-xs text-blue-600">
-                                <FileTextIcon className="w-3 h-3 mr-1" /> {v.fileName}
-                            </div>
-                        )}
-                    </div>
+                <li key={v.id}>
+                    <button 
+                        onClick={() => onSelectVersion(v.id)}
+                        className={`w-full text-left p-3 rounded-lg transition-colors flex items-start space-x-3 ${v.id === selectedVersionId ? 'bg-primary-100 dark:bg-primary-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}
+                    >
+                        <div className="flex-shrink-0">
+                            <img className="h-8 w-8 rounded-full" src={v.author.avatarUrl} alt={`${v.author.firstName} ${v.author.lastName}`} />
+                        </div>
+                        <div>
+                            <p className={`text-sm font-semibold ${v.id === selectedVersionId ? 'text-primary-800 dark:text-primary-100' : 'text-gray-800 dark:text-gray-200'}`}>Version {v.versionNumber}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">by {`${v.author.firstName} ${v.author.lastName}`} on {v.createdAt}</p>
+                            {v.fileName && (
+                                <div className="mt-1 flex items-center text-xs text-blue-600 dark:text-blue-400">
+                                    <FileTextIcon className="w-3 h-3 mr-1" /> {v.fileName}
+                                </div>
+                            )}
+                            <p className="mt-2 text-xs text-gray-600 dark:text-gray-400 italic">
+                                {v.content.trim().substring(0, 75)}...
+                            </p>
+                        </div>
+                    </button>
                 </li>
             ))}
         </ul>
     </div>
 );
 
-const AiAnalysis = ({ contract, setContract }: { contract: Contract, setContract: React.Dispatch<React.SetStateAction<Contract>> }) => {
-    const [isLoadingSummary, setIsLoadingSummary] = useState(false);
-    const [isLoadingClauses, setIsLoadingClauses] = useState(false);
-
-    const handleSummarize = useCallback(async () => {
-        setIsLoadingSummary(true);
-        const summary = await summarizeContractRisk(contract.versions[contract.versions.length - 1].content);
-        setContract(c => ({...c, riskSummary: summary }));
-        setIsLoadingSummary(false);
-    }, [contract, setContract]);
-
-    const handleExtract = useCallback(async () => {
-        setIsLoadingClauses(true);
-        const clauses = await extractClauses(contract.versions[contract.versions.length - 1].content);
-        setContract(c => ({...c, extractedClauses: clauses}));
-        setIsLoadingClauses(false);
-    }, [contract, setContract]);
-    
+const AiAnalysis = ({ onSummary, onExtract, riskSummary, extractedClauses, isLoadingSummary, isLoadingClauses }: { 
+    onSummary: () => void; 
+    onExtract: () => void;
+    riskSummary?: string;
+    extractedClauses?: Clause[];
+    isLoadingSummary: boolean;
+    isLoadingClauses: boolean;
+}) => {
     return (
         <div className="bg-primary-50 border border-primary-200 p-6 rounded-lg shadow-sm">
             <div className="flex items-center justify-between">
@@ -108,29 +104,29 @@ const AiAnalysis = ({ contract, setContract }: { contract: Contract, setContract
                     Gemini AI Analysis
                 </h3>
                 <div className="flex space-x-2">
-                    <button onClick={handleSummarize} disabled={isLoadingSummary} className="px-3 py-1.5 text-xs font-semibold text-primary-800 bg-white border border-primary-300 rounded-md hover:bg-primary-100 disabled:opacity-50 disabled:cursor-wait flex items-center">
+                    <button onClick={onSummary} disabled={isLoadingSummary} className="px-3 py-1.5 text-xs font-semibold text-primary-800 bg-white border border-primary-300 rounded-md hover:bg-primary-100 disabled:opacity-50 disabled:cursor-wait flex items-center">
                         {isLoadingSummary ? <LoaderIcon className="w-4 h-4 mr-1.5" /> : null}
                         Summarize Risk
                     </button>
-                    <button onClick={handleExtract} disabled={isLoadingClauses} className="px-3 py-1.5 text-xs font-semibold text-primary-800 bg-white border border-primary-300 rounded-md hover:bg-primary-100 disabled:opacity-50 disabled:cursor-wait flex items-center">
+                    <button onClick={onExtract} disabled={isLoadingClauses} className="px-3 py-1.5 text-xs font-semibold text-primary-800 bg-white border border-primary-300 rounded-md hover:bg-primary-100 disabled:opacity-50 disabled:cursor-wait flex items-center">
                          {isLoadingClauses ? <LoaderIcon className="w-4 h-4 mr-1.5" /> : null}
                         Extract Clauses
                     </button>
                 </div>
             </div>
             
-            {contract.riskSummary && (
+            {riskSummary && (
                 <div className="mt-4">
                     <h4 className="font-semibold text-gray-800">Risk Summary:</h4>
-                    <div className="mt-2 text-sm text-gray-700 whitespace-pre-wrap bg-white/50 p-3 rounded-md">{contract.riskSummary}</div>
+                    <div className="mt-2 text-sm text-gray-700 whitespace-pre-wrap bg-white/50 p-3 rounded-md">{riskSummary}</div>
                 </div>
             )}
 
-            {contract.extractedClauses && contract.extractedClauses.length > 0 && (
+            {extractedClauses && extractedClauses.length > 0 && (
                 <div className="mt-4">
                     <h4 className="font-semibold text-gray-800">Extracted Clauses:</h4>
                     <div className="mt-2 space-y-3">
-                        {contract.extractedClauses.map(clause => (
+                        {extractedClauses.map(clause => (
                             <div key={clause.id} className="p-3 bg-white/50 rounded-md border border-primary-100">
                                 <p className="font-semibold text-sm text-gray-900">{clause.title}</p>
                                 <p className="text-sm text-gray-600 mt-1 italic">"{clause.summary}"</p>
@@ -156,12 +152,34 @@ export default function ContractDetail({ contract: initialContract, properties, 
   const [contract, setContract] = useState(initialContract);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
+  const [viewedVersionId, setViewedVersionId] = useState(initialContract.versions[initialContract.versions.length - 1].id);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const [isLoadingClauses, setIsLoadingClauses] = useState(false);
   
   const latestVersion = contract.versions[contract.versions.length - 1];
+  const viewedVersion = contract.versions.find(v => v.id === viewedVersionId) || latestVersion;
 
   useEffect(() => {
     setContract(initialContract);
+    const newLatestVersion = initialContract.versions[initialContract.versions.length - 1];
+    if (newLatestVersion) {
+        setViewedVersionId(newLatestVersion.id);
+    }
   }, [initialContract]);
+
+  const handleSummarizeRisk = useCallback(async () => {
+    setIsLoadingSummary(true);
+    const summary = await summarizeContractRisk(viewedVersion.content);
+    setContract(c => ({...c, riskSummary: summary, extractedClauses: undefined })); // Clear clauses when re-summarizing
+    setIsLoadingSummary(false);
+  }, [viewedVersion.content]);
+
+  const handleExtractClauses = useCallback(async () => {
+    setIsLoadingClauses(true);
+    const clauses = await extractClauses(viewedVersion.content);
+    setContract(c => ({...c, extractedClauses: clauses, riskSummary: undefined })); // Clear summary when extracting
+    setIsLoadingClauses(false);
+  }, [viewedVersion.content]);
 
   const handleStatusUpdate = (newStatus: ContractStatus) => {
     onUpdateStatus(contract.id, newStatus);
@@ -171,6 +189,12 @@ export default function ContractDetail({ contract: initialContract, properties, 
   const handleSaveNewVersion = (newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => {
     onCreateNewVersion(contract.id, newVersionData);
     setIsCreatingVersion(false);
+  };
+
+  const handleSelectVersion = (id: string) => {
+    setViewedVersionId(id);
+    // Clear old analysis when switching versions
+    setContract(c => ({ ...c, riskSummary: undefined, extractedClauses: undefined }));
   };
 
   return (
@@ -187,7 +211,7 @@ export default function ContractDetail({ contract: initialContract, properties, 
                     <div className="mt-2 flex items-center space-x-4">
                         <StatusTag type="contract" status={contract.status} />
                         <StatusTag type="risk" status={contract.riskLevel} />
-                        <span className="text-sm font-semibold text-gray-500">Version {latestVersion.versionNumber}</span>
+                        <span className="text-sm font-semibold text-gray-500">Viewing Version {viewedVersion.versionNumber}</span>
                     </div>
                 </div>
                 <div className="flex space-x-3">
@@ -202,14 +226,14 @@ export default function ContractDetail({ contract: initialContract, properties, 
             </div>
              <dl className="mt-6 grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                 <DetailItem label="Counterparty" value={contract.counterparty.name} />
-                <DetailItem label="Contract Value" value={formatCurrency(contract.value)} />
-                <DetailItem label="Start Date" value={contract.startDate} />
-                <DetailItem label="End Date" value={contract.endDate} />
-                {contract.property && (
+                <DetailItem label="Contract Value" value={formatCurrency(viewedVersion.value)} />
+                <DetailItem label="Start Date" value={viewedVersion.startDate} />
+                <DetailItem label="End Date" value={viewedVersion.endDate} />
+                {viewedVersion.property && (
                     <DetailItem label="Property" value={
                         <span>
-                            {contract.property.name}
-                            <p className="text-xs text-gray-500">{formatPropertyAddress(contract.property)}</p>
+                            {viewedVersion.property.name}
+                            <p className="text-xs text-gray-500">{formatPropertyAddress(viewedVersion.property)}</p>
                         </span>
                     } />
                 )}
@@ -224,17 +248,28 @@ export default function ContractDetail({ contract: initialContract, properties, 
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-                <AiAnalysis contract={contract} setContract={setContract} />
+                <AiAnalysis 
+                    onSummary={handleSummarizeRisk}
+                    onExtract={handleExtractClauses}
+                    riskSummary={contract.riskSummary}
+                    extractedClauses={contract.extractedClauses}
+                    isLoadingSummary={isLoadingSummary}
+                    isLoadingClauses={isLoadingClauses}
+                />
                  <div className="bg-white p-6 rounded-lg shadow-sm">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Contract Document</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Contract Document (Version {viewedVersion.versionNumber})</h3>
                     <div className="prose prose-sm max-w-none p-4 bg-gray-50 rounded-md border h-64 overflow-y-auto">
-                        <pre className="whitespace-pre-wrap text-xs">{latestVersion.content}</pre>
+                        <pre className="whitespace-pre-wrap text-xs">{viewedVersion.content}</pre>
                     </div>
                 </div>
             </div>
             <div className="space-y-6">
                 <ApprovalWidget steps={contract.approvalSteps} />
-                <VersionHistory versions={contract.versions} />
+                <VersionHistory 
+                    versions={contract.versions} 
+                    selectedVersionId={viewedVersionId}
+                    onSelectVersion={handleSelectVersion}
+                />
             </div>
         </div>
         {isUpdatingStatus && (

@@ -1,4 +1,4 @@
-import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet, UserNotificationSettings, CounterpartyType } from './types';
+import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet, UserNotificationSettings, CounterpartyType, AllocationType } from './types';
 import type { UserProfile, Counterparty, Property } from './types';
 
 export const STATUS_COLORS: Record<ContractStatus, string> = {
@@ -79,6 +79,8 @@ export const MOCK_CONTRACTS: Contract[] = [
     renewalDate: '2025-01-14',
     value: 250000,
     frequency: ContractFrequency.ANNUALLY,
+    // FIX: Add missing 'allocation' property
+    allocation: 'single',
     versions: [
       { 
         id: 'v1-1', versionNumber: 1, createdAt: '2023-01-05', author: USERS['alice'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'ACME_MSA_v1.pdf',
@@ -108,6 +110,8 @@ export const MOCK_CONTRACTS: Contract[] = [
     renewalDate: '2025-02-01',
     value: 75000,
     frequency: ContractFrequency.MONTHLY,
+    // FIX: Add missing 'allocation' property
+    allocation: 'single',
     versions: [
         { 
             id: 'v2-1', versionNumber: 1, createdAt: '2024-07-20', author: USERS['diana'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'Globex_SOW_v1.pdf',
@@ -133,6 +137,8 @@ export const MOCK_CONTRACTS: Contract[] = [
     renewalDate: '2025-08-31',
     value: 120000,
     frequency: ContractFrequency.ANNUALLY,
+    // FIX: Add missing 'allocation' property
+    allocation: 'single',
     versions: [
         { 
             id: 'v5-1', versionNumber: 1, createdAt: '2024-07-28', author: USERS['diana'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'Cyberdyne_Vendor_Initial_Draft.pdf',
@@ -157,6 +163,8 @@ export const MOCK_CONTRACTS: Contract[] = [
     renewalDate: '2026-07-24',
     value: 0,
     frequency: ContractFrequency.ANNUALLY,
+    // FIX: Add missing 'allocation' property
+    allocation: 'portfolio',
     versions: [
         { 
             id: 'v3-1', versionNumber: 1, createdAt: '2024-07-25', author: USERS['diana'], content: 'This is a standard Non-Disclosure Agreement...',
@@ -178,6 +186,8 @@ export const MOCK_CONTRACTS: Contract[] = [
     renewalDate: '2025-05-31',
     value: 12000,
     frequency: ContractFrequency.ANNUALLY,
+    // FIX: Add missing 'allocation' property
+    allocation: 'portfolio',
     versions: [
       { 
         id: 'v4-1', versionNumber: 1, createdAt: '2024-05-20', author: USERS['alice'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'CloudService_SaaS_Agreement.pdf',
@@ -202,6 +212,8 @@ export const MOCK_CONTRACTS: Contract[] = [
     renewalDate: '2029-09-30',
     value: 5000000,
     frequency: ContractFrequency.MONTHLY,
+    // FIX: Add missing 'allocation' property
+    allocation: 'single',
     versions: [
         { 
             id: 'v6-1', versionNumber: 1, createdAt: '2024-07-29', author: USERS['charlie'], content: DUMMY_CONTRACT_CONTENT_V1,
