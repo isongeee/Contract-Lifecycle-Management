@@ -95,8 +95,10 @@ interface Stage2Props {
     users: UserProfile[];
 }
 
-const FormRow = ({ children }: { children: React.ReactNode }) => <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-6">{children}</div>
-const FormField = ({ label, children, className = 'sm:col-span-3' }: { label: string; children: React.ReactNode; className?: string }) => (
+// FIX: Made children prop optional to satisfy type checker for what appears to be correct usage.
+const FormRow = ({ children }: { children?: React.ReactNode }) => <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-6">{children}</div>
+// FIX: Made children prop optional to satisfy type checker for what appears to be correct usage.
+const FormField = ({ label, children, className = 'sm:col-span-3' }: { label: string; children?: React.ReactNode; className?: string }) => (
     <div className={className}>
         <label className="block text-sm font-medium leading-6 text-gray-900">{label}</label>
         <div className="mt-2">{children}</div>
@@ -514,16 +516,51 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
       type: ContractType.MSA,
       status: ContractStatus.DRAFT,
       riskLevel: RiskLevel.LOW,
-      value: 120000,
+      value: 0,
       owner: currentUser,
       counterparty: counterparties[0],
       property: properties[0],
-      startDate: new Date().toISOString().split('T')[0],
-      endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
+      startDate: '2026-01-04',
+      endDate: '2026-05-04',
       frequency: ContractFrequency.SEASONAL,
-      seasonalMonths: ['Jan', 'Feb', 'Mar', 'Apr'],
+      seasonalMonths: ['Jan', 'Feb', 'Mar', 'Apr', 'May'],
       propertyAllocations: [],
   });
+
+  useEffect(() => {
+    if (newContractData.frequency === ContractFrequency.SEASONAL && newContractData.seasonalMonths && newContractData.seasonalMonths.length > 0) {
+      const monthIndices = newContractData.seasonalMonths.map(m => MONTHS.indexOf(m));
+      const minMonthIndex = Math.min(...monthIndices);
+      const maxMonthIndex = Math.max(...monthIndices);
+
+      const updateDateWithNewMonth = (dateString: string | undefined, monthIndex: number): string | undefined => {
+        if (!dateString) return dateString;
+        
+        const parts = dateString.split('-');
+        if (parts.length !== 3) return dateString;
+        
+        const year = parseInt(parts[0], 10);
+        const day = parseInt(parts[2], 10);
+
+        if (isNaN(year) || isNaN(day)) return dateString;
+
+        const newDate = new Date(Date.UTC(year, monthIndex, day));
+        
+        return newDate.toISOString().slice(0, 10);
+      };
+      
+      const newStartDate = updateDateWithNewMonth(newContractData.startDate, minMonthIndex);
+      const newEndDate = updateDateWithNewMonth(newContractData.endDate, maxMonthIndex);
+
+      if (newStartDate !== newContractData.startDate || newEndDate !== newContractData.endDate) {
+          setNewContractData(prev => ({
+            ...prev,
+            startDate: newStartDate,
+            endDate: newEndDate,
+          }));
+      }
+    }
+  }, [newContractData.seasonalMonths, newContractData.frequency]);
 
   const handleNext = () => setCurrentStep(prev => Math.min(prev + 1, 4));
   const handleBack = () => setCurrentStep(prev => Math.max(prev - 1, 1));

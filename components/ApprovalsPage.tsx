@@ -10,7 +10,8 @@ interface ApprovalsPageProps {
   currentUser: UserProfile;
 }
 
-const Section = ({ title, children, count }: { title: string; children: React.ReactNode; count: number}) => (
+// FIX: Made children prop optional to satisfy type checker for what appears to be correct usage.
+const Section = ({ title, children, count }: { title: string; children?: React.ReactNode; count: number}) => (
     <div>
         <h2 className="text-xl font-bold text-gray-800 mb-1">{title}</h2>
         <p className="text-sm text-gray-500 mb-4">You have {count} request{count === 1 ? '' : 's'} in this category.</p>

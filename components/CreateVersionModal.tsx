@@ -10,7 +10,8 @@ interface CreateVersionModalProps {
   onSave: (newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => void;
 }
 
-const FormField = ({ label, children, className = 'sm:col-span-1' }: { label: string; children: React.ReactNode; className?: string }) => (
+// FIX: Made children prop optional to satisfy type checker for what appears to be correct usage.
+const FormField = ({ label, children, className = 'sm:col-span-1' }: { label: string; children?: React.ReactNode; className?: string }) => (
     <div className={className}>
         <label className="block text-sm font-medium leading-6 text-gray-900">{label}</label>
         <div className="mt-2">{children}</div>
