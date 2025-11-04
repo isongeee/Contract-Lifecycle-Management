@@ -22,6 +22,7 @@ import LoginPage from './components/LoginPage';
 import OrgSignUpPage from './components/OrgSignUpPage';
 import UserSignUpPage from './components/UserSignUpPage';
 import CompanySettingsPage from './components/CompanySettingsPage';
+import AuthGate from '@/components/AuthGate';
 
 
 // In a real app, this would come from an auth context
