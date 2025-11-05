@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import type { Contract, Counterparty } from '../types';
+import type { Contract, Counterparty, UserProfile } from '../types';
 import { ContractStatus } from '../types';
 import { SearchIcon, BuildingOfficeIcon, PlusIcon } from './icons';
 
@@ -14,6 +14,7 @@ interface CounterpartiesListProps {
   counterparties: Counterparty[];
   onSelectCounterparty: (counterparty: Counterparty) => void;
   onStartCreate: () => void;
+  currentUser: UserProfile;
 }
 
 const formatAddress = (counterparty: Counterparty) => {
@@ -60,7 +61,7 @@ const CounterpartyCard: React.FC<{ counterparty: CounterpartyWithMeta; onSelect:
 );
 
 
-export default function CounterpartiesList({ contracts, counterparties, onSelectCounterparty, onStartCreate }: CounterpartiesListProps) {
+export default function CounterpartiesList({ contracts, counterparties, onSelectCounterparty, onStartCreate, currentUser }: CounterpartiesListProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const counterpartiesWithMeta = useMemo<CounterpartyWithMeta[]>(() => {
@@ -89,12 +90,14 @@ export default function CounterpartiesList({ contracts, counterparties, onSelect
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Counterparties</h1>
                 <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage all external organizations and partners you do business with.</p>
             </div>
-            <button 
-                onClick={onStartCreate}
-                className="flex items-center px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                <PlusIcon className="w-5 h-5 mr-2" />
-                Add Counterparty
-            </button>
+            {currentUser.role === 'Admin' && (
+                <button 
+                    onClick={onStartCreate}
+                    className="flex items-center px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    <PlusIcon className="w-5 h-5 mr-2" />
+                    Add Counterparty
+                </button>
+            )}
         </div>
         
         <div className="relative">

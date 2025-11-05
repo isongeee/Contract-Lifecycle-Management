@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType } from './types';
 import { ContractStatus, RiskLevel, ApprovalStatus } from './types';
@@ -593,7 +594,8 @@ export default function App() {
                 counterparties={counterparties} 
                 contracts={contracts} 
                 onSelectCounterparty={handleSelectCounterparty}
-                onStartCreate={handleStartCreateCounterparty} 
+                onStartCreate={handleStartCreateCounterparty}
+                currentUser={currentUser}
             />
         );
       case 'properties':
@@ -610,6 +612,7 @@ export default function App() {
             contracts={contracts}
             onSelectProperty={handleSelectProperty}
             onStartCreate={handleStartCreateProperty}
+            currentUser={currentUser}
           />
         );
       case 'profile':

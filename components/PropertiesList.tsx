@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import type { Property, Contract } from '../types';
+import type { Property, Contract, UserProfile } from '../types';
 import { SearchIcon, HomeIcon, PlusIcon, FileTextIcon } from './icons';
 
 interface PropertyWithMeta extends Property {
@@ -12,6 +12,7 @@ interface PropertiesListProps {
   contracts: Contract[];
   onSelectProperty: (property: Property) => void;
   onStartCreate: () => void;
+  currentUser: UserProfile;
 }
 
 const formatAddress = (property: Property) => {
@@ -52,7 +53,7 @@ const PropertyCard: React.FC<{ property: PropertyWithMeta, onSelect: () => void 
 );
 
 
-export default function PropertiesList({ properties, contracts, onSelectProperty, onStartCreate }: PropertiesListProps) {
+export default function PropertiesList({ properties, contracts, onSelectProperty, onStartCreate, currentUser }: PropertiesListProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const propertiesWithMeta = useMemo<PropertyWithMeta[]>(() => {
@@ -77,12 +78,14 @@ export default function PropertiesList({ properties, contracts, onSelectProperty
                 <h1 className="text-2xl font-bold text-gray-900">Properties</h1>
                 <p className="mt-1 text-sm text-gray-500">Manage all physical properties and locations.</p>
             </div>
-            <button 
-                onClick={onStartCreate}
-                className="flex items-center px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                <PlusIcon className="w-5 h-5 mr-2" />
-                Add Property
-            </button>
+            {currentUser.role === 'Admin' && (
+                <button 
+                    onClick={onStartCreate}
+                    className="flex items-center px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    <PlusIcon className="w-5 h-5 mr-2" />
+                    Add Property
+                </button>
+            )}
         </div>
         
         <div className="relative">

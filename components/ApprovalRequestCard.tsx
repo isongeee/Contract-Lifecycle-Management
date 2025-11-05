@@ -14,7 +14,8 @@ interface ApprovalRequestCardProps {
 const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
 
 
-export default function ApprovalRequestCard({ contract, onApprove, onReject, currentUserApproverId }: ApprovalRequestCardProps) {
+// FIX: Changed component to React.FC to correctly handle props including the 'key' prop.
+const ApprovalRequestCard: React.FC<ApprovalRequestCardProps> = ({ contract, onApprove, onReject, currentUserApproverId }) => {
     const relevantStep = contract.approvalSteps.find(step => step.approver.id === currentUserApproverId);
     if (!relevantStep) return null; // Should not happen if filtered correctly
 
@@ -57,3 +58,5 @@ export default function ApprovalRequestCard({ contract, onApprove, onReject, cur
         </div>
     )
 }
+
+export default ApprovalRequestCard;

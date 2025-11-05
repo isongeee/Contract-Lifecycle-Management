@@ -141,6 +141,22 @@ const getMonthsInRange = (startDateStr: string, endDateStr: string): { year: num
 const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, counterparties, users }: Stage2Props) => {
     const availableMonthsByYear = useMemo(() => getMonthsInRange(data.startDate!, data.endDate!), [data.startDate, data.endDate]);
 
+    const isFormValid = useMemo(() => {
+        if (!data.title || data.title.trim() === '') return false;
+        if (!data.counterparty) return false;
+        if (!data.startDate || !data.endDate) return false;
+    
+        const start = new Date(data.startDate);
+        const end = new Date(data.endDate);
+
+        // Check if dates are valid objects and if end is not before start
+        if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
+            return false;
+        }
+        
+        return true;
+    }, [data.title, data.counterparty, data.startDate, data.endDate]);
+
     return (
         <div>
             <h2 className="text-lg font-semibold text-gray-800">Contract Information</h2>
@@ -223,7 +239,14 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
             </div>
             <div className="mt-8 flex justify-between">
                 <button onClick={onBack} type="button" className="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Back</button>
-                <button onClick={onNext} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Next</button>
+                <button 
+                    onClick={onNext} 
+                    type="button"
+                    disabled={!isFormValid}
+                    title={!isFormValid ? "Please fill in all required fields and ensure End Date is not before Start Date." : undefined}
+                    className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                    Next
+                </button>
             </div>
         </div>
     );
@@ -381,7 +404,8 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
     if (isSeasonal) {
         // FIX: Explicitly break down reduce to avoid potential type inference issues with nested reduces.
         totalAllocated = seasonalAllocations.reduce((sum: number, alloc) => {
-            const monthlyTotal = Object.values(alloc.monthlyValues).reduce((monthSum, val) => monthSum + (Number(val) || 0), 0);
+            // FIX: The `val` was incorrectly typed as `unknown`, causing a type error. Removed the explicit type to allow TypeScript to correctly infer it as `number` from the `monthlyValues` object.
+            const monthlyTotal = Object.values(alloc.monthlyValues).reduce((monthSum: number, val) => monthSum + (Number(val) || 0), 0);
             return sum + monthlyTotal;
         }, 0);
     } else {
