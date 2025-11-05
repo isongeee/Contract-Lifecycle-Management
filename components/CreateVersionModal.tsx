@@ -11,7 +11,6 @@ interface CreateVersionModalProps {
   onSave: (newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => void;
 }
 
-// FIX: Made children prop optional to satisfy type checker for what appears to be correct usage.
 const FormField = ({ label, children, className = 'sm:col-span-1' }: { label: string; children?: React.ReactNode; className?: string }) => (
     <div className={className}>
         <label className="block text-sm font-medium leading-6 text-gray-900">{label}</label>
@@ -28,7 +27,7 @@ export default function CreateVersionModal({ contract, properties, onClose, onSa
         content: latestVersion.content,
         fileName: '',
         value: latestVersion.value,
-        startDate: latestVersion.startDate,
+        effectiveDate: latestVersion.effectiveDate,
         endDate: latestVersion.endDate,
         renewalDate: latestVersion.renewalDate,
         frequency: latestVersion.frequency,
@@ -90,8 +89,8 @@ export default function CreateVersionModal({ contract, properties, onClose, onSa
                                             {Object.values(ContractFrequency).map(f => <option key={f} value={f}>{f}</option>)}
                                         </SelectInput>
                                     </FormField>
-                                    <FormField label="Start Date">
-                                        <TextInput type="date" value={formData.startDate} onChange={e => handleChange('startDate', e.target.value)} />
+                                    <FormField label="Effective Date">
+                                        <TextInput type="date" value={formData.effectiveDate} onChange={e => handleChange('effectiveDate', e.target.value)} />
                                     </FormField>
                                     <FormField label="End Date">
                                         <TextInput type="date" value={formData.endDate} onChange={e => handleChange('endDate', e.target.value)} />

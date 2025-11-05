@@ -29,6 +29,8 @@ import { Session } from '@supabase/supabase-js';
 import { getUserProfile, signOut } from './lib/auth';
 
 
+type ContractAction = ContractStatus | 'APPROVE_STEP' | 'REJECT_STEP';
+
 export default function App() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [templates] = useState<ContractTemplate[]>(MOCK_TEMPLATES);
@@ -177,8 +179,6 @@ export default function App() {
     const propertiesMap = new Map(mappedProperties.map(p => [p.id, p]));
     setProperties(mappedProperties);
 
-
-    // Fetch contract-related data
     const { data: contractsData } = await supabase.from('contracts').select('*').eq('company_id', companyId);
     const contractIds = (contractsData || []).map(c => c.id);
 
@@ -186,22 +186,35 @@ export default function App() {
     const { data: approvalsData } = contractIds.length > 0 ? await supabase.from('approval_steps').select('*').in('contract_id', contractIds) : { data: [] };
     const { data: allocationsData } = contractIds.length > 0 ? await supabase.from('contract_property_allocations').select('*').in('contract_id', contractIds) : { data: [] };
     
-    // Join on client
     const contractsById = new Map();
-    for (const contract of (contractsData || [])) {
-      contractsById.set(contract.id, {
-        ...contract,
-        riskLevel: contract.risk_level,
-        startDate: contract.start_date,
-        endDate: contract.end_date,
-        renewalDate: contract.renewal_date,
-        seasonalMonths: contract.seasonal_months,
-        owner: usersMap.get(contract.owner_id),
-        counterparty: counterpartiesMap.get(contract.counterparty_id),
-        property: propertiesMap.get(contract.property_id),
-        versions: [],
-        approvalSteps: [],
-        propertyAllocations: [],
+    for (const c of (contractsData || [])) {
+      contractsById.set(c.id, {
+        id: c.id, title: c.title, type: c.type, status: c.status,
+        riskLevel: c.risk_level,
+        effectiveDate: c.effective_date,
+        endDate: c.end_date,
+        renewalDate: c.renewal_date,
+        value: c.value, frequency: c.frequency, allocation: c.allocation,
+        seasonalMonths: c.seasonal_months,
+        owner: usersMap.get(c.owner_id),
+        counterparty: counterpartiesMap.get(c.counterparty_id),
+        property: propertiesMap.get(c.property_id),
+        submittedAt: c.submitted_at,
+        reviewStartedAt: c.review_started_at,
+        approvalStartedAt: c.approval_started_at,
+        approvalCompletedAt: c.approval_completed_at,
+        sentForSignatureAt: c.sent_for_signature_at,
+        executedAt: c.executed_at,
+        activeAt: c.active_at,
+        expiredAt: c.expired_at,
+        archivedAt: c.archived_at,
+        updatedAt: c.updated_at,
+        signatureProvider: c.signature_provider,
+        signatureEnvelopeId: c.signature_envelope_id,
+        signatureStatus: c.signature_status,
+        executedFileUrl: c.executed_file_url,
+        currentVersionId: c.current_version_id,
+        versions: [], approvalSteps: [], propertyAllocations: [],
       });
     }
 
@@ -213,7 +226,7 @@ export default function App() {
                 versionNumber: version.version_number,
                 createdAt: version.created_at,
                 fileName: version.file_name,
-                startDate: version.start_date,
+                effectiveDate: version.effective_date,
                 endDate: version.end_date,
                 renewalDate: version.renewal_date,
                 seasonalMonths: version.seasonal_months,
@@ -276,13 +289,12 @@ export default function App() {
   };
 
   const handleLogin = () => {
-    // Auth state change will trigger re-renders and data fetching
     setActiveView('dashboard');
   };
 
   const handleLogout = async () => {
     await signOut();
-    setActiveView('dashboard'); // Reset to default view on logout
+    setActiveView('dashboard'); 
     setAuthView('login');
   };
 
@@ -325,7 +337,7 @@ export default function App() {
     setSelectedTemplate(null);
     setSelectedCounterparty(null);
     setSelectedProperty(null);
-    setInitialFilters({}); // Reset filters on direct navigation
+    setInitialFilters({});
   };
   
   const handleMetricNavigation = (metric: 'active' | 'pending' | 'high-risk' | 'my-contracts') => {
@@ -354,7 +366,6 @@ export default function App() {
   const handleFinalizeCreate = async (newContractData: Partial<Contract> & { propertyAllocations?: any[] }) => {
     if (!currentUser?.companyId || !currentUser?.appId) return;
 
-    // 1. Prepare and insert main contract record
     const contractRecord = {
       title: newContractData.title,
       type: newContractData.type,
@@ -363,7 +374,7 @@ export default function App() {
       counterparty_id: newContractData.counterparty?.id,
       property_id: newContractData.property?.id,
       owner_id: newContractData.owner?.id,
-      start_date: newContractData.startDate,
+      effective_date: newContractData.effectiveDate,
       end_date: newContractData.endDate,
       renewal_date: newContractData.renewalDate,
       value: newContractData.value,
@@ -380,7 +391,6 @@ export default function App() {
       return;
     }
 
-    // 2. Prepare and insert first version
     const versionData = newContractData.versions![0];
     const versionRecord = {
       contract_id: insertedContract.id,
@@ -388,7 +398,7 @@ export default function App() {
       author_id: versionData.author.id,
       content: versionData.content,
       value: versionData.value,
-      start_date: versionData.startDate,
+      effective_date: versionData.effectiveDate,
       end_date: versionData.endDate,
       renewal_date: versionData.renewalDate,
       frequency: versionData.frequency,
@@ -403,7 +413,6 @@ export default function App() {
       return;
     }
     
-    // 3. Prepare and insert property allocations if they exist
     if (newContractData.propertyAllocations && newContractData.propertyAllocations.length > 0) {
       const allocationRecords = newContractData.propertyAllocations.map(alloc => ({
         contract_id: insertedContract.id,
@@ -421,7 +430,7 @@ export default function App() {
       }
     }
     
-    await fetchData(currentUser); // Refetch all data to get the new contract
+    await fetchData(currentUser);
     setIsCreatingContract(false);
   };
 
@@ -490,21 +499,41 @@ export default function App() {
     setIsCreatingProperty(false);
   };
 
-  const handleUpdateContractStatus = async (contractId: string, newStatus: ContractStatusType) => {
-    const { error } = await supabase.from('contracts').update({ status: newStatus }).eq('id', contractId);
-    if (error) {
-        console.error("Error updating status:", error);
-        return;
+  const handleContractTransition = async (contractId: string, action: ContractAction, payload?: any) => {
+    if (!currentUser) return;
+    
+    let rpcPayload = payload;
+    // Transform payload for specific actions that need it
+    if (action === ContractStatus.PENDING_APPROVAL && payload.approvers) {
+        rpcPayload = {
+            ...payload,
+            approvers: payload.approvers.map((a: UserProfile) => a.id)
+        };
     }
-    setContracts(prevContracts =>
-      prevContracts.map(contract =>
-        contract.id === contractId ? { ...contract, status: newStatus } : contract
-      )
-    );
-    if (selectedContract && selectedContract.id === contractId) {
-        setSelectedContract(prev => prev ? { ...prev, status: newStatus } : null);
+    
+    const { error } = await supabase.rpc('handle_contract_transition', {
+        p_contract_id: contractId,
+        p_action: action,
+        p_payload: rpcPayload,
+    });
+
+    if (error) {
+      console.error("Error transitioning contract state:", error);
+      alert(`Failed to update contract: ${error.message}`);
+    } else {
+      await fetchData(currentUser);
+      // If the currently viewed contract was updated, make sure to update it
+      if (selectedContract && selectedContract.id === contractId) {
+        const {data} = await supabase.from('contracts').select('*').eq('id', contractId).single();
+        if(data) {
+          // This is a simplified refresh. A full refresh would require re-fetching versions, etc.
+          // The full fetchData call above should handle this correctly, but this is a fallback.
+           setSelectedContract(prev => prev ? { ...prev, status: data.status } : null);
+        }
+      }
     }
   };
+
 
   const handleCreateNewVersion = async (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => {
       if (!currentUser?.companyId || !currentUser?.appId) return;
@@ -513,7 +542,6 @@ export default function App() {
       
       const latestVersionNumber = contractToUpdate.versions.length > 0 ? Math.max(...contractToUpdate.versions.map(v => v.versionNumber)) : 0;
       
-      // Insert new version
       const { data: insertedVersion, error: versionError } = await supabase.from('contract_versions').insert({
           contract_id: contractId,
           version_number: latestVersionNumber + 1,
@@ -521,7 +549,7 @@ export default function App() {
           content: newVersionData.content,
           file_name: newVersionData.fileName,
           value: newVersionData.value,
-          start_date: newVersionData.startDate,
+          effective_date: newVersionData.effectiveDate,
           end_date: newVersionData.endDate,
           renewal_date: newVersionData.renewalDate,
           frequency: newVersionData.frequency,
@@ -533,25 +561,26 @@ export default function App() {
       
       if (versionError) { console.error("Error creating new version:", versionError); return; }
 
-      // Update contract's main fields and status
       const { error: contractUpdateError } = await supabase.from('contracts').update({
           value: newVersionData.value,
-          start_date: newVersionData.startDate,
+          effective_date: newVersionData.effectiveDate,
           end_date: newVersionData.endDate,
           renewal_date: newVersionData.renewalDate,
           frequency: newVersionData.frequency,
           seasonal_months: newVersionData.seasonalMonths,
           property_id: newVersionData.property?.id,
-          status: ContractStatus.IN_REVIEW,
+          status: ContractStatus.IN_REVIEW, // A new version always moves the contract back to review
+          approval_completed_at: null, // Reset approval timestamp
+          approval_started_at: null,
       }).eq('id', contractId);
 
       if (contractUpdateError) { console.error("Error updating contract:", contractUpdateError); return; }
 
-      // Reset approval steps for this contract
-      const { error: approvalError } = await supabase.from('approval_steps').update({ status: ApprovalStatus.PENDING }).eq('contract_id', contractId);
-      if (approvalError) { console.error("Error resetting approvals:", approvalError); return; }
+      // When a new version is created, we reset approval steps.
+      const { error: approvalError } = await supabase.from('approval_steps').delete().eq('contract_id', contractId);
+      if (approvalError) { console.error("Error clearing old approvals:", approvalError); }
 
-      await fetchData(currentUser); // Easiest way to sync state
+      await fetchData(currentUser);
   };
 
   const handleUpdateRolePermissions = async (roleId: string, newPermissions: PermissionSet) => {
@@ -566,7 +595,6 @@ export default function App() {
         return;
     }
 
-    // Update local state to reflect the change
     setRoles(prevRoles => prevRoles.map(role =>
         role.id === roleId ? { ...role, permissions: newPermissions } : role
     ));
@@ -578,7 +606,7 @@ export default function App() {
     const { data, error } = await supabase.from('roles').insert({
         name,
         description,
-        permissions: requestorPermissions, // Use a safe default
+        permissions: requestorPermissions,
         company_id: currentUser.companyId,
         app_id: currentUser.appId,
     }).select().single();
@@ -640,9 +668,10 @@ export default function App() {
         return selectedContract ? (
           <ContractDetail 
             contract={selectedContract} 
+            users={users}
             properties={properties}
             onBack={handleBackToList} 
-            onUpdateStatus={handleUpdateContractStatus}
+            onTransition={handleContractTransition}
             onCreateNewVersion={handleCreateNewVersion}
           />
         ) : (
@@ -655,7 +684,7 @@ export default function App() {
           />
         );
       case 'approvals':
-        return <ApprovalsPage contracts={contracts} setContracts={setContracts} currentUser={currentUser} />;
+        return <ApprovalsPage contracts={contracts} onTransition={handleContractTransition} currentUser={currentUser} />;
       case 'templates':
         return selectedTemplate ? (
             <TemplateDetail template={selectedTemplate} onBack={handleBackToTemplatesList} />

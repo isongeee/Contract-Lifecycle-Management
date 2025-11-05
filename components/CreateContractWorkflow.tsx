@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Contract, Counterparty, UserProfile, Property, AllocationType } from '../types';
+import type { Contract, Counterparty, UserProfile, Property, AllocationType, ContractPropertyAllocation } from '../types';
 import { ContractType, ContractStatus, RiskLevel, ContractFrequency } from '../types';
 import { UploadCloudIcon, XIcon, PlusIcon, Trash2Icon } from './icons';
 
@@ -86,7 +86,7 @@ const Stage1_Upload = ({ onNext }: { onNext: () => void }) => {
 
 interface Stage2Props {
     data: Partial<Contract>;
-    setData: (field: keyof Contract, value: any) => void;
+    setData: (field: keyof Contract | Partial<Contract>, value?: any) => void;
     onBack: () => void;
     onNext: () => void;
     onToggleMonth: (monthYearKey: string) => void;
@@ -108,7 +108,6 @@ const SelectInput = (props: React.ComponentProps<'select'>) => <select {...props
 const getMonthsInRange = (startDateStr: string, endDateStr: string): { year: number; months: string[] }[] => {
     if (!startDateStr || !endDateStr) return [];
     
-    // Use UTC dates to avoid timezone issues
     const start = new Date(startDateStr);
     const end = new Date(endDateStr);
 
@@ -138,23 +137,22 @@ const getMonthsInRange = (startDateStr: string, endDateStr: string): { year: num
 
 
 const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, counterparties, users }: Stage2Props) => {
-    const availableMonthsByYear = useMemo(() => getMonthsInRange(data.startDate!, data.endDate!), [data.startDate, data.endDate]);
+    const availableMonthsByYear = useMemo(() => getMonthsInRange(data.effectiveDate!, data.endDate!), [data.effectiveDate, data.endDate]);
 
     const isFormValid = useMemo(() => {
         if (!data.title || data.title.trim() === '') return false;
         if (!data.counterparty) return false;
-        if (!data.startDate || !data.endDate) return false;
+        if (!data.effectiveDate || !data.endDate) return false;
     
-        const start = new Date(data.startDate);
+        const start = new Date(data.effectiveDate);
         const end = new Date(data.endDate);
 
-        // Check if dates are valid objects and if end is not before start
         if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
             return false;
         }
         
         return true;
-    }, [data.title, data.counterparty, data.startDate, data.endDate]);
+    }, [data.title, data.counterparty, data.effectiveDate, data.endDate]);
 
     return (
         <div>
@@ -180,8 +178,8 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
                             {users.map((user: UserProfile) => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}
                         </SelectInput>
                     </FormField>
-                    <FormField label="Start Date">
-                        <TextInput type="date" value={data.startDate} onChange={e => setData('startDate', e.target.value)} />
+                    <FormField label="Effective Date">
+                        <TextInput type="date" value={data.effectiveDate} onChange={e => setData('effectiveDate', e.target.value)} />
                     </FormField>
                     <FormField label="End Date">
                         <TextInput type="date" value={data.endDate} onChange={e => setData('endDate', e.target.value)} />
@@ -230,7 +228,7 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
                                     ))}
                                 </div>
                             ) : (
-                                <p className="mt-2 text-sm text-gray-500">Please set a valid Start and End Date to select active months.</p>
+                                <p className="mt-2 text-sm text-gray-500">Please set a valid Effective and End Date to select active months.</p>
                             )}
                         </div>
                     )}
@@ -242,7 +240,7 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
                     onClick={onNext} 
                     type="button"
                     disabled={!isFormValid}
-                    title={!isFormValid ? "Please fill in all required fields and ensure End Date is not before Start Date." : undefined}
+                    title={!isFormValid ? "Please fill in all required fields and ensure End Date is not before Effective Date." : undefined}
                     className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:opacity-50 disabled:cursor-not-allowed">
                     Next
                 </button>
@@ -334,7 +332,6 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                     if (field === 'propertyId') {
                         return { ...row, propertyId: String(value) };
                     }
-                    // It's a month field
                     return { 
                         ...row, 
                         monthlyValues: { ...row.monthlyValues, [field]: Number(value) },
@@ -378,7 +375,7 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                 const newMonthlyValues = { ...row.monthlyValues };
                 data.seasonalMonths.forEach((month: string) => {
                     if (!row.manualEdits[month]) {
-                        newMonthlyValues[month] = Math.max(0, valuePerCell); // Ensure non-negative
+                        newMonthlyValues[month] = Math.max(0, valuePerCell);
                     }
                 });
                 return { ...row, monthlyValues: newMonthlyValues };
@@ -408,28 +405,48 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
     };
 
     const handleProceed = () => {
-        const updates: Partial<Contract> & { propertyAllocations?: any[] } = {
+        const updates: Partial<Contract> & { propertyAllocations?: ContractPropertyAllocation[] } = {
             allocation: allocationType,
         };
 
         if (allocationType === 'single') {
             updates.property = properties.find((p: Property) => p.id === singlePropertyId);
             if (isSeasonal) {
-                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => ({...rest, propertyId: singlePropertyId}));
+                // FIX: Corrected object structure to match ContractPropertyAllocation type.
+                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => ({
+                    ...rest,
+                    propertyId: singlePropertyId,
+                    id: `temp-${id}`,
+                    allocatedValue: Object.values(rest.monthlyValues).reduce((sum, v) => sum + (v || 0), 0)
+                }));
             } else {
                 updates.propertyAllocations = [];
             }
         } else if (allocationType === 'multi') {
             updates.property = properties.find((p: Property) => p.id === (isSeasonal ? seasonalAllocations[0]?.propertyId : multiAllocations[0]?.propertyId));
             if (isSeasonal) {
-                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => rest);
+                 // FIX: Corrected object structure to match ContractPropertyAllocation type.
+                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => ({
+                    ...rest,
+                    id: `temp-${id}`,
+                    allocatedValue: Object.values(rest.monthlyValues).reduce((sum, v) => sum + (v || 0), 0)
+                }));
             } else {
-                 updates.propertyAllocations = multiAllocations.map(({ id, manualEdits, ...rest }: any) => rest);
+                // FIX: Corrected object structure to match ContractPropertyAllocation type.
+                 updates.propertyAllocations = multiAllocations.map(({ id, manualEdits, ...rest }: MultiPropertyAllocation) => ({
+                    ...rest,
+                    id: `temp-${id}`
+                 }));
             }
-        } else { // Portfolio
+        } else { // portfolio
             updates.property = undefined;
             if (isSeasonal) {
-                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => rest);
+                // FIX: Corrected object structure to match ContractPropertyAllocation type.
+                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => ({
+                    ...rest,
+                    id: `temp-${id}`,
+                    allocatedValue: Object.values(rest.monthlyValues).reduce((sum, v) => sum + (v || 0), 0)
+                }));
             } else {
                 updates.propertyAllocations = [];
             }
@@ -441,9 +458,7 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
 
     let totalAllocated = 0;
     if (isSeasonal) {
-        // FIX: Explicitly break down reduce to avoid potential type inference issues with nested reduces.
         totalAllocated = seasonalAllocations.reduce((sum: number, alloc) => {
-            // FIX: The `val` was incorrectly typed as `unknown`, causing a type error. Cast Object.values to number[] to ensure correct typing.
             const monthlyTotal = (Object.values(alloc.monthlyValues) as number[]).reduce((monthSum, val) => monthSum + (val || 0), 0);
             return sum + monthlyTotal;
         }, 0);
@@ -616,7 +631,7 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
                 <SummaryItem label="Contract Type" value={data.type} />
                 <SummaryItem label="Contract Owner" value={`${data.owner?.firstName} ${data.owner?.lastName}`} />
                 <SummaryItem label="Total Value" value={new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(data.value || 0)} />
-                <SummaryItem label="Start Date" value={data.startDate} />
+                <SummaryItem label="Effective Date" value={data.effectiveDate} />
                 <SummaryItem label="End Date" value={data.endDate} />
                 <SummaryItem label="Risk Level" value={data.riskLevel} />
                 <SummaryItem label="Frequency" value={frequencyDisplay} />
@@ -641,7 +656,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
       owner: currentUser,
       counterparty: undefined,
       property: undefined,
-      startDate: '',
+      effectiveDate: '',
       endDate: '',
       frequency: ContractFrequency.MONTHLY,
       seasonalMonths: [],
@@ -649,19 +664,16 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
   });
 
   useEffect(() => {
-    // Set default counterparty and property once they are loaded from props.
-    // This avoids the initial state being set with undefined values when props are empty arrays.
     setNewContractData(prev => ({
       ...prev,
-      // Only update if the current value is not set and the new list has items.
       counterparty: prev.counterparty || (counterparties.length > 0 ? counterparties[0] : undefined),
       property: prev.property || (properties.length > 0 ? properties[0] : undefined),
     }));
   }, [counterparties, properties]);
 
   useEffect(() => {
-    if (newContractData.frequency === ContractFrequency.SEASONAL && newContractData.startDate && newContractData.endDate && newContractData.seasonalMonths && newContractData.seasonalMonths.length > 0) {
-      const start = new Date(newContractData.startDate);
+    if (newContractData.frequency === ContractFrequency.SEASONAL && newContractData.effectiveDate && newContractData.endDate && newContractData.seasonalMonths && newContractData.seasonalMonths.length > 0) {
+      const start = new Date(newContractData.effectiveDate);
       const end = new Date(newContractData.endDate);
 
       if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
@@ -676,10 +688,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
         const [year, month] = monthYear.split('-').map(Number);
         const monthDate = new Date(Date.UTC(year, month - 1, 1));
         
-        // Ensure the monthDate is within the start and end date range
-        // Check if the month is on or after the start month
         const afterStart = monthDate.getUTCFullYear() > startUTC.getUTCFullYear() || (monthDate.getUTCFullYear() === startUTC.getUTCFullYear() && monthDate.getUTCMonth() >= startUTC.getUTCMonth());
-        // Check if the month is on or before the end month
         const beforeEnd = monthDate.getUTCFullYear() < endUTC.getUTCFullYear() || (monthDate.getUTCFullYear() === endUTC.getUTCFullYear() && monthDate.getUTCMonth() <= endUTC.getUTCMonth());
 
         return afterStart && beforeEnd;
@@ -689,7 +698,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
         setNewContractData(prev => ({ ...prev, seasonalMonths: validMonths }));
       }
     }
-  }, [newContractData.startDate, newContractData.endDate, newContractData.frequency]);
+  }, [newContractData.effectiveDate, newContractData.endDate, newContractData.frequency]);
 
   const handleNext = () => setCurrentStep(prev => Math.min(prev + 1, 4));
   const handleBack = () => setCurrentStep(prev => Math.max(prev - 1, 1));
@@ -754,7 +763,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
         author: currentUser,
         content: finalContent,
         value: newContractData.value || 0,
-        startDate: newContractData.startDate || '',
+        effectiveDate: newContractData.effectiveDate || '',
         endDate: newContractData.endDate || '',
         renewalDate: newContractData.endDate || '',
         frequency: newContractData.frequency!,

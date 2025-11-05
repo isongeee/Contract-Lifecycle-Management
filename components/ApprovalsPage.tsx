@@ -1,16 +1,17 @@
 import React, { useState, useMemo } from 'react';
-import type { Contract, UserProfile } from '../types';
+import type { Contract, UserProfile, ContractStatus as ContractStatusType } from '../types';
 import { ContractStatus, ApprovalStatus } from '../types';
 import ApprovalRequestCard from './ApprovalRequestCard';
 import { CheckCircleIcon } from './icons';
 
+type ContractAction = ContractStatusType | 'APPROVE_STEP' | 'REJECT_STEP';
+
 interface ApprovalsPageProps {
   contracts: Contract[];
-  setContracts: React.Dispatch<React.SetStateAction<Contract[]>>;
+  onTransition: (contractId: string, action: ContractAction, payload?: any) => void;
   currentUser: UserProfile;
 }
 
-// FIX: Made children prop optional to satisfy type checker for what appears to be correct usage.
 const Section = ({ title, children, count }: { title: string; children?: React.ReactNode; count: number}) => (
     <div>
         <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-1">{title}</h2>
@@ -21,7 +22,7 @@ const Section = ({ title, children, count }: { title: string; children?: React.R
     </div>
 );
 
-export default function ApprovalsPage({ contracts, setContracts, currentUser }: ApprovalsPageProps) {
+export default function ApprovalsPage({ contracts, onTransition, currentUser }: ApprovalsPageProps) {
 
     const { myPending, allPending } = useMemo(() => {
         const myPending: Contract[] = [];
@@ -41,41 +42,14 @@ export default function ApprovalsPage({ contracts, setContracts, currentUser }: 
         return { myPending, allPending };
     }, [contracts, currentUser.id]);
 
-    const handleApprovalAction = (contractId: string, stepId: string, newStatus: ApprovalStatus.APPROVED | ApprovalStatus.REJECTED) => {
-        setContracts(prevContracts => {
-            const newContracts = [...prevContracts];
-            const contractIndex = newContracts.findIndex(c => c.id === contractId);
-            if (contractIndex === -1) return prevContracts;
-
-            const contractToUpdate = { ...newContracts[contractIndex] };
-            const stepIndex = contractToUpdate.approvalSteps.findIndex(s => s.id === stepId);
-            if (stepIndex === -1) return prevContracts;
-            
-            // Update the step status
-            contractToUpdate.approvalSteps = [...contractToUpdate.approvalSteps];
-            contractToUpdate.approvalSteps[stepIndex] = {
-                ...contractToUpdate.approvalSteps[stepIndex],
-                status: newStatus,
-                approvedAt: new Date().toISOString().split('T')[0] // Set current date
-            };
-
-            // Check if all approvals are now complete
-            const allApproved = contractToUpdate.approvalSteps.every(s => s.status === ApprovalStatus.APPROVED);
-            if (allApproved) {
-                contractToUpdate.status = ContractStatus.APPROVED;
-            }
-
-            newContracts[contractIndex] = contractToUpdate;
-            return newContracts;
-        });
-    };
-    
     const handleApprove = (contractId: string, stepId: string) => {
-        handleApprovalAction(contractId, stepId, ApprovalStatus.APPROVED);
+        onTransition(contractId, 'APPROVE_STEP', { stepId });
     };
 
     const handleReject = (contractId: string, stepId: string) => {
-        handleApprovalAction(contractId, stepId, ApprovalStatus.REJECTED);
+         if (window.confirm("Are you sure you want to reject this approval? This will send the contract back to the 'In Review' stage.")) {
+            onTransition(contractId, 'REJECT_STEP', { stepId });
+        }
     };
 
     return (
@@ -115,7 +89,7 @@ export default function ApprovalsPage({ contracts, setContracts, currentUser }: 
                                    Waiting on: {contract.approvalSteps.filter(s => s.status === ApprovalStatus.PENDING).map(s => `${s.approver.firstName} ${s.approver.lastName}`).join(', ')}
                                </p>
                            </div>
-                           <span className="text-xs font-semibold px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full">
+                           <span className="text-xs font-semibold px-2 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200 rounded-full">
                                Pending
                            </span>
                        </div>

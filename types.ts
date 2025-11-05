@@ -18,7 +18,7 @@ export enum ContractStatus {
   PENDING_APPROVAL = 'Pending Approval',
   APPROVED = 'Approved',
   SENT_FOR_SIGNATURE = 'Sent for Signature',
-  FULLY_SIGNED = 'Fully Signed',
+  FULLY_EXECUTED = 'Fully Executed',
   ACTIVE = 'Active',
   EXPIRED = 'Expired',
   TERMINATED = 'Terminated',
@@ -116,7 +116,7 @@ export interface ContractVersion {
   fileName?: string;
   // Snapshot of commercial terms for this version
   value: number;
-  startDate: string;
+  effectiveDate: string;
   endDate: string;
   renewalDate: string;
   frequency: ContractFrequency;
@@ -148,7 +148,7 @@ export interface Contract {
   counterparty: Counterparty;
   property?: Property;
   owner: UserProfile;
-  startDate: string;
+  effectiveDate: string;
   endDate: string;
   renewalDate: string;
   value: number;
@@ -160,6 +160,24 @@ export interface Contract {
   riskSummary?: string;
   allocation: AllocationType;
   propertyAllocations?: ContractPropertyAllocation[];
+  // New lifecycle tracking fields
+  submittedAt?: string;
+  reviewStartedAt?: string;
+  approvalStartedAt?: string;
+  approvalCompletedAt?: string;
+  sentForSignatureAt?: string;
+  executedAt?: string;
+  activeAt?: string;
+  expiredAt?: string;
+  archivedAt?: string;
+  updatedAt?: string;
+  // New e-signature fields
+  signatureProvider?: string;
+  signatureEnvelopeId?: string;
+  signatureStatus?: string;
+  executedFileUrl?: string;
+  // New current version FK
+  currentVersionId?: string;
 }
 
 export interface ContractTemplate {

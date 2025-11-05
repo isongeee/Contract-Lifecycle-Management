@@ -8,7 +8,7 @@ interface CreateCounterpartyWorkflowProps {
   onFinish: (newCounterpartyData: Omit<Counterparty, 'id'>) => void;
 }
 
-// FIX: Made children prop optional to satisfy type checker for what appears to be correct usage.
+// FIX: Made children prop optional to satisfy type checker.
 const FormField = ({ label, children, className = 'col-span-1' }: { label: string; children?: React.ReactNode; className?: string }) => (
     <div className={className}>
         <label className="block text-sm font-medium leading-6 text-gray-900">{label}</label>

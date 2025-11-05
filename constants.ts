@@ -2,30 +2,30 @@ import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, Cont
 import type { UserProfile, Counterparty, Property } from './types';
 
 export const STATUS_COLORS: Record<ContractStatus, string> = {
-  [ContractStatus.DRAFT]: 'bg-gray-200 text-gray-800',
-  [ContractStatus.IN_REVIEW]: 'bg-blue-100 text-blue-800',
-  [ContractStatus.PENDING_APPROVAL]: 'bg-yellow-100 text-yellow-800',
-  [ContractStatus.APPROVED]: 'bg-teal-100 text-teal-800',
-  [ContractStatus.SENT_FOR_SIGNATURE]: 'bg-indigo-100 text-indigo-800',
-  [ContractStatus.FULLY_SIGNED]: 'bg-primary-200 text-primary-800',
-  [ContractStatus.ACTIVE]: 'bg-green-100 text-green-800',
-  [ContractStatus.EXPIRED]: 'bg-gray-400 text-white',
-  [ContractStatus.TERMINATED]: 'bg-red-200 text-red-800',
-  [ContractStatus.ARCHIVED]: 'bg-gray-500 text-white',
+  [ContractStatus.DRAFT]: 'bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-100',
+  [ContractStatus.IN_REVIEW]: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200',
+  [ContractStatus.PENDING_APPROVAL]: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200',
+  [ContractStatus.APPROVED]: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200',
+  [ContractStatus.SENT_FOR_SIGNATURE]: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200',
+  [ContractStatus.FULLY_EXECUTED]: 'bg-primary-200 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200',
+  [ContractStatus.ACTIVE]: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
+  [ContractStatus.EXPIRED]: 'bg-gray-400 text-white dark:bg-gray-500',
+  [ContractStatus.TERMINATED]: 'bg-red-200 text-red-800 dark:bg-red-900/40 dark:text-red-200',
+  [ContractStatus.ARCHIVED]: 'bg-gray-500 text-white dark:bg-gray-400',
 };
 
 export const RISK_COLORS: Record<RiskLevel, string> = {
-  [RiskLevel.LOW]: 'bg-green-100 text-green-800',
-  [RiskLevel.MEDIUM]: 'bg-yellow-100 text-yellow-800',
-  [RiskLevel.HIGH]: 'bg-orange-200 text-orange-800',
-  [RiskLevel.CRITICAL]: 'bg-red-200 text-red-800',
+  [RiskLevel.LOW]: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
+  [RiskLevel.MEDIUM]: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200',
+  [RiskLevel.HIGH]: 'bg-orange-200 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200',
+  [RiskLevel.CRITICAL]: 'bg-red-200 text-red-800 dark:bg-red-900/40 dark:text-red-200',
 };
 
 export const APPROVAL_STATUS_COLORS: Record<ApprovalStatus, string> = {
-    [ApprovalStatus.PENDING]: 'bg-yellow-100 text-yellow-800',
-    [ApprovalStatus.REQUESTED_CHANGES]: 'bg-blue-100 text-blue-800',
-    [ApprovalStatus.REJECTED]: 'bg-red-200 text-red-800',
-    [ApprovalStatus.APPROVED]: 'bg-green-100 text-green-800',
+    [ApprovalStatus.PENDING]: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200',
+    [ApprovalStatus.REQUESTED_CHANGES]: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200',
+    [ApprovalStatus.REJECTED]: 'bg-red-200 text-red-800 dark:bg-red-900/40 dark:text-red-200',
+    [ApprovalStatus.APPROVED]: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
 };
 
 export const USERS: Record<string, FullUserProfile> = {
@@ -73,22 +73,21 @@ export const MOCK_CONTRACTS: Contract[] = [
     counterparty: COUNTERPARTIES['acme'],
     property: MOCK_PROPERTIES['prop-1'],
     owner: USERS['alice'],
-    // Terms from latest version (v2)
-    startDate: '2023-01-15',
+    effectiveDate: '2023-01-15',
     endDate: '2025-01-14',
     renewalDate: '2025-01-14',
     value: 250000,
     frequency: ContractFrequency.ANNUALLY,
-    // FIX: Add missing 'allocation' property
-    allocation: 'single',
+    // FIX: Explicitly cast 'allocation' to AllocationType to satisfy TypeScript.
+    allocation: 'single' as AllocationType,
     versions: [
       { 
         id: 'v1-1', versionNumber: 1, createdAt: '2023-01-05', author: USERS['alice'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'ACME_MSA_v1.pdf',
-        value: 240000, startDate: '2023-01-15', endDate: '2025-01-14', renewalDate: '2025-01-14', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
+        value: 240000, effectiveDate: '2023-01-15', endDate: '2025-01-14', renewalDate: '2025-01-14', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
       },
       { 
         id: 'v1-2', versionNumber: 2, createdAt: '2023-01-10', author: USERS['bob'], content: DUMMY_CONTRACT_CONTENT_V2, fileName: 'ACME_MSA_v2_redline.pdf',
-        value: 250000, startDate: '2023-01-15', endDate: '2025-01-14', renewalDate: '2025-01-14', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
+        value: 250000, effectiveDate: '2023-01-15', endDate: '2025-01-14', renewalDate: '2025-01-14', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
       },
     ],
     approvalSteps: [
@@ -105,17 +104,17 @@ export const MOCK_CONTRACTS: Contract[] = [
     counterparty: COUNTERPARTIES['globex'],
     property: MOCK_PROPERTIES['prop-2'],
     owner: USERS['bob'],
-    startDate: '2024-08-01',
+    effectiveDate: '2024-08-01',
     endDate: '2025-02-01',
     renewalDate: '2025-02-01',
     value: 75000,
     frequency: ContractFrequency.MONTHLY,
-    // FIX: Add missing 'allocation' property
-    allocation: 'single',
+    // FIX: Explicitly cast 'allocation' to AllocationType to satisfy TypeScript.
+    allocation: 'single' as AllocationType,
     versions: [
         { 
             id: 'v2-1', versionNumber: 1, createdAt: '2024-07-20', author: USERS['diana'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'Globex_SOW_v1.pdf',
-            value: 75000, startDate: '2024-08-01', endDate: '2025-02-01', renewalDate: '2025-02-01', frequency: ContractFrequency.MONTHLY, property: MOCK_PROPERTIES['prop-2']
+            value: 75000, effectiveDate: '2024-08-01', endDate: '2025-02-01', renewalDate: '2025-02-01', frequency: ContractFrequency.MONTHLY, property: MOCK_PROPERTIES['prop-2']
         }
     ],
     approvalSteps: [
@@ -132,17 +131,17 @@ export const MOCK_CONTRACTS: Contract[] = [
     counterparty: COUNTERPARTIES['cyberdyne'],
     property: MOCK_PROPERTIES['prop-1'],
     owner: USERS['diana'],
-    startDate: '2024-09-01',
+    effectiveDate: '2024-09-01',
     endDate: '2025-08-31',
     renewalDate: '2025-08-31',
     value: 120000,
     frequency: ContractFrequency.ANNUALLY,
-    // FIX: Add missing 'allocation' property
-    allocation: 'single',
+    // FIX: Explicitly cast 'allocation' to AllocationType to satisfy TypeScript.
+    allocation: 'single' as AllocationType,
     versions: [
         { 
             id: 'v5-1', versionNumber: 1, createdAt: '2024-07-28', author: USERS['diana'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'Cyberdyne_Vendor_Initial_Draft.pdf',
-            value: 120000, startDate: '2024-09-01', endDate: '2025-08-31', renewalDate: '2025-08-31', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
+            value: 120000, effectiveDate: '2024-09-01', endDate: '2025-08-31', renewalDate: '2025-08-31', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
         }
     ],
     approvalSteps: [
@@ -158,17 +157,17 @@ export const MOCK_CONTRACTS: Contract[] = [
     riskLevel: RiskLevel.LOW,
     counterparty: COUNTERPARTIES['stark'],
     owner: USERS['diana'],
-    startDate: '2024-07-25',
+    effectiveDate: '2024-07-25',
     endDate: '2026-07-24',
     renewalDate: '2026-07-24',
     value: 0,
     frequency: ContractFrequency.ANNUALLY,
-    // FIX: Add missing 'allocation' property
-    allocation: 'portfolio',
+    // FIX: Explicitly cast 'allocation' to AllocationType to satisfy TypeScript.
+    allocation: 'portfolio' as AllocationType,
     versions: [
         { 
             id: 'v3-1', versionNumber: 1, createdAt: '2024-07-25', author: USERS['diana'], content: 'This is a standard Non-Disclosure Agreement...',
-            value: 0, startDate: '2024-07-25', endDate: '2026-07-24', renewalDate: '2026-07-24', frequency: ContractFrequency.ANNUALLY
+            value: 0, effectiveDate: '2024-07-25', endDate: '2026-07-24', renewalDate: '2026-07-24', frequency: ContractFrequency.ANNUALLY
         }
     ],
     approvalSteps: [],
@@ -177,21 +176,21 @@ export const MOCK_CONTRACTS: Contract[] = [
     id: 'contract-004',
     title: 'SaaS Subscription - CloudService Pro',
     type: ContractType.SAAS,
-    status: ContractStatus.FULLY_SIGNED,
+    status: ContractStatus.FULLY_EXECUTED,
     riskLevel: RiskLevel.LOW,
     counterparty: { id: 'cp-4', name: 'CloudService Pro', type: CounterpartyType.VENDOR, addressLine1: '789 Cloud Ave', city: 'Tech City', state: 'CA', zipCode: '94000', country: 'USA' },
     owner: USERS['alice'],
-    startDate: '2024-06-01',
+    effectiveDate: '2024-06-01',
     endDate: '2025-05-31',
     renewalDate: '2025-05-31',
     value: 12000,
     frequency: ContractFrequency.ANNUALLY,
-    // FIX: Add missing 'allocation' property
-    allocation: 'portfolio',
+    // FIX: Explicitly cast 'allocation' to AllocationType to satisfy TypeScript.
+    allocation: 'portfolio' as AllocationType,
     versions: [
       { 
         id: 'v4-1', versionNumber: 1, createdAt: '2024-05-20', author: USERS['alice'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'CloudService_SaaS_Agreement.pdf',
-        value: 12000, startDate: '2024-06-01', endDate: '2025-05-31', renewalDate: '2025-05-31', frequency: ContractFrequency.ANNUALLY
+        value: 12000, effectiveDate: '2024-06-01', endDate: '2025-05-31', renewalDate: '2025-05-31', frequency: ContractFrequency.ANNUALLY
       },
     ],
     approvalSteps: [
@@ -207,24 +206,40 @@ export const MOCK_CONTRACTS: Contract[] = [
     counterparty: COUNTERPARTIES['wayne'],
     property: MOCK_PROPERTIES['prop-3'],
     owner: USERS['charlie'],
-    startDate: '2024-10-01',
+    effectiveDate: '2024-10-01',
     endDate: '2029-09-30',
     renewalDate: '2029-09-30',
     value: 5000000,
     frequency: ContractFrequency.MONTHLY,
-    // FIX: Add missing 'allocation' property
-    allocation: 'single',
+    // FIX: Explicitly cast 'allocation' to AllocationType to satisfy TypeScript.
+    allocation: 'single' as AllocationType,
     versions: [
         { 
             id: 'v6-1', versionNumber: 1, createdAt: '2024-07-29', author: USERS['charlie'], content: DUMMY_CONTRACT_CONTENT_V1,
-            value: 5000000, startDate: '2024-10-01', endDate: '2029-09-30', renewalDate: '2029-09-30', frequency: ContractFrequency.MONTHLY, property: MOCK_PROPERTIES['prop-3']
+            value: 5000000, effectiveDate: '2024-10-01', endDate: '2029-09-30', renewalDate: '2029-09-30', frequency: ContractFrequency.MONTHLY, property: MOCK_PROPERTIES['prop-3']
         }
     ],
     approvalSteps: [
       { id: 'app-6-1', approver: USERS['bob'], status: ApprovalStatus.PENDING },
     ],
   },
-];
+].map(c => ({
+    ...c,
+    submittedAt: undefined,
+    reviewStartedAt: undefined,
+    approvalStartedAt: undefined,
+    approvalCompletedAt: undefined,
+    sentForSignatureAt: undefined,
+    executedAt: undefined,
+    activeAt: undefined,
+    expiredAt: undefined,
+    archivedAt: undefined,
+    signatureProvider: undefined,
+    signatureEnvelopeId: undefined,
+    signatureStatus: undefined,
+    executedFileUrl: undefined,
+    currentVersionId: undefined,
+}));
 
 const DUMMY_NDA_CONTENT = `
 This Mutual Non-Disclosure Agreement ("Agreement") is entered into between [Party A] and [Party B] for the purpose of preventing the unauthorized disclosure of Confidential Information as defined below.

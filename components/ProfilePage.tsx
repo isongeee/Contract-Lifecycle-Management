@@ -46,7 +46,7 @@ const ThemeOption = ({ label, value, icon, current, onClick }: { label: string; 
   );
 };
 
-// FIX: Made children prop optional to satisfy type checker for what appears to be correct usage.
+// FIX: Made children prop optional to satisfy type checker.
 const SectionCard = ({ title, description, children }: { title: string; description: string; children?: React.ReactNode; }) => (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
