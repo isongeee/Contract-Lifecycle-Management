@@ -299,7 +299,7 @@ const financePermissions: PermissionSet = {
     settings: { access: false, edit: false },
 };
 
-const requestorPermissions: PermissionSet = {
+export const requestorPermissions: PermissionSet = {
     contracts: { view: true, edit: false, approve: false, delete: false },
     counterparties: { view: false, edit: false },
     properties: { view: false, edit: false },

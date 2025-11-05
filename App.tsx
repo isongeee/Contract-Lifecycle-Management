@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType, PermissionSet } from './types';
 import { ContractStatus, RiskLevel, ApprovalStatus } from './types';
-import { MOCK_TEMPLATES, MOCK_ROLES, MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS } from './constants';
+import { MOCK_TEMPLATES, MOCK_ROLES, MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS, requestorPermissions } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import ContractsList from './components/ContractsList';
@@ -107,13 +107,25 @@ export default function App() {
     const { data: companyData } = await supabase.from('companies').select('id, name, slug').eq('id', companyId).single();
     setCompany(companyData);
 
-    // Fetch lookups
-    const { data: rolesData } = await supabase.from('roles').select('*').eq('company_id', companyId);
-    setRoles((rolesData || []).map(r => ({...r, userCount: 0, permissions: r.permissions as any })));
-    const rolesMap = new Map((rolesData || []).map(r => [r.id, r.name]));
-
+    // Fetch users first to calculate role counts
     const { data: usersData } = await supabase.from('users').select('*').eq('company_id', companyId);
-    // FIX: Explicitly map supabase snake_case fields to UserProfile camelCase fields to ensure correct typing.
+    
+    const userCountsByRole = (usersData || []).reduce((acc, user) => {
+        if (user.role_id) {
+            acc[user.role_id] = (acc[user.role_id] || 0) + 1;
+        }
+        return acc;
+    }, {} as Record<string, number>);
+
+    // Fetch roles and enrich with user counts
+    const { data: rolesData } = await supabase.from('roles').select('*').eq('company_id', companyId);
+    setRoles((rolesData || []).map(r => ({
+        ...r, 
+        userCount: userCountsByRole[r.id] || 0,
+        permissions: r.permissions as any 
+    })).sort((a, b) => a.name.localeCompare(b.name)));
+    const rolesMap = new Map((rolesData || []).map(r => [r.id, r.name]));
+    
     const mappedUsers: UserProfile[] = (usersData || []).map(u => ({
         id: u.id,
         firstName: u.first_name,
@@ -560,6 +572,57 @@ export default function App() {
     ));
   };
 
+  const handleCreateRole = async (name: string, description: string) => {
+    if (!currentUser?.companyId || !currentUser?.appId) return;
+
+    const { data, error } = await supabase.from('roles').insert({
+        name,
+        description,
+        permissions: requestorPermissions, // Use a safe default
+        company_id: currentUser.companyId,
+        app_id: currentUser.appId,
+    }).select().single();
+
+    if (error) {
+        console.error("Error creating role:", error);
+        alert("Failed to create role.");
+        return;
+    }
+
+    if (data) {
+        setRoles(prev => [...prev, { ...data, userCount: 0, permissions: data.permissions as any }].sort((a,b) => a.name.localeCompare(b.name)));
+    }
+  };
+
+  const handleDeleteRole = async (roleId: string) => {
+    const roleToDelete = roles.find(r => r.id === roleId);
+    if (!roleToDelete) return;
+
+    if (roleToDelete.name === 'Admin') {
+        alert("The default Admin role cannot be deleted.");
+        return;
+    }
+
+    if (roleToDelete.userCount > 0) {
+        alert("Cannot delete a role that has users assigned to it. Please reassign users first.");
+        return;
+    }
+    
+    if (!window.confirm(`Are you sure you want to delete the "${roleToDelete.name}" role? This action cannot be undone.`)) {
+        return;
+    }
+
+    const { error } = await supabase.from('roles').delete().eq('id', roleId);
+    
+    if (error) {
+        console.error("Error deleting role:", error);
+        alert("Failed to delete role.");
+        return;
+    }
+    
+    setRoles(prev => prev.filter(r => r.id !== roleId));
+  };
+
 
   const renderContent = () => {
     if (isLoading || !currentUser) {
@@ -650,6 +713,8 @@ export default function App() {
                     currentUser={currentUser}
                     setUsers={setUsers}
                     onUpdateRolePermissions={handleUpdateRolePermissions}
+                    onCreateRole={handleCreateRole}
+                    onDeleteRole={handleDeleteRole}
                     setNotificationSettings={setNotificationSettings}
                 />;
       default:

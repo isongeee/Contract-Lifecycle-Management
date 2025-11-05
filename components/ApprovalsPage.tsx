@@ -13,8 +13,8 @@ interface ApprovalsPageProps {
 // FIX: Made children prop optional to satisfy type checker for what appears to be correct usage.
 const Section = ({ title, children, count }: { title: string; children?: React.ReactNode; count: number}) => (
     <div>
-        <h2 className="text-xl font-bold text-gray-800 mb-1">{title}</h2>
-        <p className="text-sm text-gray-500 mb-4">You have {count} request{count === 1 ? '' : 's'} in this category.</p>
+        <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-1">{title}</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">You have {count} request{count === 1 ? '' : 's'} in this category.</p>
         <div className="space-y-4">
             {children}
         </div>
@@ -81,8 +81,8 @@ export default function ApprovalsPage({ contracts, setContracts, currentUser }: 
     return (
         <div className="space-y-8">
             <div>
-                <h1 className="text-2xl font-bold text-gray-900">Approval Dashboard</h1>
-                <p className="mt-1 text-sm text-gray-500">Review and action pending contract requests.</p>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Approval Dashboard</h1>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Review and action pending contract requests.</p>
             </div>
 
             <Section title="Pending My Approval" count={myPending.length}>
@@ -97,10 +97,10 @@ export default function ApprovalsPage({ contracts, setContracts, currentUser }: 
                         />
                     ))
                 ) : (
-                    <div className="text-center py-10 bg-white rounded-lg border border-dashed">
+                    <div className="text-center py-10 bg-white dark:bg-gray-800/50 rounded-lg border border-dashed dark:border-gray-700">
                         <CheckCircleIcon className="mx-auto h-12 w-12 text-green-400" />
-                        <h3 className="mt-2 text-md font-medium text-gray-900">All caught up!</h3>
-                        <p className="mt-1 text-sm text-gray-500">You have no pending approvals.</p>
+                        <h3 className="mt-2 text-md font-medium text-gray-900 dark:text-gray-100">All caught up!</h3>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">You have no pending approvals.</p>
                     </div>
                 )}
             </Section>
@@ -108,10 +108,10 @@ export default function ApprovalsPage({ contracts, setContracts, currentUser }: 
             <Section title="All Pending Requests" count={allPending.length}>
                  {allPending.length > 0 ? (
                     allPending.map(contract => (
-                       <div key={`${contract.id}-all`} className="bg-white p-4 rounded-lg shadow-sm border flex justify-between items-center">
+                       <div key={`${contract.id}-all`} className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border dark:border-gray-700 flex justify-between items-center">
                            <div>
-                               <p className="font-semibold text-gray-800">{contract.title}</p>
-                               <p className="text-sm text-gray-500">
+                               <p className="font-semibold text-gray-800 dark:text-gray-100">{contract.title}</p>
+                               <p className="text-sm text-gray-500 dark:text-gray-400">
                                    Waiting on: {contract.approvalSteps.filter(s => s.status === ApprovalStatus.PENDING).map(s => `${s.approver.firstName} ${s.approver.lastName}`).join(', ')}
                                </p>
                            </div>
@@ -121,9 +121,9 @@ export default function ApprovalsPage({ contracts, setContracts, currentUser }: 
                        </div>
                     ))
                 ) : (
-                    <div className="text-center py-10 bg-white rounded-lg border border-dashed">
-                         <h3 className="mt-2 text-md font-medium text-gray-900">No Pending Approvals</h3>
-                        <p className="mt-1 text-sm text-gray-500">There are no contracts pending approval across the organization.</p>
+                    <div className="text-center py-10 bg-white dark:bg-gray-800/50 rounded-lg border border-dashed dark:border-gray-700">
+                         <h3 className="mt-2 text-md font-medium text-gray-900 dark:text-gray-100">No Pending Approvals</h3>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">There are no contracts pending approval across the organization.</p>
                     </div>
                 )}
             </Section>

@@ -20,31 +20,31 @@ const ApprovalRequestCard: React.FC<ApprovalRequestCardProps> = ({ contract, onA
     if (!relevantStep) return null; // Should not happen if filtered correctly
 
     return (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="p-5">
                 <div className="flex justify-between items-start">
                     <div>
-                        <p className="text-xs text-primary-700 font-semibold uppercase">{contract.type}</p>
-                        <h4 className="font-bold text-gray-800 text-lg">{contract.title}</h4>
-                        <p className="text-sm text-gray-500 mt-1">vs. {contract.counterparty.name}</p>
+                        <p className="text-xs text-primary-700 dark:text-primary-300 font-semibold uppercase">{contract.type}</p>
+                        <h4 className="font-bold text-gray-800 dark:text-gray-100 text-lg">{contract.title}</h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">vs. {contract.counterparty.name}</p>
                     </div>
                     <div className="text-right">
-                        <p className="font-bold text-lg text-gray-800">{formatCurrency(contract.value)}</p>
-                         <p className="text-sm text-gray-500">Value</p>
+                        <p className="font-bold text-lg text-gray-800 dark:text-gray-100">{formatCurrency(contract.value)}</p>
+                         <p className="text-sm text-gray-500 dark:text-gray-400">Value</p>
                     </div>
                 </div>
                 <div className="mt-4 flex items-center space-x-3">
                     <img className="h-8 w-8 rounded-full" src={contract.owner.avatarUrl} alt={`${contract.owner.firstName} ${contract.owner.lastName}`} />
                     <div>
-                        <p className="text-sm font-medium text-gray-700">{`${contract.owner.firstName} ${contract.owner.lastName}`}</p>
-                        <p className="text-xs text-gray-500">Requested on {contract.versions[contract.versions.length - 1].createdAt}</p>
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{`${contract.owner.firstName} ${contract.owner.lastName}`}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Requested on {contract.versions[contract.versions.length - 1].createdAt}</p>
                     </div>
                 </div>
             </div>
-            <div className="bg-gray-50 px-5 py-3 flex justify-end items-center space-x-3">
+            <div className="bg-gray-50 dark:bg-gray-700/50 px-5 py-3 flex justify-end items-center space-x-3">
                  <button 
                     onClick={() => onReject(contract.id, relevantStep.id)}
-                    className="flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                    className="flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
                     <XCircleIcon className="w-5 h-5 mr-2 text-red-500" />
                     Reject
                 </button>

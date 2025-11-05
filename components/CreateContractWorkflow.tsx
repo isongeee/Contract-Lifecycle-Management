@@ -77,8 +77,7 @@ const Stage1_Upload = ({ onNext }: { onNext: () => void }) => {
                 </div>
                  {fileName && <p className="mt-3 text-sm text-gray-700 font-medium">Uploaded: {fileName}</p>}
             </div>
-            <div className="mt-8 flex justify-end space-x-3">
-                <button onClick={onNext} type="button" className="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Skip for now</button>
+            <div className="mt-8 flex justify-end">
                 <button onClick={onNext} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Next</button>
             </div>
         </div>
@@ -409,30 +408,34 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
     };
 
     const handleProceed = () => {
-        setData('allocation', allocationType);
+        const updates: Partial<Contract> & { propertyAllocations?: any[] } = {
+            allocation: allocationType,
+        };
+
         if (allocationType === 'single') {
-            setData('property', properties.find((p: Property) => p.id === singlePropertyId));
+            updates.property = properties.find((p: Property) => p.id === singlePropertyId);
             if (isSeasonal) {
-                setData('propertyAllocations', seasonalAllocations.map(({ id, ...rest }) => ({...rest, propertyId: singlePropertyId})));
+                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => ({...rest, propertyId: singlePropertyId}));
             } else {
-                 setData('propertyAllocations', null);
+                updates.propertyAllocations = [];
             }
         } else if (allocationType === 'multi') {
-            const primaryProperty = properties.find((p: Property) => p.id === (isSeasonal ? seasonalAllocations[0]?.propertyId : multiAllocations[0]?.propertyId));
-            setData('property', primaryProperty);
+            updates.property = properties.find((p: Property) => p.id === (isSeasonal ? seasonalAllocations[0]?.propertyId : multiAllocations[0]?.propertyId));
             if (isSeasonal) {
-                setData('propertyAllocations', seasonalAllocations.map(({ id, ...rest }) => rest));
+                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => rest);
             } else {
-                 setData('propertyAllocations', multiAllocations.map(({ id, manualEdits, ...rest }: any) => rest));
+                 updates.propertyAllocations = multiAllocations.map(({ id, manualEdits, ...rest }: any) => rest);
             }
         } else { // Portfolio
-            setData('property', null);
+            updates.property = undefined;
             if (isSeasonal) {
-                setData('propertyAllocations', seasonalAllocations.map(({ id, ...rest }) => rest));
+                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => rest);
             } else {
-                setData('propertyAllocations', null);
+                updates.propertyAllocations = [];
             }
         }
+
+        setData(updates);
         onNext();
     };
 
@@ -691,8 +694,16 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
   const handleNext = () => setCurrentStep(prev => Math.min(prev + 1, 4));
   const handleBack = () => setCurrentStep(prev => Math.max(prev - 1, 1));
   
-  const updateData = (field: keyof typeof newContractData, value: any) => {
-      setNewContractData(prev => ({...prev, [field]: value }));
+  const updateData = (
+    fieldOrUpdates: keyof typeof newContractData | Partial<typeof newContractData>,
+    value?: any
+  ) => {
+    setNewContractData((prev) => {
+      if (typeof fieldOrUpdates === 'string') {
+        return { ...prev, [fieldOrUpdates]: value };
+      }
+      return { ...prev, ...fieldOrUpdates };
+    });
   };
 
   const handleToggleMonth = (monthYearKey: string) => {

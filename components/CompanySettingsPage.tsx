@@ -14,6 +14,8 @@ interface CompanySettingsPageProps {
   currentUser: UserProfile;
   setUsers: React.Dispatch<React.SetStateAction<UserProfile[]>>;
   onUpdateRolePermissions: (roleId: string, permissions: PermissionSet) => void;
+  onCreateRole: (name: string, description: string) => void;
+  onDeleteRole: (roleId: string) => void;
   setNotificationSettings: React.Dispatch<React.SetStateAction<NotificationSetting[]>>;
 }
 
@@ -25,8 +27,8 @@ const TabButton: React.FC<{ label: string; icon: React.ReactNode; isActive: bool
         onClick={onClick}
         className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors duration-150 ${
             isActive
-                ? 'bg-primary-100 text-primary-700'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/20 dark:text-primary-200'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700'
         }`}
     >
         {icon}
@@ -35,9 +37,9 @@ const TabButton: React.FC<{ label: string; icon: React.ReactNode; isActive: bool
 );
 
 const PlaceholderTab = ({ title }: { title: string }) => (
-    <div className="bg-white p-6 rounded-lg shadow-sm">
-        <h3 className="text-lg font-bold text-gray-900">{title}</h3>
-        <p className="mt-2 text-sm text-gray-500">This section is under construction. Functionality for managing {title.toLowerCase()} will be available here soon.</p>
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
+        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{title}</h3>
+        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">This section is under construction. Functionality for managing {title.toLowerCase()} will be available here soon.</p>
     </div>
 );
 
@@ -69,7 +71,12 @@ export default function CompanySettingsPage(props: CompanySettingsPageProps) {
             case 'users':
                 return <UserManagementTab users={props.users} roles={props.roles} setUsers={props.setUsers} currentUser={props.currentUser} />;
             case 'roles':
-                return <RolesPermissionsTab roles={props.roles} onUpdateRole={props.onUpdateRolePermissions} />;
+                return <RolesPermissionsTab 
+                            roles={props.roles} 
+                            onUpdateRole={props.onUpdateRolePermissions}
+                            onCreateRole={props.onCreateRole}
+                            onDeleteRole={props.onDeleteRole}
+                        />;
             case 'notifications':
                 return <NotificationsTab settings={props.notificationSettings} setSettings={props.setNotificationSettings} />;
             case 'counterparties':
@@ -84,9 +91,9 @@ export default function CompanySettingsPage(props: CompanySettingsPageProps) {
     return (
         <div className="space-y-6">
             <div>
-                <p className="text-sm text-gray-500">Dashboard &gt; Settings &gt; Company Settings</p>
-                <h1 className="text-2xl font-bold text-gray-900 mt-1">Company Settings</h1>
-                <p className="mt-1 text-sm text-gray-500">Manage your organization’s users, roles, permissions, and configuration settings.</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Dashboard &gt; Settings &gt; Company Settings</p>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">Company Settings</h1>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage your organization’s users, roles, permissions, and configuration settings.</p>
             </div>
 
             {inviteCode && (
@@ -106,7 +113,7 @@ export default function CompanySettingsPage(props: CompanySettingsPageProps) {
                 </div>
             )}
 
-            <div className="flex space-x-2 border-b border-gray-200">
+            <div className="flex space-x-2 border-b border-gray-200 dark:border-gray-700">
                 {tabs.map(tab => (
                     <TabButton
                         key={tab.id}
