@@ -238,7 +238,8 @@ export const MOCK_CONTRACTS: Contract[] = [
     signatureEnvelopeId: undefined,
     signatureStatus: undefined,
     executedFileUrl: undefined,
-    currentVersionId: undefined,
+    draftVersionId: undefined,
+    executedVersionId: undefined,
 }));
 
 const DUMMY_NDA_CONTENT = `

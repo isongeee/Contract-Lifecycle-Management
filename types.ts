@@ -118,7 +118,7 @@ export interface ContractVersion {
   value: number;
   effectiveDate: string;
   endDate: string;
-  renewalDate: string;
+  renewalDate?: string;
   frequency: ContractFrequency;
   seasonalMonths?: string[];
   property?: Property;
@@ -150,7 +150,7 @@ export interface Contract {
   owner: UserProfile;
   effectiveDate: string;
   endDate: string;
-  renewalDate: string;
+  renewalDate?: string;
   value: number;
   frequency: ContractFrequency;
   seasonalMonths?: string[];
@@ -176,8 +176,9 @@ export interface Contract {
   signatureEnvelopeId?: string;
   signatureStatus?: string;
   executedFileUrl?: string;
-  // New current version FK
-  currentVersionId?: string;
+  // New version FKs
+  draftVersionId?: string;
+  executedVersionId?: string;
 }
 
 export interface ContractTemplate {

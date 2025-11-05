@@ -92,7 +92,7 @@ export default function App() {
   }, []);
 
 
-  const fetchData = useCallback(async (user: UserProfile) => {
+  const fetchData = useCallback(async (user: UserProfile): Promise<Contract[]> => {
     if (!user || !user.companyId) {
         setContracts([]);
         setCounterparties([]);
@@ -100,7 +100,7 @@ export default function App() {
         setUsers([]);
         setRoles([]);
         setIsLoading(false);
-        return;
+        return [];
     }
     setIsLoading(true);
     const companyId = user.companyId;
@@ -213,7 +213,8 @@ export default function App() {
         signatureEnvelopeId: c.signature_envelope_id,
         signatureStatus: c.signature_status,
         executedFileUrl: c.executed_file_url,
-        currentVersionId: c.current_version_id,
+        draftVersionId: c.draft_version_id,
+        executedVersionId: c.executed_version_id,
         versions: [], approvalSteps: [], propertyAllocations: [],
       });
     }
@@ -264,8 +265,10 @@ export default function App() {
         contract.versions.sort((a: ContractVersion, b: ContractVersion) => a.versionNumber - b.versionNumber);
     }
     
-    setContracts(Array.from(contractsById.values()));
+    const allContracts = Array.from(contractsById.values());
+    setContracts(allContracts);
     setIsLoading(false);
+    return allContracts;
   }, []);
 
   useEffect(() => {
@@ -560,6 +563,7 @@ export default function App() {
       }).select().single();
       
       if (versionError) { console.error("Error creating new version:", versionError); return; }
+      if (!insertedVersion) { console.error("Failed to retrieve new version after creation."); return; }
 
       const { error: contractUpdateError } = await supabase.from('contracts').update({
           value: newVersionData.value,
@@ -572,6 +576,7 @@ export default function App() {
           status: ContractStatus.IN_REVIEW, // A new version always moves the contract back to review
           approval_completed_at: null, // Reset approval timestamp
           approval_started_at: null,
+          draft_version_id: insertedVersion.id,
       }).eq('id', contractId);
 
       if (contractUpdateError) { console.error("Error updating contract:", contractUpdateError); return; }
@@ -580,7 +585,15 @@ export default function App() {
       const { error: approvalError } = await supabase.from('approval_steps').delete().eq('contract_id', contractId);
       if (approvalError) { console.error("Error clearing old approvals:", approvalError); }
 
-      await fetchData(currentUser);
+      const updatedContracts = await fetchData(currentUser);
+      // After refetching all data, find the updated contract and set it as selected
+      // to ensure the detail view re-renders with the latest information.
+      if (selectedContract && selectedContract.id === contractId) {
+        const newSelectedContract = updatedContracts.find(c => c.id === contractId);
+        if (newSelectedContract) {
+            setSelectedContract(newSelectedContract);
+        }
+      }
   };
 
   const handleUpdateRolePermissions = async (roleId: string, newPermissions: PermissionSet) => {
