@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import type { UserProfile, Role, NotificationSetting } from '../types';
+import type { UserProfile, Role, NotificationSetting, PermissionSet } from '../types';
 import { UsersIcon, ShieldCheckIcon, BellIcon, BuildingOfficeIcon, HomeIcon, CopyIcon, CheckCircleIcon } from './icons';
 import UserManagementTab from './UserManagementTab';
 import RolesPermissionsTab from './RolesPermissionsTab';
@@ -13,7 +13,7 @@ interface CompanySettingsPageProps {
   company: { id: string; name: string; slug: string; } | null;
   currentUser: UserProfile;
   setUsers: React.Dispatch<React.SetStateAction<UserProfile[]>>;
-  setRoles: React.Dispatch<React.SetStateAction<Role[]>>;
+  onUpdateRolePermissions: (roleId: string, permissions: PermissionSet) => void;
   setNotificationSettings: React.Dispatch<React.SetStateAction<NotificationSetting[]>>;
 }
 
@@ -69,7 +69,7 @@ export default function CompanySettingsPage(props: CompanySettingsPageProps) {
             case 'users':
                 return <UserManagementTab users={props.users} roles={props.roles} setUsers={props.setUsers} currentUser={props.currentUser} />;
             case 'roles':
-                return <RolesPermissionsTab roles={props.roles} setRoles={props.setRoles} />;
+                return <RolesPermissionsTab roles={props.roles} onUpdateRole={props.onUpdateRolePermissions} />;
             case 'notifications':
                 return <NotificationsTab settings={props.notificationSettings} setSettings={props.setNotificationSettings} />;
             case 'counterparties':

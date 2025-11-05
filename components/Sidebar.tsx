@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { LayoutDashboardIcon, FileTextIcon, UsersIcon, BookTextIcon, CheckCircleIcon, SettingsIcon, HomeIcon, BuildingOfficeIcon, UserIcon } from './icons';
+import type { UserProfile } from '../types';
 
 // FIX: Changed component to React.FC to correctly handle props including the 'key' prop.
 const NavItem: React.FC<{ icon: React.ReactNode; label: string; active?: boolean; onClick: () => void; }> = ({ icon, label, active = false, onClick }) => (
@@ -26,7 +27,7 @@ const navItems = [
     { id: 'approvals', label: 'Approvals', icon: <CheckCircleIcon className="h-5 w-5" /> },
 ];
 
-export default function Sidebar({ activeView, onNavigate }: { activeView: string; onNavigate: (view: string) => void; }) {
+export default function Sidebar({ activeView, onNavigate, currentUser }: { activeView: string; onNavigate: (view: string) => void; currentUser: UserProfile | null }) {
   return (
     <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 hidden md:flex flex-col">
       <div className="h-16 flex items-center px-6 border-b border-gray-200 dark:border-gray-700">
@@ -52,12 +53,14 @@ export default function Sidebar({ activeView, onNavigate }: { activeView: string
             onClick={() => onNavigate('profile')}
             active={activeView === 'profile'}
         />
+        {currentUser?.role === 'Admin' && (
          <NavItem 
             icon={<BuildingOfficeIcon className="h-5 w-5" />} 
             label="Company Settings" 
             onClick={() => onNavigate('company-settings')}
             active={activeView === 'company-settings'}
         />
+        )}
       </div>
     </aside>
   );

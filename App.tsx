@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType } from './types';
+import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType, PermissionSet } from './types';
 import { ContractStatus, RiskLevel, ApprovalStatus } from './types';
 import { MOCK_TEMPLATES, MOCK_ROLES, MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS } from './constants';
 import Sidebar from './components/Sidebar';
@@ -542,6 +542,24 @@ export default function App() {
       await fetchData(currentUser); // Easiest way to sync state
   };
 
+  const handleUpdateRolePermissions = async (roleId: string, newPermissions: PermissionSet) => {
+    const { error } = await supabase
+        .from('roles')
+        .update({ permissions: newPermissions })
+        .eq('id', roleId);
+
+    if (error) {
+        console.error("Error updating role permissions:", error);
+        alert("Failed to update role permissions.");
+        return;
+    }
+
+    // Update local state to reflect the change
+    setRoles(prevRoles => prevRoles.map(role =>
+        role.id === roleId ? { ...role, permissions: newPermissions } : role
+    ));
+  };
+
 
   const renderContent = () => {
     if (isLoading || !currentUser) {
@@ -631,7 +649,7 @@ export default function App() {
                     company={company}
                     currentUser={currentUser}
                     setUsers={setUsers}
-                    setRoles={setRoles}
+                    onUpdateRolePermissions={handleUpdateRolePermissions}
                     setNotificationSettings={setNotificationSettings}
                 />;
       default:
@@ -661,7 +679,7 @@ export default function App() {
 
   return (
     <div className="bg-gray-50 dark:bg-gray-900 min-h-screen font-sans text-gray-900 dark:text-gray-100 flex">
-      <Sidebar activeView={activeView} onNavigate={handleNavigate} />
+      <Sidebar activeView={activeView} onNavigate={handleNavigate} currentUser={currentUser} />
       <div className="flex-1 flex flex-col">
         <Header onLogout={handleLogout} onNavigate={handleNavigate} currentUser={currentUser} />
         <main className="flex-1 p-6 lg:p-8 overflow-y-auto">

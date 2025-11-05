@@ -259,6 +259,13 @@ type MonthlyAllocation = {
     manualEdits: { [month: string]: boolean };
 };
 
+type MultiPropertyAllocation = {
+    id: number;
+    propertyId: string;
+    allocatedValue: number;
+    manualEdits: boolean;
+};
+
 const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: any) => {
     const isSeasonal = data.frequency === ContractFrequency.SEASONAL && data.seasonalMonths?.length > 0;
     const [allocationType, setAllocationType] = useState<AllocationType>(
@@ -268,7 +275,12 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
     
     // Non-seasonal state
     const [singlePropertyId, setSinglePropertyId] = useState(data.property?.id || (properties.length > 0 ? properties[0].id : ''));
-    const [multiAllocations, setMultiAllocations] = useState(() => (data.propertyAllocations && !isSeasonal ? data.propertyAllocations : [{ id: Date.now(), propertyId: properties[0]?.id || '', allocatedValue: data.value || 0 }]));
+    const [multiAllocations, setMultiAllocations] = useState<MultiPropertyAllocation[]>(() => 
+        (data.propertyAllocations && !isSeasonal && data.propertyAllocations.length > 0
+            ? data.propertyAllocations.map((a: any, i: number) => ({ ...a, id: Date.now() + i, manualEdits: false }))
+            : [{ id: Date.now(), propertyId: properties[0]?.id || '', allocatedValue: data.value || 0, manualEdits: false }]
+        )
+    );
 
     // Seasonal state
     const [seasonalAllocations, setSeasonalAllocations] = useState<MonthlyAllocation[]>([]);
@@ -304,7 +316,7 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
             Object.keys(initialManualEdits).forEach(k => initialManualEdits[k] = false);
             setSeasonalAllocations(prev => [...prev, { id: Date.now(), propertyId: properties[0]?.id || '', monthlyValues: initialMonthlyValues, manualEdits: initialManualEdits }]);
         } else {
-             setMultiAllocations((prev: any) => [...prev, { id: Date.now(), propertyId: properties[0]?.id || '', allocatedValue: 0 }]);
+             setMultiAllocations((prev) => [...prev, { id: Date.now(), propertyId: properties[0]?.id || '', allocatedValue: 0, manualEdits: false }]);
         }
     };
     
@@ -312,7 +324,7 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
         if (isSeasonal) {
             setSeasonalAllocations(prev => prev.filter(row => row.id !== id));
         } else {
-             setMultiAllocations((prev: any) => prev.filter((row: any) => row.id !== id));
+             setMultiAllocations((prev) => prev.filter((row) => row.id !== id));
         }
     };
 
@@ -333,9 +345,12 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                 return row;
             }));
         } else {
-            setMultiAllocations((prev: any) => prev.map((row: any) => {
+            setMultiAllocations((prev) => prev.map((row) => {
                 if (row.id === id) {
-                    return { ...row, [field]: field === 'allocatedValue' ? Number(value) : value };
+                    if (field === 'allocatedValue') {
+                        return { ...row, allocatedValue: Number(value), manualEdits: true };
+                    }
+                    return { ...row, [field]: value };
                 }
                 return row;
             }));
@@ -343,33 +358,54 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
     };
     
     const handleCalculateAllocation = () => {
-        if (!isSeasonal) return;
+        if (isSeasonal) {
+            let totalManualAllocation = 0;
+            let unallocatedCellCount = 0;
 
-        let totalManualAllocation = 0;
-        let unallocatedCellCount = 0;
+            seasonalAllocations.forEach(row => {
+                data.seasonalMonths.forEach((month: string) => {
+                    if (row.manualEdits[month]) {
+                        totalManualAllocation += row.monthlyValues[month] || 0;
+                    } else {
+                        unallocatedCellCount++;
+                    }
+                });
+            });
+            
+            const remainingValue = (data.value || 0) - totalManualAllocation;
+            const valuePerCell = unallocatedCellCount > 0 ? remainingValue / unallocatedCellCount : 0;
 
-        seasonalAllocations.forEach(row => {
-            data.seasonalMonths.forEach((month: string) => {
-                if (row.manualEdits[month]) {
-                    totalManualAllocation += row.monthlyValues[month] || 0;
+            setSeasonalAllocations(prev => prev.map(row => {
+                const newMonthlyValues = { ...row.monthlyValues };
+                data.seasonalMonths.forEach((month: string) => {
+                    if (!row.manualEdits[month]) {
+                        newMonthlyValues[month] = Math.max(0, valuePerCell); // Ensure non-negative
+                    }
+                });
+                return { ...row, monthlyValues: newMonthlyValues };
+            }));
+        } else if (allocationType === 'multi') {
+            let totalManualAllocation = 0;
+            let unallocatedRowCount = 0;
+
+            multiAllocations.forEach((row) => {
+                if (row.manualEdits) {
+                    totalManualAllocation += Number(row.allocatedValue) || 0;
                 } else {
-                    unallocatedCellCount++;
+                    unallocatedRowCount++;
                 }
             });
-        });
-        
-        const remainingValue = (data.value || 0) - totalManualAllocation;
-        const valuePerCell = unallocatedCellCount > 0 ? remainingValue / unallocatedCellCount : 0;
+            
+            const remainingValue = (data.value || 0) - totalManualAllocation;
+            const valuePerRow = unallocatedRowCount > 0 ? remainingValue / unallocatedRowCount : 0;
 
-        setSeasonalAllocations(prev => prev.map(row => {
-            const newMonthlyValues = { ...row.monthlyValues };
-            data.seasonalMonths.forEach((month: string) => {
-                if (!row.manualEdits[month]) {
-                    newMonthlyValues[month] = Math.max(0, valuePerCell); // Ensure non-negative
+            setMultiAllocations((prev) => prev.map((row) => {
+                if (!row.manualEdits) {
+                    return { ...row, allocatedValue: Math.max(0, valuePerRow) };
                 }
-            });
-            return { ...row, monthlyValues: newMonthlyValues };
-        }));
+                return row;
+            }));
+        }
     };
 
     const handleProceed = () => {
@@ -387,7 +423,7 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
             if (isSeasonal) {
                 setData('propertyAllocations', seasonalAllocations.map(({ id, ...rest }) => rest));
             } else {
-                 setData('propertyAllocations', multiAllocations.map(({ id, ...rest }: any) => rest));
+                 setData('propertyAllocations', multiAllocations.map(({ id, manualEdits, ...rest }: any) => rest));
             }
         } else { // Portfolio
             setData('property', null);
@@ -463,7 +499,18 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                                 <div className="col-span-1">{multiAllocations.length > 1 && <button type="button" onClick={() => handleDeleteRow(alloc.id)} className="text-gray-400 hover:text-red-600"><Trash2Icon className="w-5 h-5"/></button>}</div>
                             </div>
                         ))}
-                        <div className="flex justify-between items-center pt-2"><button type="button" onClick={handleAddRow} className="flex items-center text-sm font-semibold text-primary hover:text-primary-600"><PlusIcon className="w-4 h-4 mr-1"/> Add Property</button><div className="text-sm font-medium"><span className={remainingValue !== 0 ? 'text-red-600' : 'text-green-600'}>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(remainingValue)}</span><span className="text-gray-600"> unallocated</span></div></div>
+                        <div className="flex justify-between items-center pt-2">
+                            <button type="button" onClick={handleAddRow} className="flex items-center text-sm font-semibold text-primary hover:text-primary-600"><PlusIcon className="w-4 h-4 mr-1"/> Add Property</button>
+                            <div className="flex items-center space-x-4">
+                                <button onClick={handleCalculateAllocation} type="button" className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
+                                    Calculate Allocation
+                                </button>
+                                <div className="text-sm font-medium">
+                                    <span className={remainingValue.toFixed(2) !== '0.00' ? 'text-red-600' : 'text-green-600'}>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(remainingValue)}</span>
+                                    <span className="text-gray-600"> unallocated</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
                 

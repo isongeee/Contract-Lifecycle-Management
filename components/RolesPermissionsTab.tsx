@@ -1,11 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { Role, PermissionSet } from '../types';
 import { PlusIcon } from './icons';
 
 interface RolesPermissionsTabProps {
     roles: Role[];
-    setRoles: React.Dispatch<React.SetStateAction<Role[]>>;
+    onUpdateRole: (roleId: string, permissions: PermissionSet) => void;
 }
 
 // FIX: Changed component to React.FC to correctly handle props including the 'key' prop.
@@ -29,23 +29,17 @@ const ModulePermissions: React.FC<{ title: string; permissions: any; onPermissio
 );
 
 
-export default function RolesPermissionsTab({ roles, setRoles }: RolesPermissionsTabProps) {
-    const [selectedRole, setSelectedRole] = useState<Role | null>(roles[0] || null);
+export default function RolesPermissionsTab({ roles, onUpdateRole }: RolesPermissionsTabProps) {
+    const [selectedRoleId, setSelectedRoleId] = useState<string | null>(roles[0]?.id || null);
+    const selectedRole = useMemo(() => roles.find(role => role.id === selectedRoleId), [roles, selectedRoleId]);
     
     const handlePermissionChange = (module: keyof PermissionSet, key: string, value: boolean) => {
         if (!selectedRole) return;
         
-        const newRoles = roles.map(role => {
-            if (role.id === selectedRole.id) {
-                const newPermissions = { ...role.permissions };
-                (newPermissions[module] as any)[key] = value;
-                return { ...role, permissions: newPermissions };
-            }
-            return role;
-        });
+        const newPermissions = JSON.parse(JSON.stringify(selectedRole.permissions));
+        (newPermissions[module] as any)[key] = value;
         
-        setRoles(newRoles);
-        setSelectedRole(prev => prev ? { ...prev, permissions: (newRoles.find(r => r.id === prev.id) as Role).permissions } : null);
+        onUpdateRole(selectedRole.id, newPermissions);
     };
 
     return (
@@ -65,7 +59,7 @@ export default function RolesPermissionsTab({ roles, setRoles }: RolesPermission
                     <ul className="divide-y divide-gray-200">
                         {roles.map(role => (
                             <li key={role.id}>
-                                <button onClick={() => setSelectedRole(role)} className={`w-full text-left p-4 ${selectedRole?.id === role.id ? 'bg-primary-50' : 'hover:bg-gray-50'}`}>
+                                <button onClick={() => setSelectedRoleId(role.id)} className={`w-full text-left p-4 ${selectedRole?.id === role.id ? 'bg-primary-50' : 'hover:bg-gray-50'}`}>
                                     <p className={`font-semibold ${selectedRole?.id === role.id ? 'text-primary-700' : 'text-gray-800'}`}>{role.name}</p>
                                     <p className="text-sm text-gray-500">{role.userCount} users</p>
                                 </button>
