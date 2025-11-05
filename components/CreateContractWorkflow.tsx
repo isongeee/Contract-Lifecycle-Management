@@ -404,8 +404,8 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
     if (isSeasonal) {
         // FIX: Explicitly break down reduce to avoid potential type inference issues with nested reduces.
         totalAllocated = seasonalAllocations.reduce((sum: number, alloc) => {
-            // FIX: The `val` was incorrectly typed as `unknown`, causing a type error. Removed the explicit type to allow TypeScript to correctly infer it as `number` from the `monthlyValues` object.
-            const monthlyTotal = Object.values(alloc.monthlyValues).reduce((monthSum: number, val) => monthSum + (Number(val) || 0), 0);
+            // FIX: The `val` was incorrectly typed as `unknown`, causing a type error. Cast Object.values to number[] to ensure correct typing.
+            const monthlyTotal = (Object.values(alloc.monthlyValues) as number[]).reduce((monthSum, val) => monthSum + (val || 0), 0);
             return sum + monthlyTotal;
         }, 0);
     } else {
