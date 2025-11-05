@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
 import type { UserProfile, Role, NotificationSetting } from '../types';
-import { UsersIcon, ShieldCheckIcon, BellIcon, BuildingOfficeIcon, HomeIcon } from './icons';
+import { UsersIcon, ShieldCheckIcon, BellIcon, BuildingOfficeIcon, HomeIcon, CopyIcon, CheckCircleIcon } from './icons';
 import UserManagementTab from './UserManagementTab';
 import RolesPermissionsTab from './RolesPermissionsTab';
 import NotificationsTab from './NotificationsTab';
@@ -10,6 +9,7 @@ interface CompanySettingsPageProps {
   users: UserProfile[];
   roles: Role[];
   notificationSettings: NotificationSetting[];
+  company: { id: string; name: string; slug: string; } | null;
   setUsers: React.Dispatch<React.SetStateAction<UserProfile[]>>;
   setRoles: React.Dispatch<React.SetStateAction<Role[]>>;
   setNotificationSettings: React.Dispatch<React.SetStateAction<NotificationSetting[]>>;
@@ -42,6 +42,17 @@ const PlaceholderTab = ({ title }: { title: string }) => (
 
 export default function CompanySettingsPage(props: CompanySettingsPageProps) {
     const [activeTab, setActiveTab] = useState<ActiveTab>('users');
+    const [copied, setCopied] = useState(false);
+
+    const inviteCode = props.company?.slug;
+
+    const handleCopy = () => {
+        if (inviteCode) {
+            navigator.clipboard.writeText(inviteCode);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
 
     const tabs = [
         { id: 'users', label: 'User Management', icon: <UsersIcon className="w-5 h-5" /> },
@@ -75,6 +86,23 @@ export default function CompanySettingsPage(props: CompanySettingsPageProps) {
                 <h1 className="text-2xl font-bold text-gray-900 mt-1">Company Settings</h1>
                 <p className="mt-1 text-sm text-gray-500">Manage your organization’s users, roles, permissions, and configuration settings.</p>
             </div>
+
+            {inviteCode && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Organization Invite Code</h3>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Share this code with new users to allow them to join <span className="font-semibold">{props.company?.name}</span>.</p>
+                    <div className="mt-4 flex items-center space-x-3 bg-gray-100 dark:bg-gray-700 p-3 rounded-md">
+                        <span className="flex-1 text-lg font-mono text-gray-700 dark:text-gray-200">{inviteCode}</span>
+                        <button
+                            onClick={handleCopy}
+                            className="flex items-center px-3 py-1.5 text-sm font-semibold text-primary-800 dark:text-primary-200 bg-primary-100 dark:bg-primary-900/40 rounded-md hover:bg-primary-200 dark:hover:bg-primary-900/60"
+                        >
+                            {copied ? <CheckCircleIcon className="w-4 h-4 mr-2" /> : <CopyIcon className="w-4 h-4 mr-2" />}
+                            {copied ? 'Copied!' : 'Copy'}
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <div className="flex space-x-2 border-b border-gray-200">
                 {tabs.map(tab => (

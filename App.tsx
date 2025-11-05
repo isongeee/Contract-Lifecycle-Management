@@ -53,6 +53,7 @@ export default function App() {
   // Auth State
   const [session, setSession] = useState<Session | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [company, setCompany] = useState<{ id: string; name: string; slug: string; } | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authView, setAuthView] = useState<'login' | 'org-signup' | 'user-signup'>('login');
 
@@ -65,7 +66,12 @@ export default function App() {
             setCurrentUser(profile);
         } else {
             setCurrentUser(null);
+            setCompany(null);
             setContracts([]);
+            setCounterparties([]);
+            setProperties([]);
+            setUsers([]);
+            setRoles([]);
         }
     });
 
@@ -95,6 +101,10 @@ export default function App() {
     }
     setIsLoading(true);
     const companyId = user.companyId;
+
+    // Fetch Company Info
+    const { data: companyData } = await supabase.from('companies').select('id, name, slug').eq('id', companyId).single();
+    setCompany(companyData);
 
     // Fetch lookups
     const { data: rolesData } = await supabase.from('roles').select('*').eq('company_id', companyId);
@@ -615,6 +625,7 @@ export default function App() {
                     users={users}
                     roles={roles}
                     notificationSettings={notificationSettings}
+                    company={company}
                     setUsers={setUsers}
                     setRoles={setRoles}
                     setNotificationSettings={setNotificationSettings}

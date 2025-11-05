@@ -82,10 +82,10 @@ export default function Header({ onLogout, onNavigate, currentUser }: HeaderProp
                     Help / Support
                 </a>
                 <div className="border-t border-gray-100 dark:border-gray-700 my-1"></div>
-                <a href="#" onClick={handleLogoutClick} className="flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                <button onClick={handleLogoutClick} className="w-full text-left flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
                     <LogOutIcon className="w-4 h-4 mr-3" />
                     Logout
-                </a>
+                </button>
             </div>
           )}
         </div>
