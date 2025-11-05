@@ -1,21 +1,26 @@
+
 import React, { useState, useMemo } from 'react';
 import type { UserProfile, Role } from '../types';
 import { SearchIcon, PlusIcon, EditIcon } from './icons';
 import Pagination from './Pagination';
+import EditUserModal from './EditUserModal';
+import { supabase } from '../lib/supabaseClient';
 
 interface UserManagementTabProps {
     users: UserProfile[];
     roles: Role[];
     setUsers: React.Dispatch<React.SetStateAction<UserProfile[]>>;
+    currentUser: UserProfile;
 }
 
 const ITEMS_PER_PAGE = 5;
 
-export default function UserManagementTab({ users, roles, setUsers }: UserManagementTabProps) {
+export default function UserManagementTab({ users, roles, setUsers, currentUser }: UserManagementTabProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [roleFilter, setRoleFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
+    const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
     
     const filteredUsers = useMemo(() => {
         return users.filter(user => 
@@ -32,6 +37,29 @@ export default function UserManagementTab({ users, roles, setUsers }: UserManage
         if (page > 0 && page <= totalPages) {
             setCurrentPage(page);
         }
+    };
+
+    const handleSaveRole = async (userId: string, newRoleId: string) => {
+        const { error } = await supabase
+            .from('users')
+            .update({ role_id: newRoleId })
+            .eq('id', userId);
+
+        if (error) {
+            console.error("Error updating user role:", error);
+            alert("Failed to update user role.");
+            return;
+        }
+
+        // Update local state to provide instant feedback
+        setUsers(prevUsers => prevUsers.map(user => {
+            if (user.id === userId) {
+                const newRole = roles.find(r => r.id === newRoleId);
+                return { ...user, roleId: newRoleId, role: newRole?.name || 'Unknown' };
+            }
+            return user;
+        }));
+        setEditingUser(null); // Close modal
     };
     
     return (
@@ -102,7 +130,12 @@ export default function UserManagementTab({ users, roles, setUsers }: UserManage
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{user.lastLogin}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    <button className="text-primary-600 hover:text-primary-900">
+                                    <button
+                                        className="text-primary-600 hover:text-primary-900 disabled:text-gray-300 disabled:cursor-not-allowed"
+                                        disabled={currentUser.role !== 'Admin' || user.role === 'Admin'}
+                                        onClick={() => setEditingUser(user)}
+                                        title={currentUser.role !== 'Admin' ? "You don't have permission to edit users." : user.role === 'Admin' ? "Admin roles cannot be changed." : "Edit User"}
+                                    >
                                         <EditIcon className="w-4 h-4" />
                                     </button>
                                 </td>
@@ -118,6 +151,14 @@ export default function UserManagementTab({ users, roles, setUsers }: UserManage
                 totalItems={filteredUsers.length}
                 itemsPerPage={ITEMS_PER_PAGE}
             />
+            {editingUser && (
+                <EditUserModal
+                    user={editingUser}
+                    roles={roles}
+                    onClose={() => setEditingUser(null)}
+                    onSave={handleSaveRole}
+                />
+            )}
         </div>
     );
 }

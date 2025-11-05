@@ -629,6 +629,7 @@ export default function App() {
                     roles={roles}
                     notificationSettings={notificationSettings}
                     company={company}
+                    currentUser={currentUser}
                     setUsers={setUsers}
                     setRoles={setRoles}
                     setNotificationSettings={setNotificationSettings}

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import type { UserProfile, Role, NotificationSetting } from '../types';
 import { UsersIcon, ShieldCheckIcon, BellIcon, BuildingOfficeIcon, HomeIcon, CopyIcon, CheckCircleIcon } from './icons';
@@ -10,6 +11,7 @@ interface CompanySettingsPageProps {
   roles: Role[];
   notificationSettings: NotificationSetting[];
   company: { id: string; name: string; slug: string; } | null;
+  currentUser: UserProfile;
   setUsers: React.Dispatch<React.SetStateAction<UserProfile[]>>;
   setRoles: React.Dispatch<React.SetStateAction<Role[]>>;
   setNotificationSettings: React.Dispatch<React.SetStateAction<NotificationSetting[]>>;
@@ -65,7 +67,7 @@ export default function CompanySettingsPage(props: CompanySettingsPageProps) {
     const renderContent = () => {
         switch (activeTab) {
             case 'users':
-                return <UserManagementTab users={props.users} roles={props.roles} setUsers={props.setUsers} />;
+                return <UserManagementTab users={props.users} roles={props.roles} setUsers={props.setUsers} currentUser={props.currentUser} />;
             case 'roles':
                 return <RolesPermissionsTab roles={props.roles} setRoles={props.setRoles} />;
             case 'notifications':
