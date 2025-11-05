@@ -9,6 +9,7 @@ import { APPROVAL_STATUS_COLORS } from '../constants';
 import { summarizeContractRisk, extractClauses } from '../services/geminiService';
 import CreateVersionModal from './CreateVersionModal';
 import RequestApprovalModal from './RequestApprovalModal';
+import ConfirmStatusChangeModal from './ConfirmStatusChangeModal';
 
 type ContractAction = ContractStatus | 'APPROVE_STEP' | 'REJECT_STEP';
 
@@ -22,24 +23,24 @@ interface ContractDetailProps {
   onCreateNewVersion: (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => void;
 }
 
-const ContractActions = ({ contract, onTransition, onOpenApprovalModal, onStartCreateNewVersion }: { contract: Contract, onTransition: ContractDetailProps['onTransition'], onOpenApprovalModal: () => void, onStartCreateNewVersion: () => void }) => {
+const ContractActions = ({ contract, onRequestTransition, onOpenApprovalModal, onStartCreateNewVersion }: { contract: Contract, onRequestTransition: (action: ContractAction) => void, onOpenApprovalModal: () => void, onStartCreateNewVersion: () => void }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const allApproved = contract.approvalSteps.every(s => s.status === ApprovalStatus.APPROVED);
 
     const mainAction = () => {
         switch (contract.status) {
             case ContractStatus.DRAFT:
-                return <button onClick={() => onTransition(contract.id, ContractStatus.IN_REVIEW)} className="px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600">Submit for Review</button>;
+                return <button onClick={() => onRequestTransition(ContractStatus.IN_REVIEW)} className="px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600">Submit for Review</button>;
             case ContractStatus.IN_REVIEW:
                 return <button onClick={onOpenApprovalModal} className="px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600">Request Approval</button>;
             case ContractStatus.APPROVED:
-                return <button onClick={() => onTransition(contract.id, ContractStatus.SENT_FOR_SIGNATURE)} className="px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600">Send for Signature</button>;
+                return <button onClick={() => onRequestTransition(ContractStatus.SENT_FOR_SIGNATURE)} className="px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600">Send for Signature</button>;
             case ContractStatus.SENT_FOR_SIGNATURE:
-                 return <button onClick={() => onTransition(contract.id, ContractStatus.FULLY_EXECUTED)} className="px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600">Mark as Executed</button>;
+                 return <button onClick={() => onRequestTransition(ContractStatus.FULLY_EXECUTED)} className="px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600">Mark as Executed</button>;
             case ContractStatus.FULLY_EXECUTED:
                 const effectiveDate = new Date(contract.effectiveDate);
                 if (effectiveDate <= new Date()) {
-                    return <button onClick={() => onTransition(contract.id, ContractStatus.ACTIVE)} className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700">Activate Contract</button>;
+                    return <button onClick={() => onRequestTransition(ContractStatus.ACTIVE)} className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700">Activate Contract</button>;
                 }
                 return <span className="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-200 rounded-lg">Awaiting Activation</span>;
             default:
@@ -60,7 +61,7 @@ const ContractActions = ({ contract, onTransition, onOpenApprovalModal, onStartC
                 </button>
                 {isMenuOpen && (
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 border z-10">
-                        <button onClick={() => { onTransition(contract.id, ContractStatus.ARCHIVED); setIsMenuOpen(false); }} className="w-full text-left flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                        <button onClick={() => { onRequestTransition(ContractStatus.ARCHIVED); setIsMenuOpen(false); }} className="w-full text-left flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                             <ArchiveIcon className="w-4 h-4 mr-2" /> Archive
                         </button>
                     </div>
@@ -201,11 +202,16 @@ const formatPropertyAddress = (property: Property) => {
 
 export default function ContractDetail({ contract: initialContract, properties, users, currentUser, onBack, onTransition, onCreateNewVersion }: ContractDetailProps) {
   const [contract, setContract] = useState(initialContract);
-  const [isCreatingVersion, _setIsCreatingVersion] = useState(false);
+  const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const [isRequestingApproval, setIsRequestingApproval] = useState(false);
   const [viewedVersionId, setViewedVersionId] = useState(initialContract.versions[initialContract.versions.length - 1].id);
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [isLoadingClauses, setIsLoadingClauses] = useState(false);
+  const [confirmModalState, setConfirmModalState] = useState<{
+    isOpen: boolean;
+    action: ContractAction | null;
+    payload?: any;
+  }>({ isOpen: false, action: null, payload: undefined });
   
   const latestVersion = contract.versions[contract.versions.length - 1];
   const viewedVersion = contract.versions.find(v => v.id === viewedVersionId) || latestVersion;
@@ -218,6 +224,10 @@ export default function ContractDetail({ contract: initialContract, properties, 
     }
   }, [initialContract]);
 
+  const handleRequestTransition = (action: ContractAction, payload?: any) => {
+    setConfirmModalState({ isOpen: true, action, payload });
+  };
+
   const myPendingApprovalStep = useMemo(() => {
       if (contract.status !== ContractStatus.PENDING_APPROVAL) {
           return null;
@@ -227,15 +237,13 @@ export default function ContractDetail({ contract: initialContract, properties, 
 
   const handleApprove = () => {
       if (myPendingApprovalStep) {
-          onTransition(contract.id, 'APPROVE_STEP', { stepId: myPendingApprovalStep.id });
+          handleRequestTransition('APPROVE_STEP', { stepId: myPendingApprovalStep.id });
       }
   };
 
   const handleReject = () => {
       if (myPendingApprovalStep) {
-           if (window.confirm("Are you sure you want to reject this approval? This will send the contract back to the 'In Review' stage.")) {
-              onTransition(contract.id, 'REJECT_STEP', { stepId: myPendingApprovalStep.id });
-          }
+           handleRequestTransition('REJECT_STEP', { stepId: myPendingApprovalStep.id });
       }
   };
 
@@ -255,7 +263,7 @@ export default function ContractDetail({ contract: initialContract, properties, 
 
   const handleSaveNewVersion = (newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => {
     onCreateNewVersion(contract.id, newVersionData);
-    _setIsCreatingVersion(false);
+    setIsCreatingVersion(false);
   };
 
   const handleSelectVersion = (id: string) => {
@@ -310,9 +318,9 @@ export default function ContractDetail({ contract: initialContract, properties, 
                 </div>
                 <ContractActions 
                     contract={contract} 
-                    onTransition={onTransition} 
+                    onRequestTransition={handleRequestTransition} 
                     onOpenApprovalModal={() => setIsRequestingApproval(true)} 
-                    onStartCreateNewVersion={() => _setIsCreatingVersion(true)}
+                    onStartCreateNewVersion={() => setIsCreatingVersion(true)}
                 />
             </div>
              <dl className="mt-6 grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
@@ -367,7 +375,7 @@ export default function ContractDetail({ contract: initialContract, properties, 
             <CreateVersionModal
                 contract={contract}
                 properties={properties}
-                onClose={() => _setIsCreatingVersion(false)}
+                onClose={() => setIsCreatingVersion(false)}
                 onSave={handleSaveNewVersion}
             />
         )}
@@ -377,6 +385,21 @@ export default function ContractDetail({ contract: initialContract, properties, 
                 users={users}
                 onClose={() => setIsRequestingApproval(false)}
                 onSave={handleRequestApproval}
+            />
+        )}
+        {confirmModalState.isOpen && confirmModalState.action && (
+            <ConfirmStatusChangeModal
+                isOpen={confirmModalState.isOpen}
+                onClose={() => setConfirmModalState({ isOpen: false, action: null, payload: undefined })}
+                onConfirm={() => {
+                    if (confirmModalState.action) {
+                        onTransition(contract.id, confirmModalState.action, confirmModalState.payload);
+                    }
+                    setConfirmModalState({ isOpen: false, action: null, payload: undefined });
+                }}
+                contractTitle={contract.title}
+                currentStatus={contract.status}
+                action={confirmModalState.action}
             />
         )}
     </div>
