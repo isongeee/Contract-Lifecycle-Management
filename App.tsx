@@ -670,6 +670,7 @@ export default function App() {
             contract={selectedContract} 
             users={users}
             properties={properties}
+            currentUser={currentUser}
             onBack={handleBackToList} 
             onTransition={handleContractTransition}
             onCreateNewVersion={handleCreateNewVersion}

@@ -306,6 +306,61 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
     }, [isSeasonal, data.seasonalMonths, allocationType, singlePropertyId, multiAllocations, properties]);
 
 
+    const handleProceed = () => {
+        const updates: Partial<Contract> & { propertyAllocations?: ContractPropertyAllocation[] } = {
+            allocation: allocationType,
+        };
+
+        if (allocationType === 'single') {
+            updates.property = properties.find((p: Property) => p.id === singlePropertyId);
+            if (isSeasonal) {
+                // FIX: Corrected object structure to match ContractPropertyAllocation type.
+                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => ({
+                    ...rest,
+                    propertyId: singlePropertyId,
+                    id: `temp-${id}`,
+// FIX: Cast the result of Object.values to number[] to resolve the TypeScript error with the reduce function.
+                    allocatedValue: (Object.values(rest.monthlyValues) as number[]).reduce((sum, v) => sum + (v || 0), 0)
+                }));
+            } else {
+                updates.propertyAllocations = [];
+            }
+        } else if (allocationType === 'multi') {
+            updates.property = properties.find((p: Property) => p.id === (isSeasonal ? seasonalAllocations[0]?.propertyId : multiAllocations[0]?.propertyId));
+            if (isSeasonal) {
+                 // FIX: Corrected object structure to match ContractPropertyAllocation type.
+                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => ({
+                    ...rest,
+                    id: `temp-${id}`,
+// FIX: Cast the result of Object.values to number[] to resolve the TypeScript error with the reduce function.
+                    allocatedValue: (Object.values(rest.monthlyValues) as number[]).reduce((sum, v) => sum + (v || 0), 0)
+                }));
+            } else {
+                // FIX: Corrected object structure to match ContractPropertyAllocation type.
+                 updates.propertyAllocations = multiAllocations.map(({ id, manualEdits, ...rest }: MultiPropertyAllocation) => ({
+                    ...rest,
+                    id: `temp-${id}`
+                 }));
+            }
+        } else { // portfolio
+            updates.property = undefined;
+            if (isSeasonal) {
+                // FIX: Corrected object structure to match ContractPropertyAllocation type.
+                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => ({
+                    ...rest,
+                    id: `temp-${id}`,
+// FIX: Cast the result of Object.values to number[] to resolve the TypeScript error with the reduce function.
+                    allocatedValue: (Object.values(rest.monthlyValues) as number[]).reduce((sum, v) => sum + (v || 0), 0)
+                }));
+            } else {
+                updates.propertyAllocations = [];
+            }
+        }
+
+        setData(updates);
+        onNext();
+    };
+
     const handleAddRow = () => {
         if(isSeasonal) {
             const initialMonthlyValues = data.seasonalMonths.reduce((acc: any, month: string) => ({ ...acc, [month]: 0 }), {});
@@ -402,58 +457,6 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                 return row;
             }));
         }
-    };
-
-    const handleProceed = () => {
-        const updates: Partial<Contract> & { propertyAllocations?: ContractPropertyAllocation[] } = {
-            allocation: allocationType,
-        };
-
-        if (allocationType === 'single') {
-            updates.property = properties.find((p: Property) => p.id === singlePropertyId);
-            if (isSeasonal) {
-                // FIX: Corrected object structure to match ContractPropertyAllocation type.
-                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => ({
-                    ...rest,
-                    propertyId: singlePropertyId,
-                    id: `temp-${id}`,
-                    allocatedValue: Object.values(rest.monthlyValues).reduce((sum, v) => sum + (v || 0), 0)
-                }));
-            } else {
-                updates.propertyAllocations = [];
-            }
-        } else if (allocationType === 'multi') {
-            updates.property = properties.find((p: Property) => p.id === (isSeasonal ? seasonalAllocations[0]?.propertyId : multiAllocations[0]?.propertyId));
-            if (isSeasonal) {
-                 // FIX: Corrected object structure to match ContractPropertyAllocation type.
-                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => ({
-                    ...rest,
-                    id: `temp-${id}`,
-                    allocatedValue: Object.values(rest.monthlyValues).reduce((sum, v) => sum + (v || 0), 0)
-                }));
-            } else {
-                // FIX: Corrected object structure to match ContractPropertyAllocation type.
-                 updates.propertyAllocations = multiAllocations.map(({ id, manualEdits, ...rest }: MultiPropertyAllocation) => ({
-                    ...rest,
-                    id: `temp-${id}`
-                 }));
-            }
-        } else { // portfolio
-            updates.property = undefined;
-            if (isSeasonal) {
-                // FIX: Corrected object structure to match ContractPropertyAllocation type.
-                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => ({
-                    ...rest,
-                    id: `temp-${id}`,
-                    allocatedValue: Object.values(rest.monthlyValues).reduce((sum, v) => sum + (v || 0), 0)
-                }));
-            } else {
-                updates.propertyAllocations = [];
-            }
-        }
-
-        setData(updates);
-        onNext();
     };
 
     let totalAllocated = 0;

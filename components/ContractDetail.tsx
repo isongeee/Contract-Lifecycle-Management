@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useEffect } from 'react';
+
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type { Contract, Clause, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile } from '../types';
 import { ContractStatus, ApprovalStatus } from '../types';
 import StatusTag from './StatusTag';
 // FIX: Imported the missing ArchiveIcon component.
-import { ArrowLeftIcon, SparklesIcon, LoaderIcon, CopyIcon, FileTextIcon, ChevronDownIcon, ArchiveIcon } from './icons';
+import { ArrowLeftIcon, SparklesIcon, LoaderIcon, CopyIcon, FileTextIcon, ChevronDownIcon, ArchiveIcon, CheckCircleIcon, XCircleIcon } from './icons';
 import { APPROVAL_STATUS_COLORS } from '../constants';
 import { summarizeContractRisk, extractClauses } from '../services/geminiService';
 import CreateVersionModal from './CreateVersionModal';
@@ -15,6 +16,7 @@ interface ContractDetailProps {
   contract: Contract;
   properties: Property[];
   users: UserProfile[];
+  currentUser: UserProfile;
   onBack: () => void;
   onTransition: (contractId: string, action: ContractAction, payload?: any) => void;
   onCreateNewVersion: (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => void;
@@ -197,7 +199,7 @@ const formatPropertyAddress = (property: Property) => {
     ].filter(Boolean).join(', ');
 }
 
-export default function ContractDetail({ contract: initialContract, properties, users, onBack, onTransition, onCreateNewVersion }: ContractDetailProps) {
+export default function ContractDetail({ contract: initialContract, properties, users, currentUser, onBack, onTransition, onCreateNewVersion }: ContractDetailProps) {
   const [contract, setContract] = useState(initialContract);
   const [isCreatingVersion, _setIsCreatingVersion] = useState(false);
   const [isRequestingApproval, setIsRequestingApproval] = useState(false);
@@ -215,6 +217,27 @@ export default function ContractDetail({ contract: initialContract, properties, 
         setViewedVersionId(newLatestVersion.id);
     }
   }, [initialContract]);
+
+  const myPendingApprovalStep = useMemo(() => {
+      if (contract.status !== ContractStatus.PENDING_APPROVAL) {
+          return null;
+      }
+      return contract.approvalSteps.find(step => step.approver.id === currentUser.id && step.status === ApprovalStatus.PENDING);
+  }, [contract, currentUser]);
+
+  const handleApprove = () => {
+      if (myPendingApprovalStep) {
+          onTransition(contract.id, 'APPROVE_STEP', { stepId: myPendingApprovalStep.id });
+      }
+  };
+
+  const handleReject = () => {
+      if (myPendingApprovalStep) {
+           if (window.confirm("Are you sure you want to reject this approval? This will send the contract back to the 'In Review' stage.")) {
+              onTransition(contract.id, 'REJECT_STEP', { stepId: myPendingApprovalStep.id });
+          }
+      }
+  };
 
   const handleSummarizeRisk = useCallback(async () => {
     setIsLoadingSummary(true);
@@ -251,6 +274,29 @@ export default function ContractDetail({ contract: initialContract, properties, 
             <ArrowLeftIcon className="w-4 h-4 mr-2" />
             Back to all contracts
         </button>
+
+        {myPendingApprovalStep && (
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 p-4 rounded-r-lg mb-6 flex justify-between items-center shadow-sm">
+                <div>
+                    <h3 className="font-bold text-yellow-800 dark:text-yellow-200">Your Approval is Requested</h3>
+                    <p className="text-sm text-yellow-700 dark:text-yellow-300">Please review this contract and approve or reject it.</p>
+                </div>
+                <div className="flex space-x-3">
+                     <button 
+                        onClick={handleReject}
+                        className="flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                        <XCircleIcon className="w-5 h-5 mr-2 text-red-500" />
+                        Reject
+                    </button>
+                    <button
+                        onClick={handleApprove}
+                        className="flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                        <CheckCircleIcon className="w-5 h-5 mr-2" />
+                        Approve
+                    </button>
+                </div>
+            </div>
+        )}
 
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm mb-6">
             <div className="flex justify-between items-start">
