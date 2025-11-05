@@ -9,7 +9,8 @@ interface TemplatesListProps {
   onSelectTemplate: (template: ContractTemplate) => void;
 }
 
-const TemplateCard = ({ template, onSelect }: { template: ContractTemplate, onSelect: () => void }) => (
+// FIX: Changed component to React.FC to correctly handle props including the 'key' prop.
+const TemplateCard: React.FC<{ template: ContractTemplate, onSelect: () => void }> = ({ template, onSelect }) => (
     <button onClick={onSelect} className="w-full text-left bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary-300 transition-all duration-200 p-5 flex flex-col h-full">
         <div className="flex-shrink-0 flex items-center mb-3">
             <div className="w-10 h-10 flex items-center justify-center bg-primary-100 rounded-lg mr-4">

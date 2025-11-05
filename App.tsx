@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType } from './types';
 import { ContractStatus, RiskLevel, ApprovalStatus } from './types';
-import { MOCK_TEMPLATES, MOCK_ROLES, MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS, USERS } from './constants';
+import { MOCK_TEMPLATES, MOCK_ROLES, MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import ContractsList from './components/ContractsList';
@@ -24,10 +24,9 @@ import UserSignUpPage from './components/UserSignUpPage';
 import CompanySettingsPage from './components/CompanySettingsPage';
 import { supabase } from './lib/supabaseClient';
 import { LoaderIcon } from './components/icons';
+import { Session } from '@supabase/supabase-js';
+import { getUserProfile, signOut } from './lib/auth';
 
-
-// In a real app, this would come from an auth context
-const currentUser = USERS['alice'];
 
 export default function App() {
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -35,7 +34,7 @@ export default function App() {
   const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [roles, setRoles] = useState<Role[]>(MOCK_ROLES);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [notificationSettings, setNotificationSettings] = useState<NotificationSetting[]>(MOCK_NOTIFICATION_SETTINGS);
   const [userNotificationSettings, setUserNotificationSettings] = useState<UserNotificationSettings>(MOCK_USER_NOTIFICATION_SETTINGS);
 
@@ -50,67 +49,119 @@ export default function App() {
   const [isCreatingProperty, setIsCreatingProperty] = useState(false);
   const [initialFilters, setInitialFilters] = useState<{ status?: ContractStatus; riskLevels?: RiskLevel[]; ownerId?: string }>({});
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
-  const [isAuthenticated, setIsAuthenticated] = useState(true); // Auto-login for dev
+  
+  // Auth State
+  const [session, setSession] = useState<Session | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authView, setAuthView] = useState<'login' | 'org-signup' | 'user-signup'>('login');
 
-  const fetchData = useCallback(async () => {
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        setSession(session);
+        setIsAuthenticated(!!session);
+        if (session?.user) {
+            const profile = await getUserProfile(session.user.id);
+            setCurrentUser(profile);
+        } else {
+            setCurrentUser(null);
+            setContracts([]);
+        }
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+        setSession(session);
+        setIsAuthenticated(!!session);
+        if (session?.user) {
+            getUserProfile(session.user.id).then(setCurrentUser);
+        } else {
+            setIsLoading(false);
+        }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+
+  const fetchData = useCallback(async (user: UserProfile) => {
+    if (!user || !user.companyId) {
+        setContracts([]);
+        setCounterparties([]);
+        setProperties([]);
+        setUsers([]);
+        setRoles([]);
+        setIsLoading(false);
+        return;
+    }
     setIsLoading(true);
+    const companyId = user.companyId;
 
     // Fetch lookups
-    const { data: rolesData } = await supabase.from('roles').select('*');
+    const { data: rolesData } = await supabase.from('roles').select('*').eq('company_id', companyId);
+    setRoles((rolesData || []).map(r => ({...r, userCount: 0, permissions: r.permissions as any })));
     const rolesMap = new Map((rolesData || []).map(r => [r.id, r.name]));
 
-    const { data: usersData } = await supabase.from('users').select('*');
-    const usersMap = new Map((usersData || []).map(u => [u.id, { 
-      ...u, 
-      firstName: u.first_name, 
-      lastName: u.last_name, 
-      jobTitle: u.job_title,
-      avatarUrl: u.avatar_url,
-      lastLogin: u.last_login,
-      role: rolesMap.get(u.role_id) || 'Unknown' 
-    }]));
-    setUsers(Array.from(usersMap.values()));
+    const { data: usersData } = await supabase.from('users').select('*').eq('company_id', companyId);
+    // FIX: Explicitly map supabase snake_case fields to UserProfile camelCase fields to ensure correct typing.
+    const mappedUsers: UserProfile[] = (usersData || []).map(u => ({
+        id: u.id,
+        firstName: u.first_name,
+        lastName: u.last_name,
+        email: u.email,
+        phone: u.phone,
+        jobTitle: u.job_title,
+        department: u.department,
+        avatarUrl: u.avatar_url,
+        role: rolesMap.get(u.role_id) || 'Unknown',
+        roleId: u.role_id,
+        status: u.status,
+        lastLogin: u.last_login,
+        companyId: u.company_id,
+        appId: u.app_id,
+    }));
+    const usersMap = new Map(mappedUsers.map(u => [u.id, u]));
+    setUsers(mappedUsers);
     
-    const { data: counterpartiesData } = await supabase.from('counterparties').select('*');
-    const counterpartiesMap = new Map((counterpartiesData || []).map(c => [c.id, {
-        ...c,
+    const { data: counterpartiesData } = await supabase.from('counterparties').select('*').eq('company_id', companyId);
+    const mappedCounterparties: Counterparty[] = (counterpartiesData || []).map(c => ({
+        id: c.id,
+        name: c.name,
+        type: c.type,
         addressLine1: c.address_line1,
         addressLine2: c.address_line2,
+        city: c.city,
+        state: c.state,
         zipCode: c.zip_code,
+        country: c.country,
         contactName: c.contact_name,
         contactEmail: c.contact_email,
         contactPhone: c.contact_phone
-    }]));
-    setCounterparties(counterpartiesData ? counterpartiesData.map(c => ({
-        ...c,
-        addressLine1: c.address_line1,
-        addressLine2: c.address_line2,
-        zipCode: c.zip_code,
-        contactName: c.contact_name,
-        contactEmail: c.contact_email,
-        contactPhone: c.contact_phone
-    })) : []);
+    }));
+    const counterpartiesMap = new Map(mappedCounterparties.map(c => [c.id, c]));
+    setCounterparties(mappedCounterparties);
 
-    const { data: propertiesData } = await supabase.from('properties').select('*');
-    const propertiesMap = new Map((propertiesData || []).map(p => [p.id, {
-        ...p,
+    const { data: propertiesData } = await supabase.from('properties').select('*').eq('company_id', companyId);
+    const mappedProperties: Property[] = (propertiesData || []).map(p => ({
+        id: p.id,
+        name: p.name,
         addressLine1: p.address_line1,
         addressLine2: p.address_line2,
+        city: p.city,
+        state: p.state,
+        country: p.country,
         zipCode: p.zip_code
-    }]));
-    setProperties(propertiesData ? propertiesData.map(p => ({
-         ...p,
-        addressLine1: p.address_line1,
-        addressLine2: p.address_line2,
-        zipCode: p.zip_code
-    })) : []);
+    }));
+    const propertiesMap = new Map(mappedProperties.map(p => [p.id, p]));
+    setProperties(mappedProperties);
+
 
     // Fetch contract-related data
-    const { data: contractsData } = await supabase.from('contracts').select('*');
-    const { data: versionsData } = await supabase.from('contract_versions').select('*');
-    const { data: approvalsData } = await supabase.from('approval_steps').select('*');
-    const { data: allocationsData } = await supabase.from('contract_property_allocations').select('*');
+    const { data: contractsData } = await supabase.from('contracts').select('*').eq('company_id', companyId);
+    const contractIds = (contractsData || []).map(c => c.id);
+
+    const { data: versionsData } = contractIds.length > 0 ? await supabase.from('contract_versions').select('*').in('contract_id', contractIds) : { data: [] };
+    const { data: approvalsData } = contractIds.length > 0 ? await supabase.from('approval_steps').select('*').in('contract_id', contractIds) : { data: [] };
+    const { data: allocationsData } = contractIds.length > 0 ? await supabase.from('contract_property_allocations').select('*').in('contract_id', contractIds) : { data: [] };
     
     // Join on client
     const contractsById = new Map();
@@ -182,8 +233,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if(currentUser) {
+        fetchData(currentUser);
+    }
+  }, [currentUser, fetchData]);
 
 
   useEffect(() => {
@@ -200,11 +253,12 @@ export default function App() {
   };
 
   const handleLogin = () => {
-    setIsAuthenticated(true);
+    // Auth state change will trigger re-renders and data fetching
+    setActiveView('dashboard');
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
+  const handleLogout = async () => {
+    await signOut();
     setActiveView('dashboard'); // Reset to default view on logout
     setAuthView('login');
   };
@@ -252,6 +306,7 @@ export default function App() {
   };
   
   const handleMetricNavigation = (metric: 'active' | 'pending' | 'high-risk' | 'my-contracts') => {
+    if (!currentUser) return;
     let filters: { status?: ContractStatus; riskLevels?: RiskLevel[]; ownerId?: string } = {};
     if (metric === 'active') {
         filters = { status: ContractStatus.ACTIVE };
@@ -274,6 +329,8 @@ export default function App() {
   const handleCancelCreate = () => setIsCreatingContract(false);
 
   const handleFinalizeCreate = async (newContractData: Partial<Contract> & { propertyAllocations?: any[] }) => {
+    if (!currentUser?.companyId || !currentUser?.appId) return;
+
     // 1. Prepare and insert main contract record
     const contractRecord = {
       title: newContractData.title,
@@ -290,6 +347,8 @@ export default function App() {
       frequency: newContractData.frequency,
       seasonal_months: newContractData.seasonalMonths,
       allocation: newContractData.allocation,
+      company_id: currentUser.companyId,
+      app_id: currentUser.appId,
     };
     
     const { data: insertedContract, error: contractError } = await supabase.from('contracts').insert(contractRecord).select().single();
@@ -312,6 +371,8 @@ export default function App() {
       frequency: versionData.frequency,
       seasonal_months: versionData.seasonalMonths,
       property_id: versionData.property?.id,
+      company_id: currentUser.companyId,
+      app_id: currentUser.appId,
     };
     const { error: versionError } = await supabase.from('contract_versions').insert(versionRecord);
      if (versionError) {
@@ -326,8 +387,9 @@ export default function App() {
         property_id: alloc.propertyId === 'portfolio' ? null : alloc.propertyId,
         monthly_values: alloc.monthlyValues,
         manual_edits: alloc.manualEdits,
-        // FIX: Use 'allocatedValue' to match the type definition
         allocated_value: alloc.allocatedValue,
+        company_id: currentUser.companyId,
+        app_id: currentUser.appId,
       }));
       const { error: allocationError } = await supabase.from('contract_property_allocations').insert(allocationRecords);
       if (allocationError) {
@@ -336,13 +398,14 @@ export default function App() {
       }
     }
     
-    await fetchData(); // Refetch all data to get the new contract
+    await fetchData(currentUser); // Refetch all data to get the new contract
     setIsCreatingContract(false);
   };
 
   const handleStartCreateCounterparty = () => setIsCreatingCounterparty(true);
   const handleCancelCreateCounterparty = () => setIsCreatingCounterparty(false);
   const handleFinalizeCreateCounterparty = async (newCounterpartyData: Omit<Counterparty, 'id'>) => {
+     if (!currentUser?.companyId || !currentUser?.appId) return;
     const { data: insertedCounterparty, error } = await supabase.from('counterparties').insert({
         name: newCounterpartyData.name,
         type: newCounterpartyData.type,
@@ -354,7 +417,9 @@ export default function App() {
         country: newCounterpartyData.country,
         contact_name: newCounterpartyData.contactName,
         contact_email: newCounterpartyData.contactEmail,
-        contact_phone: newCounterpartyData.contactPhone
+        contact_phone: newCounterpartyData.contactPhone,
+        company_id: currentUser.companyId,
+        app_id: currentUser.appId,
     }).select().single();
     
     if (error) {
@@ -376,6 +441,7 @@ export default function App() {
   const handleStartCreateProperty = () => setIsCreatingProperty(true);
   const handleCancelCreateProperty = () => setIsCreatingProperty(false);
   const handleFinalizeCreateProperty = async (newPropertyData: Omit<Property, 'id'>) => {
+    if (!currentUser?.companyId || !currentUser?.appId) return;
     const { data: insertedProperty, error } = await supabase.from('properties').insert({
         name: newPropertyData.name,
         address_line1: newPropertyData.addressLine1,
@@ -383,7 +449,9 @@ export default function App() {
         city: newPropertyData.city,
         state: newPropertyData.state,
         zip_code: newPropertyData.zipCode,
-        country: newPropertyData.country
+        country: newPropertyData.country,
+        company_id: currentUser.companyId,
+        app_id: currentUser.appId,
     }).select().single();
 
      if (error) {
@@ -416,6 +484,7 @@ export default function App() {
   };
 
   const handleCreateNewVersion = async (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => {
+      if (!currentUser?.companyId || !currentUser?.appId) return;
       let contractToUpdate = contracts.find(c => c.id === contractId);
       if (!contractToUpdate) return;
       
@@ -435,6 +504,8 @@ export default function App() {
           frequency: newVersionData.frequency,
           seasonal_months: newVersionData.seasonalMonths,
           property_id: newVersionData.property?.id,
+          company_id: currentUser.companyId,
+          app_id: currentUser.appId,
       }).select().single();
       
       if (versionError) { console.error("Error creating new version:", versionError); return; }
@@ -457,16 +528,16 @@ export default function App() {
       const { error: approvalError } = await supabase.from('approval_steps').update({ status: ApprovalStatus.PENDING }).eq('contract_id', contractId);
       if (approvalError) { console.error("Error resetting approvals:", approvalError); return; }
 
-      await fetchData(); // Easiest way to sync state
+      await fetchData(currentUser); // Easiest way to sync state
   };
 
 
   const renderContent = () => {
-    if (isLoading) {
+    if (isLoading || !currentUser) {
         return (
             <div className="flex items-center justify-center h-full">
                 <LoaderIcon className="w-12 h-12 text-primary" />
-                <span className="ml-4 text-lg font-semibold text-gray-700">Loading Data...</span>
+                <span className="ml-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Loading Data...</span>
             </div>
         )
     }
@@ -582,7 +653,7 @@ export default function App() {
           {renderContent()}
         </main>
       </div>
-      {isCreatingContract && (
+      {isCreatingContract && currentUser && (
         <CreateContractWorkflow
             properties={properties}
             counterparties={counterparties}

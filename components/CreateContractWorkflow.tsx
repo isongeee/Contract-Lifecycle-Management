@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { Contract, Counterparty, UserProfile, Property, AllocationType } from '../types';
 import { ContractType, ContractStatus, RiskLevel, ContractFrequency } from '../types';
 import { UploadCloudIcon, XIcon, PlusIcon, Trash2Icon } from './icons';
@@ -79,7 +79,7 @@ const Stage1_Upload = ({ onNext }: { onNext: () => void }) => {
             </div>
             <div className="mt-8 flex justify-end space-x-3">
                 <button onClick={onNext} type="button" className="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Skip for now</button>
-                <button onClick={onNext} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Next</button>
+                <button onClick={onNext} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Next</button>
             </div>
         </div>
     );
@@ -90,14 +90,12 @@ interface Stage2Props {
     setData: (field: keyof Contract, value: any) => void;
     onBack: () => void;
     onNext: () => void;
-    onToggleMonth: (month: string) => void;
+    onToggleMonth: (monthYearKey: string) => void;
     counterparties: Counterparty[];
     users: UserProfile[];
 }
 
-// FIX: Made children prop optional to satisfy type checker for what appears to be correct usage.
 const FormRow = ({ children }: { children?: React.ReactNode }) => <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-6">{children}</div>
-// FIX: Made children prop optional to satisfy type checker for what appears to be correct usage.
 const FormField = ({ label, children, className = 'sm:col-span-3' }: { label: string; children?: React.ReactNode; className?: string }) => (
     <div className={className}>
         <label className="block text-sm font-medium leading-6 text-gray-900">{label}</label>
@@ -108,7 +106,41 @@ const TextInput = (props: React.ComponentProps<'input'>) => <input {...props} cl
 const SelectInput = (props: React.ComponentProps<'select'>) => <select {...props} className="block w-full rounded-md border-0 py-1.5 px-3 bg-white text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" />
 
 
+const getMonthsInRange = (startDateStr: string, endDateStr: string): { year: number; months: string[] }[] => {
+    if (!startDateStr || !endDateStr) return [];
+    
+    // Use UTC dates to avoid timezone issues
+    const start = new Date(startDateStr);
+    const end = new Date(endDateStr);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return [];
+
+    const startUTC = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+    const endUTC = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
+    
+    const monthsByYear: { [year: number]: string[] } = {};
+    let current = new Date(Date.UTC(startUTC.getUTCFullYear(), startUTC.getUTCMonth(), 1));
+
+    while (current <= endUTC) {
+        const year = current.getUTCFullYear();
+        const month = MONTHS[current.getUTCMonth()];
+        if (!monthsByYear[year]) {
+          monthsByYear[year] = [];
+        }
+        monthsByYear[year].push(month);
+        current.setUTCMonth(current.getUTCMonth() + 1);
+    }
+
+    return Object.entries(monthsByYear).map(([year, months]) => ({
+        year: parseInt(year, 10),
+        months,
+    }));
+};
+
+
 const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, counterparties, users }: Stage2Props) => {
+    const availableMonthsByYear = useMemo(() => getMonthsInRange(data.startDate!, data.endDate!), [data.startDate, data.endDate]);
+
     return (
         <div>
             <h2 className="text-lg font-semibold text-gray-800">Contract Information</h2>
@@ -152,29 +184,46 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
                     {data.frequency === ContractFrequency.SEASONAL && (
                         <div className="sm:col-span-6">
                             <label className="block text-sm font-medium leading-6 text-gray-900">Active Months</label>
-                            <div className="mt-2 grid grid-cols-4 sm:grid-cols-6 gap-2">
-                                {MONTHS.map(month => (
-                                    <button
-                                        key={month}
-                                        type="button"
-                                        onClick={() => onToggleMonth(month)}
-                                        className={`rounded-md px-3 py-2 text-sm font-semibold shadow-sm transition-colors ${
-                                            data.seasonalMonths?.includes(month)
-                                                ? 'bg-primary text-white hover:bg-primary-500'
-                                                : 'bg-white text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50'
-                                        }`}
-                                    >
-                                        {month}
-                                    </button>
-                                ))}
-                            </div>
+                             <p className="text-sm text-gray-500">Select the months within the contract period that are considered active.</p>
+                            {availableMonthsByYear.length > 0 ? (
+                                <div className="mt-2 space-y-4">
+                                    {availableMonthsByYear.map(({ year, months }) => (
+                                        <div key={year}>
+                                            <p className="text-sm font-semibold text-gray-700">{year}</p>
+                                            <div className="mt-2 grid grid-cols-4 sm:grid-cols-6 gap-2">
+                                                {months.map(month => {
+                                                    const monthIndex = MONTHS.indexOf(month);
+                                                    const monthYearKey = `${year}-${(monthIndex + 1).toString().padStart(2, '0')}`;
+                                                    const isSelected = data.seasonalMonths?.includes(monthYearKey);
+                                                    return (
+                                                        <button
+                                                            key={monthYearKey}
+                                                            type="button"
+                                                            onClick={() => onToggleMonth(monthYearKey)}
+                                                            className={`rounded-md px-3 py-2 text-sm font-semibold shadow-sm transition-colors ${
+                                                                isSelected
+                                                                    ? 'bg-primary text-white hover:bg-primary-500'
+                                                                    : 'bg-white text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50'
+                                                            }`}
+                                                        >
+                                                            {month}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="mt-2 text-sm text-gray-500">Please set a valid Start and End Date to select active months.</p>
+                            )}
                         </div>
                     )}
                 </FormRow>
             </div>
             <div className="mt-8 flex justify-between">
                 <button onClick={onBack} type="button" className="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Back</button>
-                <button onClick={onNext} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Next</button>
+                <button onClick={onNext} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Next</button>
             </div>
         </div>
     );
@@ -196,7 +245,6 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
     
     // Non-seasonal state
     const [singlePropertyId, setSinglePropertyId] = useState(data.property?.id || (properties.length > 0 ? properties[0].id : ''));
-    // FIX: Use 'allocatedValue' to match type definition
     const [multiAllocations, setMultiAllocations] = useState(() => (data.propertyAllocations && !isSeasonal ? data.propertyAllocations : [{ id: Date.now(), propertyId: properties[0]?.id || '', allocatedValue: data.value || 0 }]));
 
     // Seasonal state
@@ -233,7 +281,6 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
             Object.keys(initialManualEdits).forEach(k => initialManualEdits[k] = false);
             setSeasonalAllocations(prev => [...prev, { id: Date.now(), propertyId: properties[0]?.id || '', monthlyValues: initialMonthlyValues, manualEdits: initialManualEdits }]);
         } else {
-            // FIX: Use 'allocatedValue' to match type definition
              setMultiAllocations((prev: any) => [...prev, { id: Date.now(), propertyId: properties[0]?.id || '', allocatedValue: 0 }]);
         }
     };
@@ -246,7 +293,6 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
         }
     };
 
-    // FIX: Use 'allocatedValue' and ensure it's a number
     const handleAllocationChange = (id: number, field: 'propertyId' | 'allocatedValue' | string, value: string | number) => {
         if(isSeasonal) {
             setSeasonalAllocations(prev => prev.map(row => {
@@ -331,15 +377,15 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
         onNext();
     };
 
-    // Calculate totals for display
     let totalAllocated = 0;
     if (isSeasonal) {
-        totalAllocated = seasonalAllocations.reduce((sum, alloc) => {
-            return sum + Object.values(alloc.monthlyValues).reduce((monthSum, val) => monthSum + Number(val || 0), 0);
+        // FIX: Explicitly break down reduce to avoid potential type inference issues with nested reduces.
+        totalAllocated = seasonalAllocations.reduce((sum: number, alloc) => {
+            const monthlyTotal = Object.values(alloc.monthlyValues).reduce((monthSum, val) => monthSum + (Number(val) || 0), 0);
+            return sum + monthlyTotal;
         }, 0);
     } else {
          if (allocationType === 'multi') {
-            // FIX: Use 'allocatedValue' to match type definition
             totalAllocated = multiAllocations.reduce((sum: number, alloc: any) => sum + Number(alloc.allocatedValue || 0), 0);
         } else {
             totalAllocated = data.value || 0;
@@ -377,7 +423,6 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                     </fieldset>
                 </div>
                 
-                {/* NON-SEASONAL UI */}
                 {!isSeasonal && allocationType === 'single' && (
                     <FormField label="Property" className="sm:col-span-3">
                         <SelectInput value={singlePropertyId} onChange={e => setSinglePropertyId(e.target.value)}>
@@ -390,7 +435,6 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                         {multiAllocations.map((alloc: any, index: number) => (
                             <div key={alloc.id} className="grid grid-cols-12 gap-x-4 items-center">
                                 <div className="col-span-6"><SelectInput value={alloc.propertyId} onChange={e => handleAllocationChange(alloc.id, 'propertyId', e.target.value)}><option value="">Select property...</option>{properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}</SelectInput></div>
-                                {/* FIX: Use 'allocatedValue' to match type definition */}
                                 <div className="col-span-5"><div className="relative rounded-md shadow-sm"><div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div><input type="number" value={alloc.allocatedValue} onChange={e => handleAllocationChange(alloc.id, 'allocatedValue', e.target.value)} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm"/></div></div>
                                 <div className="col-span-1">{multiAllocations.length > 1 && <button type="button" onClick={() => handleDeleteRow(alloc.id)} className="text-gray-400 hover:text-red-600"><Trash2Icon className="w-5 h-5"/></button>}</div>
                             </div>
@@ -399,7 +443,6 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                     </div>
                 )}
                 
-                {/* SEASONAL UI */}
                 {isSeasonal && (allocationType === 'single' || allocationType === 'multi' || allocationType === 'portfolio') && (
                     <div className="sm:col-span-6 space-y-4">
                         <div className="overflow-x-auto">
@@ -407,7 +450,11 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                                 <thead className="bg-gray-50">
                                     <tr>
                                         <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{allocationType !== 'portfolio' ? 'Property' : 'Allocation'}</th>
-                                        {data.seasonalMonths.map((month: string) => <th key={month} className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">{month}</th>)}
+                                        {data.seasonalMonths.map((monthYear: string) => {
+                                             const [year, month] = monthYear.split('-');
+                                             const monthName = MONTHS[parseInt(month, 10) - 1];
+                                            return <th key={monthYear} className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-36">{`${monthName} ${year}`}</th>
+                                        })}
                                         {allocationType === 'multi' && <th className="w-10"></th>}
                                     </tr>
                                 </thead>
@@ -424,11 +471,11 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                                                     (<span className="text-sm font-medium text-gray-700">Portfolio-wide</span>)
                                                 }
                                             </td>
-                                            {data.seasonalMonths.map((month: string) => (
-                                                <td key={month} className="py-2 px-3">
+                                            {data.seasonalMonths.map((monthYear: string) => (
+                                                <td key={monthYear} className="py-2 px-3">
                                                      <div className="relative rounded-md shadow-sm">
                                                         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div>
-                                                        <input type="number" value={alloc.monthlyValues[month] || ''} onChange={e => handleAllocationChange(alloc.id, month, e.target.value)} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm"/>
+                                                        <input type="number" value={alloc.monthlyValues[monthYear] || ''} onChange={e => handleAllocationChange(alloc.id, monthYear, e.target.value)} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm"/>
                                                     </div>
                                                 </td>
                                             ))}
@@ -455,7 +502,7 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
             </div>
             <div className="mt-8 flex justify-between">
                 <button onClick={onBack} type="button" className="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Back</button>
-                <button onClick={handleProceed} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Next</button>
+                <button onClick={handleProceed} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Next</button>
             </div>
         </div>
     );
@@ -471,7 +518,7 @@ const SummaryItem = ({ label, value }: { label: string; value: React.ReactNode }
 
 const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & { propertyAllocations?: any[] }, onBack: () => void, onFinish: () => void }) => {
     const frequencyDisplay = data.frequency === ContractFrequency.SEASONAL
-        ? `Seasonal (${(data.seasonalMonths || []).join(', ') || 'No months selected'})`
+        ? `Seasonal (${(data.seasonalMonths || []).length} active months)`
         : data.frequency;
         
     const propertyDisplay = () => {
@@ -502,7 +549,7 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
             </dl>
             <div className="mt-8 flex justify-between">
                 <button onClick={onBack} type="button" className="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Back</button>
-                <button onClick={onFinish} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Create Contract</button>
+                <button onClick={onFinish} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Create Contract</button>
             </div>
         </div>
     );
@@ -512,55 +559,63 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
 export default function CreateContractWorkflow({ onCancel, onFinish, properties, counterparties, users, currentUser }: CreateContractWorkflowProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [newContractData, setNewContractData] = useState<Partial<Contract> & { propertyAllocations?: any[] }>({
-      title: 'New Seasonal Contract',
+      title: '',
       type: ContractType.MSA,
       status: ContractStatus.DRAFT,
       riskLevel: RiskLevel.LOW,
       value: 0,
       owner: currentUser,
-      counterparty: counterparties[0],
-      property: properties[0],
-      startDate: '2026-01-04',
-      endDate: '2026-05-04',
-      frequency: ContractFrequency.SEASONAL,
-      seasonalMonths: ['Jan', 'Feb', 'Mar', 'Apr', 'May'],
+      counterparty: undefined,
+      property: undefined,
+      startDate: '',
+      endDate: '',
+      frequency: ContractFrequency.MONTHLY,
+      seasonalMonths: [],
       propertyAllocations: [],
   });
 
   useEffect(() => {
-    if (newContractData.frequency === ContractFrequency.SEASONAL && newContractData.seasonalMonths && newContractData.seasonalMonths.length > 0) {
-      const monthIndices = newContractData.seasonalMonths.map(m => MONTHS.indexOf(m));
-      const minMonthIndex = Math.min(...monthIndices);
-      const maxMonthIndex = Math.max(...monthIndices);
+    // Set default counterparty and property once they are loaded from props.
+    // This avoids the initial state being set with undefined values when props are empty arrays.
+    setNewContractData(prev => ({
+      ...prev,
+      // Only update if the current value is not set and the new list has items.
+      counterparty: prev.counterparty || (counterparties.length > 0 ? counterparties[0] : undefined),
+      property: prev.property || (properties.length > 0 ? properties[0] : undefined),
+    }));
+  }, [counterparties, properties]);
 
-      const updateDateWithNewMonth = (dateString: string | undefined, monthIndex: number): string | undefined => {
-        if (!dateString) return dateString;
-        
-        const parts = dateString.split('-');
-        if (parts.length !== 3) return dateString;
-        
-        const year = parseInt(parts[0], 10);
-        const day = parseInt(parts[2], 10);
+  useEffect(() => {
+    if (newContractData.frequency === ContractFrequency.SEASONAL && newContractData.startDate && newContractData.endDate && newContractData.seasonalMonths && newContractData.seasonalMonths.length > 0) {
+      const start = new Date(newContractData.startDate);
+      const end = new Date(newContractData.endDate);
 
-        if (isNaN(year) || isNaN(day)) return dateString;
-
-        const newDate = new Date(Date.UTC(year, monthIndex, day));
-        
-        return newDate.toISOString().slice(0, 10);
-      };
+      if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
+        setNewContractData(prev => ({ ...prev, seasonalMonths: [] }));
+        return;
+      }
       
-      const newStartDate = updateDateWithNewMonth(newContractData.startDate, minMonthIndex);
-      const newEndDate = updateDateWithNewMonth(newContractData.endDate, maxMonthIndex);
+      const startUTC = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+      const endUTC = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
 
-      if (newStartDate !== newContractData.startDate || newEndDate !== newContractData.endDate) {
-          setNewContractData(prev => ({
-            ...prev,
-            startDate: newStartDate,
-            endDate: newEndDate,
-          }));
+      const validMonths = newContractData.seasonalMonths.filter(monthYear => {
+        const [year, month] = monthYear.split('-').map(Number);
+        const monthDate = new Date(Date.UTC(year, month - 1, 1));
+        
+        // Ensure the monthDate is within the start and end date range
+        // Check if the month is on or after the start month
+        const afterStart = monthDate.getUTCFullYear() > startUTC.getUTCFullYear() || (monthDate.getUTCFullYear() === startUTC.getUTCFullYear() && monthDate.getUTCMonth() >= startUTC.getUTCMonth());
+        // Check if the month is on or before the end month
+        const beforeEnd = monthDate.getUTCFullYear() < endUTC.getUTCFullYear() || (monthDate.getUTCFullYear() === endUTC.getUTCFullYear() && monthDate.getUTCMonth() <= endUTC.getUTCMonth());
+
+        return afterStart && beforeEnd;
+      });
+
+      if (validMonths.length !== newContractData.seasonalMonths.length) {
+        setNewContractData(prev => ({ ...prev, seasonalMonths: validMonths }));
       }
     }
-  }, [newContractData.seasonalMonths, newContractData.frequency]);
+  }, [newContractData.startDate, newContractData.endDate, newContractData.frequency]);
 
   const handleNext = () => setCurrentStep(prev => Math.min(prev + 1, 4));
   const handleBack = () => setCurrentStep(prev => Math.max(prev - 1, 1));
@@ -569,12 +624,13 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
       setNewContractData(prev => ({...prev, [field]: value }));
   };
 
-  const handleToggleMonth = (month: string) => {
+  const handleToggleMonth = (monthYearKey: string) => {
     setNewContractData(prev => {
         const currentMonths = prev.seasonalMonths || [];
-        const newMonths = currentMonths.includes(month)
-            ? currentMonths.filter(m => m !== month)
-            : [...currentMonths, month].sort((a, b) => MONTHS.indexOf(a) - MONTHS.indexOf(b));
+        const newMonths = currentMonths.includes(monthYearKey)
+            ? currentMonths.filter(m => m !== monthYearKey)
+            : [...currentMonths, monthYearKey];
+        newMonths.sort();
         return { ...prev, seasonalMonths: newMonths };
     });
   };
@@ -599,7 +655,6 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
             const totalValue = newContractData.value || 0;
             allocationDetails = newContractData.propertyAllocations.map(alloc => {
                 const prop = properties.find(p => p.id === alloc.propertyId);
-                // FIX: Use 'allocatedValue' to match type definition
                 const percentage = totalValue > 0 ? ((alloc.allocatedValue / totalValue) * 100).toFixed(2) : 0;
                 return `- ${prop?.name || 'Unknown Property'}: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(alloc.allocatedValue)} (${percentage}%)`;
             }).join('\n');

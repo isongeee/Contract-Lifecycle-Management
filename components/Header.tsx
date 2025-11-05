@@ -5,7 +5,7 @@ import type { UserProfile } from '../types';
 interface HeaderProps {
     onLogout: () => void;
     onNavigate: (view: string) => void;
-    currentUser: UserProfile;
+    currentUser: UserProfile | null;
 }
 
 export default function Header({ onLogout, onNavigate, currentUser }: HeaderProps) {
@@ -32,6 +32,14 @@ export default function Header({ onLogout, onNavigate, currentUser }: HeaderProp
   const handleLogoutClick = () => {
     onLogout();
     setIsProfileMenuOpen(false);
+  }
+
+  if (!currentUser) {
+    return (
+      <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 flex items-center justify-end px-6">
+        {/* Placeholder or nothing when logged out */}
+      </header>
+    );
   }
 
   return (

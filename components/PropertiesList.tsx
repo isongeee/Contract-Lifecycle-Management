@@ -19,7 +19,8 @@ const formatAddress = (property: Property) => {
     return `${property.addressLine1}, ${line2}${property.city}, ${property.state} ${property.zipCode}, ${property.country}`;
 };
 
-const PropertyCard = ({ property, onSelect }: { property: PropertyWithMeta, onSelect: () => void }) => (
+// FIX: Changed component to React.FC to correctly handle props including the 'key' prop.
+const PropertyCard: React.FC<{ property: PropertyWithMeta, onSelect: () => void }> = ({ property, onSelect }) => (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary-300 transition-all duration-200 flex flex-col h-full">
         <div className="p-5 flex-grow">
             <div className="flex items-start space-x-4">
@@ -78,7 +79,7 @@ export default function PropertiesList({ properties, contracts, onSelectProperty
             </div>
             <button 
                 onClick={onStartCreate}
-                className="flex items-center px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                className="flex items-center px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
                 <PlusIcon className="w-5 h-5 mr-2" />
                 Add Property
             </button>

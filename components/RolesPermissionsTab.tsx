@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import type { Role, PermissionSet } from '../types';
 import { PlusIcon } from './icons';
@@ -7,14 +8,16 @@ interface RolesPermissionsTabProps {
     setRoles: React.Dispatch<React.SetStateAction<Role[]>>;
 }
 
-const PermissionCheckbox = ({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) => (
+// FIX: Changed component to React.FC to correctly handle props including the 'key' prop.
+const PermissionCheckbox: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void }> = ({ label, checked, onChange }) => (
     <label className="flex items-center space-x-2">
         <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />
         <span className="text-sm text-gray-600">{label}</span>
     </label>
 );
 
-const ModulePermissions = ({ title, permissions, onPermissionChange }: { title: string; permissions: any; onPermissionChange: (key: string, value: boolean) => void }) => (
+// FIX: Changed component to React.FC to correctly handle props including the 'key' prop.
+const ModulePermissions: React.FC<{ title: string; permissions: any; onPermissionChange: (key: string, value: boolean) => void }> = ({ title, permissions, onPermissionChange }) => (
     <div>
         <h5 className="font-semibold text-sm text-gray-800">{title}</h5>
         <div className="flex space-x-4 mt-2">
@@ -52,7 +55,7 @@ export default function RolesPermissionsTab({ roles, setRoles }: RolesPermission
                     <h3 className="text-lg font-bold text-gray-900">Roles & Permissions</h3>
                     <p className="text-sm text-gray-500 mt-1">Define roles to control what users can see and do.</p>
                 </div>
-                 <button className="flex items-center px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary-600">
+                 <button className="flex items-center px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600">
                     <PlusIcon className="w-5 h-5 mr-2" />
                     Add Role
                 </button>

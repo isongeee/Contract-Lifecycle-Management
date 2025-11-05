@@ -69,6 +69,8 @@ export interface UserProfile {
   roleId?: string;
   status: 'active' | 'inactive';
   lastLogin: string;
+  companyId?: string;
+  appId?: string;
 }
 
 export interface Counterparty {

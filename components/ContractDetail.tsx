@@ -219,7 +219,7 @@ export default function ContractDetail({ contract: initialContract, properties, 
                         <CopyIcon className="w-4 h-4 mr-2" />
                         Create New Version
                     </button>
-                    <button onClick={() => setIsUpdatingStatus(true)} className="px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary-600">
+                    <button onClick={() => setIsUpdatingStatus(true)} className="px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600">
                         Update Status
                     </button>
                 </div>

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import type { UserProfile, UserNotificationSettings } from '../types';
 import { SunIcon, MoonIcon, MonitorIcon, UserIcon, SlidersHorizontalIcon, BellIcon, KeyRoundIcon, EditIcon } from './icons';
@@ -13,7 +14,8 @@ interface ProfilePageProps {
   setNotificationSettings: React.Dispatch<React.SetStateAction<UserNotificationSettings>>;
 }
 
-const TabButton = ({ label, icon, isActive, onClick }: { label: string; icon: React.ReactNode; isActive: boolean; onClick: () => void; }) => (
+// FIX: Changed component to React.FC to correctly handle props including the 'key' prop.
+const TabButton: React.FC<{ label: string; icon: React.ReactNode; isActive: boolean; onClick: () => void; }> = ({ label, icon, isActive, onClick }) => (
     <button
         onClick={onClick}
         className={`flex items-center px-4 py-2.5 text-sm font-medium rounded-lg transition-colors duration-150 w-full text-left ${

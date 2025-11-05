@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import type { UserProfile, Role, NotificationSetting } from '../types';
 import { UsersIcon, ShieldCheckIcon, BellIcon, BuildingOfficeIcon, HomeIcon } from './icons';
@@ -16,7 +17,8 @@ interface CompanySettingsPageProps {
 
 type ActiveTab = 'users' | 'roles' | 'notifications' | 'counterparties' | 'properties';
 
-const TabButton = ({ label, icon, isActive, onClick }: { label: string; icon: React.ReactNode; isActive: boolean; onClick: () => void; }) => (
+// FIX: Changed component to React.FC to correctly handle props including the 'key' prop.
+const TabButton: React.FC<{ label: string; icon: React.ReactNode; isActive: boolean; onClick: () => void; }> = ({ label, icon, isActive, onClick }) => (
     <button
         onClick={onClick}
         className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors duration-150 ${
