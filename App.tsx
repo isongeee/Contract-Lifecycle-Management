@@ -400,6 +400,7 @@ export default function App() {
       version_number: 1,
       author_id: versionData.author.id,
       content: versionData.content,
+      file_name: versionData.fileName,
       value: versionData.value,
       effective_date: versionData.effectiveDate,
       end_date: versionData.endDate,

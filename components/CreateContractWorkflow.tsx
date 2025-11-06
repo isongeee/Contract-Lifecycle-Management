@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Contract, Counterparty, UserProfile, Property, AllocationType, ContractPropertyAllocation } from '../types';
 import { ContractType, ContractStatus, RiskLevel, ContractFrequency } from '../types';
@@ -48,12 +49,13 @@ const ProgressBar = ({ currentStep }: { currentStep: number }) => (
     </nav>
 );
 
-const Stage1_Upload = ({ onNext }: { onNext: () => void }) => {
-    const [fileName, setFileName] = useState('');
+const Stage1_Upload = ({ onNext, onFileSelect, fileName }: { onNext: () => void; onFileSelect: (file: File | null) => void; fileName?: string; }) => {
     
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
-            setFileName(e.target.files[0].name);
+            onFileSelect(e.target.files[0]);
+        } else {
+            onFileSelect(null);
         }
     };
 
@@ -614,7 +616,7 @@ const SummaryItem = ({ label, value }: { label: string; value: React.ReactNode }
 );
 
 
-const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & { propertyAllocations?: any[] }, onBack: () => void, onFinish: () => void }) => {
+const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & { propertyAllocations?: any[], fileName?: string }, onBack: () => void, onFinish: () => void }) => {
     const frequencyDisplay = data.frequency === ContractFrequency.SEASONAL
         ? `Seasonal (${(data.seasonalMonths || []).length} active months)`
         : data.frequency;
@@ -634,6 +636,7 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
             <h2 className="text-lg font-semibold text-gray-800">Summary</h2>
             <p className="mt-1 text-sm text-gray-500">Please review the details below before creating the contract draft.</p>
             <dl className="mt-6 space-y-3">
+                {data.fileName && <SummaryItem label="Uploaded Document" value={data.fileName} />}
                 <SummaryItem label="Contract Title" value={data.title} />
                 <SummaryItem label="Counterparty" value={data.counterparty?.name} />
                 <SummaryItem label="Property Association" value={propertyDisplay()} />
@@ -656,7 +659,7 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
 
 export default function CreateContractWorkflow({ onCancel, onFinish, properties, counterparties, users, currentUser }: CreateContractWorkflowProps) {
   const [currentStep, setCurrentStep] = useState(1);
-  const [newContractData, setNewContractData] = useState<Partial<Contract> & { propertyAllocations?: any[] }>({
+  const [newContractData, setNewContractData] = useState<Partial<Contract> & { propertyAllocations?: any[], fileName?: string }>({
       title: '',
       type: ContractType.MSA,
       status: ContractStatus.DRAFT,
@@ -670,6 +673,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
       frequency: ContractFrequency.MONTHLY,
       seasonalMonths: [],
       propertyAllocations: [],
+      fileName: '',
   });
 
   useEffect(() => {
@@ -714,6 +718,10 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
       }
       return { ...prev, ...fieldOrUpdates };
     });
+  };
+
+  const handleFileSelect = (file: File | null) => {
+    updateData('fileName', file ? file.name : '');
   };
 
   const handleToggleMonth = (monthYearKey: string) => {
@@ -763,6 +771,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
         createdAt: new Date().toISOString().split('T')[0],
         author: currentUser,
         content: finalContent,
+        fileName: newContractData.fileName,
         value: newContractData.value || 0,
         effectiveDate: newContractData.effectiveDate || '',
         endDate: newContractData.endDate || '',
@@ -779,7 +788,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
   const renderStep = () => {
       switch (currentStep) {
           case 1:
-              return <Stage1_Upload onNext={handleNext} />;
+              return <Stage1_Upload onNext={handleNext} onFileSelect={handleFileSelect} fileName={newContractData.fileName} />;
           case 2:
               return <Stage2_Information data={newContractData} setData={updateData} onBack={handleBack} onNext={handleNext} onToggleMonth={handleToggleMonth} counterparties={counterparties} users={users} />;
           case 3:
