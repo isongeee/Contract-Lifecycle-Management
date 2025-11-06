@@ -164,9 +164,14 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
                         <TextInput type="text" value={data.title} onChange={e => setData('title', e.target.value)} placeholder="e.g., Master Services Agreement" />
                     </FormField>
                     <FormField label="Counterparty">
-                         <SelectInput value={data.counterparty?.id} onChange={e => setData('counterparty', counterparties.find(c => c.id === e.target.value))}>
-                            {counterparties.map((cp: Counterparty) => <option key={cp.id} value={cp.id}>{cp.name}</option>)}
-                        </SelectInput>
+                        {counterparties.length > 0 ? (
+                             <SelectInput value={data.counterparty?.id || ''} onChange={e => setData('counterparty', counterparties.find(c => c.id === e.target.value))}>
+                                <option value="" disabled>Select a counterparty...</option>
+                                {counterparties.map((cp: Counterparty) => <option key={cp.id} value={cp.id}>{cp.name}</option>)}
+                            </SelectInput>
+                        ) : (
+                            <p className="text-sm text-red-600 pt-2">No counterparties found. Please go to the Counterparties page to create one first.</p>
+                        )}
                     </FormField>
                     <FormField label="Contract Type">
                         <SelectInput value={data.type} onChange={e => setData('type', e.target.value as ContractType)}>
@@ -174,7 +179,8 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
                         </SelectInput>
                     </FormField>
                     <FormField label="Contract Owner" className="sm:col-span-full">
-                        <SelectInput value={data.owner?.id} onChange={e => setData('owner', users.find(u => u.id === e.target.value))}>
+                        <SelectInput value={data.owner?.id || ''} onChange={e => setData('owner', users.find(u => u.id === e.target.value))}>
+                             <option value="" disabled>Select an owner...</option>
                             {users.map((user: UserProfile) => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}
                         </SelectInput>
                     </FormField>
@@ -665,14 +671,6 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
       seasonalMonths: [],
       propertyAllocations: [],
   });
-
-  useEffect(() => {
-    setNewContractData(prev => ({
-      ...prev,
-      counterparty: prev.counterparty || (counterparties.length > 0 ? counterparties[0] : undefined),
-      property: prev.property || (properties.length > 0 ? properties[0] : undefined),
-    }));
-  }, [counterparties, properties]);
 
   useEffect(() => {
     if (newContractData.frequency === ContractFrequency.SEASONAL && newContractData.effectiveDate && newContractData.endDate && newContractData.seasonalMonths && newContractData.seasonalMonths.length > 0) {

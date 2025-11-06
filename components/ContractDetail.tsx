@@ -272,7 +272,7 @@ export default function ContractDetail({ contract: initialContract, properties, 
   };
   
   const handleRequestApproval = (approvers: UserProfile[], versionId: string) => {
-    onTransition(contract.id, ContractStatus.PENDING_APPROVAL, { approvers, versionId });
+    onTransition(contract.id, ContractStatus.PENDING_APPROVAL, { approvers, draft_version_id: versionId });
     setIsRequestingApproval(false);
   };
 
