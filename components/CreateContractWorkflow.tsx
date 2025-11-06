@@ -729,7 +729,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
   
   const handleFinalize = () => {
     let finalContent = `This contract for ${newContractData.title || 'a new matter'} was created via the wizard.`;
-    const isSeasonal = newContractData.frequency === ContractFrequency.SEASONAL;
+    const isSeasonal = newContractData.frequency === ContractFrequency.SEASONAL && newContractData.seasonalMonths && newContractData.seasonalMonths.length > 0;
     
     if (newContractData.propertyAllocations && newContractData.propertyAllocations.length > 0) {
         let allocationDetails = '';
