@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { Contract, UserProfile } from '../types';
-import { ContractStatus, ContractType, RiskLevel } from '../types';
+import { ContractStatus, ContractType, RiskLevel, ContractFrequency } from '../types';
 import StatusTag from './StatusTag';
-import { SearchIcon, ChevronDownIcon, PlusIcon } from './icons';
+import { SearchIcon, ChevronDownIcon, PlusIcon, ArrowUpIcon, ArrowDownIcon } from './icons';
 
 interface ContractsListProps {
   contracts: Contract[];
@@ -36,13 +36,17 @@ const FilterDropdown = ({ label, options, selected, onChange }: { label: string;
 const typeOptions = Object.values(ContractType).map(t => ({ value: t, label: t }));
 const statusOptions = Object.values(ContractStatus).map(s => ({ value: s, label: s }));
 const riskOptions = Object.values(RiskLevel).map(r => ({ value: r, label: r }));
+const frequencyOptions = Object.values(ContractFrequency).map(f => ({ value: f, label: f }));
 
 export default function ContractsList({ contracts, onSelectContract, onStartCreate, initialFilters = {}, currentUser }: ContractsListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState(initialFilters.status || '');
   const [typeFilter, setTypeFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
+  const [frequencyFilter, setFrequencyFilter] = useState('');
   const [ownerFilter, setOwnerFilter] = useState(initialFilters.ownerId || '');
+  const [sortKey, setSortKey] = useState('endDate');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
     setStatusFilter(initialFilters.status || '');
@@ -57,10 +61,11 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
     if (!initialFilters.ownerId) setOwnerFilter('');
     if (!initialFilters.riskLevels) setRiskFilter('');
     setTypeFilter('');
+    setFrequencyFilter('');
   }, [initialFilters]);
 
 
-  const filteredContracts = contracts.filter(contract => {
+  const filteredContracts = useMemo(() => contracts.filter(contract => {
     const riskMatch = () => {
         if (riskFilter === '') return true;
         if (riskFilter === 'HighAndCritical') {
@@ -75,14 +80,51 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
       (statusFilter === '' || contract.status === statusFilter) &&
       (typeFilter === '' || contract.type === typeFilter) &&
       (ownerFilter === '' || contract.owner.id === ownerFilter) &&
+      (frequencyFilter === '' || contract.frequency === frequencyFilter) &&
       riskMatch()
     );
-  });
+  }), [contracts, searchTerm, statusFilter, typeFilter, riskFilter, frequencyFilter, ownerFilter]);
+
+  const sortedContracts = useMemo(() => {
+    return [...filteredContracts].sort((a, b) => {
+        let valA, valB;
+        switch (sortKey) {
+            case 'title':
+                valA = a.title.toLowerCase();
+                valB = b.title.toLowerCase();
+                break;
+            case 'value':
+                valA = a.value;
+                valB = b.value;
+                break;
+            case 'endDate':
+            case 'updatedAt':
+                valA = new Date(a[sortKey as 'endDate' | 'updatedAt'] || 0).getTime();
+                valB = new Date(b[sortKey as 'endDate' | 'updatedAt'] || 0).getTime();
+                break;
+            default:
+                return 0;
+        }
+
+        if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+        if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+    });
+  }, [filteredContracts, sortKey, sortDirection]);
 
   const handleCreateNew = () => {
     onStartCreate();
   };
   
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('');
+    setTypeFilter('');
+    setRiskFilter('');
+    setFrequencyFilter('');
+    setOwnerFilter('');
+  };
+
   const specialRiskOptions = [
       ...riskOptions,
       { value: 'HighAndCritical', label: 'High / Critical' }
@@ -90,7 +132,7 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm">
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="p-4 border-b border-gray-200 dark:border-gray-700 space-y-4">
         <div className="flex justify-between items-start">
             <div>
                 <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Contracts Repository</h1>
@@ -106,39 +148,48 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
             </button>
         </div>
         
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-6 gap-4">
-            <div className="relative md:col-span-6 lg:col-span-3">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                    <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                    id="contract-search"
-                    type="search"
-                    placeholder="Search by title or counterparty..."
-                    autoComplete="off"
-                    className="block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 py-2.5 pl-10 pr-3 text-sm text-gray-900 dark:text-gray-100 placeholder-[#9ca3af] dark:placeholder-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#BDAD49]/60 focus:border-[#BDAD49]"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+        <div className="relative">
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
             </div>
-             <FilterDropdown 
-                label="Types"
-                options={typeOptions} 
-                selected={typeFilter} 
-                onChange={setTypeFilter}
-            />
-            <FilterDropdown 
-                label="Statuses"
-                options={statusOptions} 
-                selected={statusFilter} 
-                onChange={setStatusFilter}
-            />
-            <FilterDropdown 
-                label="Risk Levels"
-                options={specialRiskOptions} 
-                selected={riskFilter} 
-                onChange={setRiskFilter}
-            />
+            <input
+                id="contract-search"
+                type="search"
+                placeholder="Search by title or counterparty..."
+                autoComplete="off"
+                className="block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 py-2.5 pl-10 pr-3 text-sm text-gray-900 dark:text-gray-100 placeholder-[#9ca3af] dark:placeholder-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#BDAD49]/60 focus:border-[#BDAD49]"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 items-end">
+            <FilterDropdown label="Types" options={typeOptions} selected={typeFilter} onChange={setTypeFilter} />
+            <FilterDropdown label="Statuses" options={statusOptions} selected={statusFilter} onChange={setStatusFilter} />
+            <FilterDropdown label="Risk Levels" options={specialRiskOptions} selected={riskFilter} onChange={setRiskFilter} />
+            <FilterDropdown label="Frequencies" options={frequencyOptions} selected={frequencyFilter} onChange={setFrequencyFilter} />
+            <div className="lg:col-span-2 flex items-center justify-end space-x-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Sort by:</label>
+                <select 
+                    className="appearance-none bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 pl-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 dark:text-gray-200"
+                    value={sortKey}
+                    onChange={(e) => setSortKey(e.target.value)}
+                >
+                    <option value="endDate">End Date</option>
+                    <option value="updatedAt">Last Updated</option>
+                    <option value="title">Title</option>
+                    <option value="value">Value</option>
+                </select>
+                <button
+                    onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+                    className="p-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600"
+                    aria-label={`Sort ${sortDirection === 'asc' ? 'descending' : 'ascending'}`}
+                >
+                    {sortDirection === 'asc' ? <ArrowUpIcon className="h-5 w-5 text-gray-600 dark:text-gray-300"/> : <ArrowDownIcon className="h-5 w-5 text-gray-600 dark:text-gray-300"/>}
+                </button>
+                 <button onClick={handleClearFilters} className="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600">
+                    Clear All
+                </button>
+            </div>
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -154,7 +205,7 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-            {filteredContracts.map((contract) => (
+            {sortedContracts.map((contract) => (
               <tr key={contract.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => onSelectContract(contract)}>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{contract.title}</div>
@@ -176,7 +227,7 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
           </tbody>
         </table>
       </div>
-       {filteredContracts.length === 0 && (
+       {sortedContracts.length === 0 && (
           <div className="text-center py-12">
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">No contracts found</h3>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Try adjusting your search or filter criteria.</p>
