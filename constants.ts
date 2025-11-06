@@ -1,4 +1,5 @@
-import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet, UserNotificationSettings, CounterpartyType, AllocationType } from './types';
+
+import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet, UserNotificationSettings, CounterpartyType, AllocationType, RenewalStatus, AutoRenewType } from './types';
 import type { UserProfile, Counterparty, Property } from './types';
 
 export const STATUS_COLORS: Record<ContractStatus, string> = {
@@ -12,7 +13,20 @@ export const STATUS_COLORS: Record<ContractStatus, string> = {
   [ContractStatus.EXPIRED]: 'bg-gray-400 text-white dark:bg-gray-500',
   [ContractStatus.TERMINATED]: 'bg-red-200 text-red-800 dark:bg-red-900/40 dark:text-red-200',
   [ContractStatus.ARCHIVED]: 'bg-gray-500 text-white dark:bg-gray-400',
+  [ContractStatus.SUPERSEDED]: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200',
 };
+
+export const RENEWAL_STATUS_COLORS: Record<RenewalStatus, string> = {
+  [RenewalStatus.QUEUED]: 'bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-100',
+  [RenewalStatus.REVIEWING]: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200',
+  [RenewalStatus.DRAFTING]: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200',
+  [RenewalStatus.APPROVING]: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200',
+  [RenewalStatus.SIGNING]: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200',
+  [RenewalStatus.EXECUTED]: 'bg-primary-200 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200',
+  [RenewalStatus.ACTIVATED]: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
+  [RenewalStatus.CANCELLED]: 'bg-red-200 text-red-800 dark:bg-red-900/40 dark:text-red-200',
+};
+
 
 export const RISK_COLORS: Record<RiskLevel, string> = {
   [RiskLevel.LOW]: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
@@ -63,7 +77,7 @@ const DUMMY_CONTRACT_CONTENT_V2 = DUMMY_CONTRACT_CONTENT_V1
     .replace('$240,000', '$250,000');
 
 
-export const MOCK_CONTRACTS: Contract[] = [
+export const MOCK_CONTRACTS: Omit<Contract, 'renewalRequest'>[] = [
   {
     id: 'contract-001',
     title: 'Master Services Agreement - Acme Corp',
@@ -75,19 +89,17 @@ export const MOCK_CONTRACTS: Contract[] = [
     owner: USERS['alice'],
     effectiveDate: '2023-01-15',
     endDate: '2025-01-14',
-    renewalDate: '2025-01-14',
     value: 250000,
     frequency: ContractFrequency.ANNUALLY,
-    // FIX: Explicitly cast 'allocation' to AllocationType to satisfy TypeScript.
     allocation: 'single' as AllocationType,
     versions: [
       { 
         id: 'v1-1', versionNumber: 1, createdAt: '2023-01-05', author: USERS['alice'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'ACME_MSA_v1.pdf',
-        value: 240000, effectiveDate: '2023-01-15', endDate: '2025-01-14', renewalDate: '2025-01-14', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
+        value: 240000, effectiveDate: '2023-01-15', endDate: '2025-01-14', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
       },
       { 
         id: 'v1-2', versionNumber: 2, createdAt: '2023-01-10', author: USERS['bob'], content: DUMMY_CONTRACT_CONTENT_V2, fileName: 'ACME_MSA_v2_redline.pdf',
-        value: 250000, effectiveDate: '2023-01-15', endDate: '2025-01-14', renewalDate: '2025-01-14', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
+        value: 250000, effectiveDate: '2023-01-15', endDate: '2025-01-14', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
       },
     ],
     approvalSteps: [
@@ -106,15 +118,13 @@ export const MOCK_CONTRACTS: Contract[] = [
     owner: USERS['bob'],
     effectiveDate: '2024-08-01',
     endDate: '2025-02-01',
-    renewalDate: '2025-02-01',
     value: 75000,
     frequency: ContractFrequency.MONTHLY,
-    // FIX: Explicitly cast 'allocation' to AllocationType to satisfy TypeScript.
     allocation: 'single' as AllocationType,
     versions: [
         { 
             id: 'v2-1', versionNumber: 1, createdAt: '2024-07-20', author: USERS['diana'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'Globex_SOW_v1.pdf',
-            value: 75000, effectiveDate: '2024-08-01', endDate: '2025-02-01', renewalDate: '2025-02-01', frequency: ContractFrequency.MONTHLY, property: MOCK_PROPERTIES['prop-2']
+            value: 75000, effectiveDate: '2024-08-01', endDate: '2025-02-01', frequency: ContractFrequency.MONTHLY, property: MOCK_PROPERTIES['prop-2']
         }
     ],
     approvalSteps: [
@@ -126,27 +136,25 @@ export const MOCK_CONTRACTS: Contract[] = [
     id: 'contract-005',
     title: 'Vendor Agreement - Cyberdyne Systems',
     type: ContractType.VENDOR,
-    status: ContractStatus.PENDING_APPROVAL,
+    status: ContractStatus.ACTIVE,
     riskLevel: RiskLevel.MEDIUM,
     counterparty: COUNTERPARTIES['cyberdyne'],
     property: MOCK_PROPERTIES['prop-1'],
     owner: USERS['diana'],
-    effectiveDate: '2024-09-01',
-    endDate: '2025-08-31',
-    renewalDate: '2025-08-31',
+    effectiveDate: '2023-09-01',
+    endDate: new Date(new Date().setDate(new Date().getDate() + 45)).toISOString().split('T')[0], // Expires in 45 days
     value: 120000,
     frequency: ContractFrequency.ANNUALLY,
-    // FIX: Explicitly cast 'allocation' to AllocationType to satisfy TypeScript.
     allocation: 'single' as AllocationType,
     versions: [
         { 
-            id: 'v5-1', versionNumber: 1, createdAt: '2024-07-28', author: USERS['diana'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'Cyberdyne_Vendor_Initial_Draft.pdf',
-            value: 120000, effectiveDate: '2024-09-01', endDate: '2025-08-31', renewalDate: '2025-08-31', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
+            id: 'v5-1', versionNumber: 1, createdAt: '2023-08-28', author: USERS['diana'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'Cyberdyne_Vendor_Initial_Draft.pdf',
+            value: 120000, effectiveDate: '2023-09-01', endDate: '2024-08-31', frequency: ContractFrequency.ANNUALLY, property: MOCK_PROPERTIES['prop-1']
         }
     ],
     approvalSteps: [
-      { id: 'app-5-1', approver: USERS['alice'], status: ApprovalStatus.PENDING },
-      { id: 'app-5-2', approver: USERS['charlie'], status: ApprovalStatus.PENDING },
+      { id: 'app-5-1', approver: USERS['alice'], status: ApprovalStatus.APPROVED },
+      { id: 'app-5-2', approver: USERS['charlie'], status: ApprovalStatus.APPROVED },
     ],
   },
   {
@@ -159,15 +167,13 @@ export const MOCK_CONTRACTS: Contract[] = [
     owner: USERS['diana'],
     effectiveDate: '2024-07-25',
     endDate: '2026-07-24',
-    renewalDate: '2026-07-24',
     value: 0,
     frequency: ContractFrequency.ANNUALLY,
-    // FIX: Explicitly cast 'allocation' to AllocationType to satisfy TypeScript.
     allocation: 'portfolio' as AllocationType,
     versions: [
         { 
             id: 'v3-1', versionNumber: 1, createdAt: '2024-07-25', author: USERS['diana'], content: 'This is a standard Non-Disclosure Agreement...',
-            value: 0, effectiveDate: '2024-07-25', endDate: '2026-07-24', renewalDate: '2026-07-24', frequency: ContractFrequency.ANNUALLY
+            value: 0, effectiveDate: '2024-07-25', endDate: '2026-07-24', frequency: ContractFrequency.ANNUALLY
         }
     ],
     approvalSteps: [],
@@ -182,15 +188,13 @@ export const MOCK_CONTRACTS: Contract[] = [
     owner: USERS['alice'],
     effectiveDate: '2024-06-01',
     endDate: '2025-05-31',
-    renewalDate: '2025-05-31',
     value: 12000,
     frequency: ContractFrequency.ANNUALLY,
-    // FIX: Explicitly cast 'allocation' to AllocationType to satisfy TypeScript.
     allocation: 'portfolio' as AllocationType,
     versions: [
       { 
         id: 'v4-1', versionNumber: 1, createdAt: '2024-05-20', author: USERS['alice'], content: DUMMY_CONTRACT_CONTENT_V1, fileName: 'CloudService_SaaS_Agreement.pdf',
-        value: 12000, effectiveDate: '2024-06-01', endDate: '2025-05-31', renewalDate: '2025-05-31', frequency: ContractFrequency.ANNUALLY
+        value: 12000, effectiveDate: '2024-06-01', endDate: '2025-05-31', frequency: ContractFrequency.ANNUALLY
       },
     ],
     approvalSteps: [
@@ -201,26 +205,24 @@ export const MOCK_CONTRACTS: Contract[] = [
     id: 'contract-006',
     title: 'Lease Agreement - Wayne Enterprises Tower',
     type: ContractType.LEASE,
-    status: ContractStatus.PENDING_APPROVAL,
+    status: ContractStatus.ACTIVE,
     riskLevel: RiskLevel.HIGH,
     counterparty: COUNTERPARTIES['wayne'],
     property: MOCK_PROPERTIES['prop-3'],
     owner: USERS['charlie'],
-    effectiveDate: '2024-10-01',
-    endDate: '2029-09-30',
-    renewalDate: '2029-09-30',
+    effectiveDate: '2020-10-01',
+    endDate: new Date(new Date().setDate(new Date().getDate() + 80)).toISOString().split('T')[0], // Expires in 80 days
     value: 5000000,
     frequency: ContractFrequency.MONTHLY,
-    // FIX: Explicitly cast 'allocation' to AllocationType to satisfy TypeScript.
     allocation: 'single' as AllocationType,
     versions: [
         { 
-            id: 'v6-1', versionNumber: 1, createdAt: '2024-07-29', author: USERS['charlie'], content: DUMMY_CONTRACT_CONTENT_V1,
-            value: 5000000, effectiveDate: '2024-10-01', endDate: '2029-09-30', renewalDate: '2029-09-30', frequency: ContractFrequency.MONTHLY, property: MOCK_PROPERTIES['prop-3']
+            id: 'v6-1', versionNumber: 1, createdAt: '2020-09-29', author: USERS['charlie'], content: DUMMY_CONTRACT_CONTENT_V1,
+            value: 5000000, effectiveDate: '2020-10-01', endDate: '2024-09-30', frequency: ContractFrequency.MONTHLY, property: MOCK_PROPERTIES['prop-3']
         }
     ],
     approvalSteps: [
-      { id: 'app-6-1', approver: USERS['bob'], status: ApprovalStatus.PENDING },
+      { id: 'app-6-1', approver: USERS['bob'], status: ApprovalStatus.APPROVED },
     ],
   },
 ].map(c => ({
@@ -234,12 +236,15 @@ export const MOCK_CONTRACTS: Contract[] = [
     activeAt: undefined,
     expiredAt: undefined,
     archivedAt: undefined,
-    signatureProvider: undefined,
-    signatureEnvelopeId: undefined,
-    signatureStatus: undefined,
-    executedFileUrl: undefined,
     draftVersionId: undefined,
     executedVersionId: undefined,
+    // Add new nullable fields for renewals to mock data
+    startDate: c.effectiveDate,
+    autoRenew: AutoRenewType.NONE,
+    noticePeriodDays: 30,
+    renewalTermMonths: 12,
+    upliftPercent: 0,
+    parentContractId: undefined,
 }));
 
 const DUMMY_NDA_CONTENT = `
@@ -354,8 +359,11 @@ export const MOCK_NOTIFICATION_SETTINGS: NotificationSetting[] = [
 export const MOCK_USER_NOTIFICATION_SETTINGS: UserNotificationSettings = {
     id: 'user-notif-1',
     userId: 'user-1',
-    renewals: { email: true, inApp: true },
-    approvals: { email: true, inApp: true },
-    tasks: { email: false, inApp: true },
-    system: { email: false, inApp: true },
+    renewalDaysBefore: [90, 60, 30, 14, 7, 1],
+    preferences: {
+        renewals: { email: true, inApp: true },
+        approvals: { email: true, inApp: true },
+        tasks: { email: false, inApp: true },
+        system: { email: false, inApp: true },
+    }
 };

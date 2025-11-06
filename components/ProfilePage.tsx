@@ -106,12 +106,16 @@ const PreferencesTab = ({ theme, onThemeChange }: { theme: Theme, onThemeChange:
 );
 
 const NotificationsTab = ({ settings, setSettings }: { settings: UserNotificationSettings, setSettings: React.Dispatch<React.SetStateAction<UserNotificationSettings>> }) => {
-    const handleToggle = (type: keyof Omit<UserNotificationSettings, 'id' | 'userId'>, method: 'email' | 'inApp', value: boolean) => {
+    // FIX: Correctly handle nested state updates within the 'preferences' object.
+    const handleToggle = (type: keyof UserNotificationSettings['preferences'], method: 'email' | 'inApp', value: boolean) => {
         setSettings(prev => ({
             ...prev,
-            [type]: {
-                ...prev[type],
-                [method]: value
+            preferences: {
+                ...prev.preferences,
+                [type]: {
+                    ...prev.preferences[type],
+                    [method]: value
+                }
             }
         }));
     };
@@ -132,11 +136,13 @@ const NotificationsTab = ({ settings, setSettings }: { settings: UserNotificatio
                         <div className="flex items-center space-x-6">
                              <div className="text-center">
                                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Email</label>
-                                <ToggleSwitch enabled={settings[notif.key].email} onChange={(val) => handleToggle(notif.key, 'email', val)} />
+                                {/* FIX: Access nested 'preferences' object for notification settings. */}
+                                <ToggleSwitch enabled={settings.preferences[notif.key].email} onChange={(val) => handleToggle(notif.key, 'email', val)} />
                             </div>
                             <div className="text-center">
                                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">In-App</label>
-                                <ToggleSwitch enabled={settings[notif.key].inApp} onChange={(val) => handleToggle(notif.key, 'inApp', val)} />
+                                {/* FIX: Access nested 'preferences' object for notification settings. */}
+                                <ToggleSwitch enabled={settings.preferences[notif.key].inApp} onChange={(val) => handleToggle(notif.key, 'inApp', val)} />
                             </div>
                         </div>
                     </li>

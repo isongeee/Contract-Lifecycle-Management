@@ -1,9 +1,8 @@
 
 import React from 'react';
-import { LayoutDashboardIcon, FileTextIcon, UsersIcon, BookTextIcon, CheckCircleIcon, SettingsIcon, HomeIcon, BuildingOfficeIcon, UserIcon } from './icons';
+import { LayoutDashboardIcon, FileTextIcon, UsersIcon, BookTextIcon, CheckCircleIcon, SettingsIcon, HomeIcon, BuildingOfficeIcon, UserIcon, RefreshCwIcon } from './icons';
 import type { UserProfile } from '../types';
 
-// FIX: Changed component to React.FC to correctly handle props including the 'key' prop.
 const NavItem: React.FC<{ icon: React.ReactNode; label: string; active?: boolean; onClick: () => void; }> = ({ icon, label, active = false, onClick }) => (
   <button
     onClick={onClick}
@@ -21,6 +20,7 @@ const NavItem: React.FC<{ icon: React.ReactNode; label: string; active?: boolean
 const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboardIcon className="h-5 w-5" /> },
     { id: 'contracts', label: 'Contracts', icon: <FileTextIcon className="h-5 w-5" /> },
+    { id: 'renewals', label: 'Renewals', icon: <RefreshCwIcon className="h-5 w-5" /> },
     { id: 'counterparties', label: 'Counterparties', icon: <UsersIcon className="h-5 w-5" /> },
     { id: 'properties', label: 'Properties', icon: <HomeIcon className="h-5 w-5" /> },
     { id: 'templates', label: 'Templates', icon: <BookTextIcon className="h-5 w-5" /> },

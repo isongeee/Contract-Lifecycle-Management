@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import React from 'react';
 
@@ -23,6 +24,32 @@ export enum ContractStatus {
   EXPIRED = 'Expired',
   TERMINATED = 'Terminated',
   ARCHIVED = 'Archived',
+  SUPERSEDED = 'Superseded',
+}
+
+export enum RenewalStatus {
+    QUEUED = 'queued',
+    REVIEWING = 'reviewing',
+    DRAFTING = 'drafting',
+    APPROVING = 'approving',
+    SIGNING = 'signing',
+    EXECUTED = 'executed',
+    ACTIVATED = 'activated',
+    CANCELLED = 'cancelled',
+}
+
+export enum AutoRenewType {
+    NONE = 'none',
+    EVERGREEN = 'evergreen',
+    FIXED = 'fixed',
+}
+
+export enum RenewalMode {
+    AUTO = 'auto',
+    AMENDMENT = 'amendment',
+    NEW_CONTRACT = 'new_contract',
+    TERMINATE = 'terminate',
+    RENEW_AS_IS = 'renew_as_is',
 }
 
 export enum ApprovalStatus {
@@ -139,6 +166,29 @@ export interface ContractPropertyAllocation {
     manualEdits?: { [month: string]: boolean };
 }
 
+export interface AuditLog {
+    id: string;
+    createdAt: string;
+    user?: UserProfile;
+    relatedEntityType: 'contract' | 'renewal_request';
+    changeType: 'status' | 'renewal_status';
+    oldValue?: string;
+    newValue?: string;
+}
+
+export interface RenewalRequest {
+    id: string;
+    contractId: string;
+    companyId: string;
+    renewalOwner?: UserProfile;
+    mode: RenewalMode;
+    status: RenewalStatus;
+    noticeDeadline?: string;
+    internalDecisionDeadline?: string;
+    upliftPercent?: number;
+    notes?: string;
+}
+
 export interface Contract {
   id: string;
   title: string;
@@ -150,17 +200,13 @@ export interface Contract {
   owner: UserProfile;
   effectiveDate: string;
   endDate: string;
-  renewalDate?: string;
   value: number;
   frequency: ContractFrequency;
   seasonalMonths?: string[];
   versions: ContractVersion[];
   approvalSteps: ApprovalStep[];
-  extractedClauses?: Clause[];
-  riskSummary?: string;
   allocation: AllocationType;
   propertyAllocations?: ContractPropertyAllocation[];
-  // New lifecycle tracking fields
   submittedAt?: string;
   reviewStartedAt?: string;
   approvalStartedAt?: string;
@@ -171,14 +217,24 @@ export interface Contract {
   expiredAt?: string;
   archivedAt?: string;
   updatedAt?: string;
-  // New e-signature fields
-  signatureProvider?: string;
-  signatureEnvelopeId?: string;
-  signatureStatus?: string;
-  executedFileUrl?: string;
-  // New version FKs
   draftVersionId?: string;
   executedVersionId?: string;
+  
+  // Optional analysis fields
+  extractedClauses?: Clause[];
+  riskSummary?: string;
+
+  // Renewal Fields from new migration
+  startDate?: string;
+  autoRenew?: AutoRenewType;
+  noticePeriodDays?: number;
+  renewalTermMonths?: number;
+  upliftPercent?: number;
+  parentContractId?: string;
+  
+  // Associated data
+  renewalRequest?: RenewalRequest;
+  auditLogs?: AuditLog[];
 }
 
 export interface ContractTemplate {
@@ -217,8 +273,11 @@ export interface NotificationSetting {
 export interface UserNotificationSettings {
   id: string;
   userId: string;
-  renewals: { email: boolean; inApp: boolean };
-  approvals: { email: boolean; inApp: boolean };
-  tasks: { email: boolean; inApp: boolean };
-  system: { email: boolean; inApp: boolean };
+  renewalDaysBefore: number[];
+  preferences: {
+    renewals: { email: boolean; inApp: boolean };
+    approvals: { email: boolean; inApp: boolean };
+    tasks: { email: boolean; inApp: boolean };
+    system: { email: boolean; inApp: boolean };
+  };
 }
