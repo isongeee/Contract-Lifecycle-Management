@@ -1,10 +1,9 @@
-
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type { Contract, Clause, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile } from '../types';
-import { ContractStatus, ApprovalStatus } from '../types';
+import { ContractStatus, ApprovalStatus, ContractFrequency } from '../types';
 import StatusTag from './StatusTag';
 // FIX: Imported the missing ArchiveIcon component.
-import { ArrowLeftIcon, SparklesIcon, LoaderIcon, CopyIcon, FileTextIcon, ChevronDownIcon, ArchiveIcon, CheckCircleIcon, XCircleIcon } from './icons';
+import { ArrowLeftIcon, SparklesIcon, LoaderIcon, CopyIcon, FileTextIcon, ChevronDownIcon, ArchiveIcon, CheckCircleIcon, XCircleIcon, HomeIcon } from './icons';
 import { APPROVAL_STATUS_COLORS } from '../constants';
 import { summarizeContractRisk, extractClauses } from '../services/geminiService';
 import CreateVersionModal from './CreateVersionModal';
@@ -198,6 +197,126 @@ const formatPropertyAddress = (property: Property) => {
         `${property.city}, ${property.state} ${property.zipCode}`,
         property.country
     ].filter(Boolean).join(', ');
+};
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const formatMonthYear = (monthYear: string) => {
+    const [year, monthNum] = monthYear.split('-');
+    return `${MONTHS[parseInt(monthNum, 10) - 1]} ${year}`;
+};
+
+const AssociatedPropertiesCard = ({ contract, properties }: { contract: Contract, properties: Property[] }) => {
+    if (contract.allocation === 'portfolio') {
+        return (
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center"><HomeIcon className="w-5 h-5 mr-2 text-gray-400"/>Associated Properties</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">This is a portfolio-wide contract and is not associated with any specific properties.</p>
+            </div>
+        );
+    }
+
+    const associatedProperties = contract.allocation === 'single'
+        ? (contract.property ? [contract.property] : [])
+        : (contract.propertyAllocations || [])
+            .map(alloc => properties.find(p => p.id === alloc.propertyId))
+            .filter((p): p is Property => !!p);
+
+    if (!associatedProperties || associatedProperties.length === 0) return null;
+
+    return (
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center"><HomeIcon className="w-5 h-5 mr-2 text-gray-400"/>Associated Propert{associatedProperties.length > 1 ? 'ies' : 'y'}</h3>
+            <ul className="space-y-3">
+                {associatedProperties.map(prop => (
+                    prop && <li key={prop.id} className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md border dark:border-gray-700">
+                        <p className="font-semibold text-gray-800 dark:text-gray-200">{prop.name}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{formatPropertyAddress(prop)}</p>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+};
+
+const FinancialsAndAllocationCard = ({ contract, viewedVersion, properties }: { contract: Contract; viewedVersion: ContractVersion; properties: Property[] }) => {
+    const isSeasonal = contract.frequency === ContractFrequency.SEASONAL && contract.seasonalMonths && contract.seasonalMonths.length > 0;
+    const hasMultiAllocations = contract.allocation === 'multi' && contract.propertyAllocations && contract.propertyAllocations.length > 0;
+    const totalValue = viewedVersion.value;
+
+    const getPropertyName = (propertyId?: string) => {
+        if (!propertyId || propertyId === 'portfolio') return 'Portfolio-wide';
+        return properties.find(p => p.id === propertyId)?.name || 'Unknown Property';
+    };
+
+    const renderAllocationDetails = () => {
+        if (isSeasonal) {
+            return (
+                <div className="mt-4 pt-4 border-t dark:border-gray-700">
+                    <h4 className="text-md font-semibold text-gray-800 dark:text-gray-200 mb-3">Seasonal Allocation Breakdown</h4>
+                    <div className="space-y-4">
+                        {contract.propertyAllocations?.map(alloc => (
+                            <div key={alloc.id} className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md border dark:border-gray-700">
+                                <p className="font-semibold text-gray-800 dark:text-gray-200">{getPropertyName(alloc.propertyId)}</p>
+                                <dl className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-2">
+                                    {alloc.monthlyValues && Object.entries(alloc.monthlyValues)
+                                        .sort(([a], [b]) => a.localeCompare(b))
+                                        .map(([month, value]) => (
+                                        <div key={month}>
+                                            <dt className="text-xs text-gray-500 dark:text-gray-400">{formatMonthYear(month)}</dt>
+                                            <dd className="text-sm font-medium text-gray-900 dark:text-gray-100">{formatCurrency(value)}</dd>
+                                        </div>
+                                    ))}
+                                </dl>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        if (hasMultiAllocations) {
+            return (
+                 <div className="mt-4 pt-4 border-t dark:border-gray-700">
+                    <h4 className="text-md font-semibold text-gray-800 dark:text-gray-200 mb-3">Multi-Property Allocation</h4>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm">
+                            <thead className="text-left text-gray-500 dark:text-gray-400">
+                                <tr><th className="p-2 font-medium">Property</th><th className="p-2 font-medium">Allocated Value</th><th className="p-2 font-medium">% of Total</th></tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                {contract.propertyAllocations?.map(alloc => {
+                                    const percentage = totalValue > 0 ? (alloc.allocatedValue / totalValue) * 100 : 0;
+                                    return (
+                                        <tr key={alloc.id}>
+                                            <td className="p-2 font-semibold text-gray-800 dark:text-gray-200">{getPropertyName(alloc.propertyId)}</td>
+                                            <td className="p-2">{formatCurrency(alloc.allocatedValue)}</td>
+                                            <td className="p-2">{percentage.toFixed(2)}%</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        }
+        
+        return null;
+    };
+
+
+    return (
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Financials & Allocation</h3>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+                <DetailItem label="Total Contract Value" value={formatCurrency(totalValue)} />
+                <DetailItem label="Allocation Type" value={
+                    <span className="font-semibold">{contract.allocation.charAt(0).toUpperCase() + contract.allocation.slice(1)}</span>
+                } />
+            </dl>
+            {renderAllocationDetails()}
+        </div>
+    )
 }
 
 export default function ContractDetail({ contract: initialContract, properties, users, currentUser, onBack, onTransition, onCreateNewVersion }: ContractDetailProps) {
@@ -328,14 +447,8 @@ export default function ContractDetail({ contract: initialContract, properties, 
                 <DetailItem label="Contract Value" value={formatCurrency(viewedVersion.value)} />
                 <DetailItem label="Effective Date" value={viewedVersion.effectiveDate} />
                 <DetailItem label="End Date" value={viewedVersion.endDate} />
-                {viewedVersion.property && (
-                    <DetailItem label="Property" value={
-                        <span>
-                            {viewedVersion.property.name}
-                            <p className="text-xs text-gray-500 dark:text-gray-400">{formatPropertyAddress(viewedVersion.property)}</p>
-                        </span>
-                    } />
-                )}
+                <DetailItem label="Frequency" value={viewedVersion.frequency} />
+                <DetailItem label="Renewal Date" value={viewedVersion.renewalDate || 'N/A'} />
                 <DetailItem label="Owner" value={
                     <div className="flex items-center space-x-2">
                         <img className="h-6 w-6 rounded-full" src={contract.owner.avatarUrl} alt={`${contract.owner.firstName} ${contract.owner.lastName}`} />
@@ -347,6 +460,8 @@ export default function ContractDetail({ contract: initialContract, properties, 
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
+                <AssociatedPropertiesCard contract={contract} properties={properties} />
+                <FinancialsAndAllocationCard contract={contract} viewedVersion={viewedVersion} properties={properties} />
                 <AiAnalysis 
                     onSummary={handleSummarizeRisk}
                     onExtract={handleExtractClauses}
