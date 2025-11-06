@@ -87,11 +87,19 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
 
   const sortedContracts = useMemo(() => {
     return [...filteredContracts].sort((a, b) => {
-        let valA, valB;
+        let valA: string | number, valB: string | number;
         switch (sortKey) {
             case 'title':
                 valA = a.title.toLowerCase();
                 valB = b.title.toLowerCase();
+                break;
+            case 'counterparty':
+                valA = a.counterparty.name.toLowerCase();
+                valB = b.counterparty.name.toLowerCase();
+                break;
+            case 'status':
+                valA = a.status.toLowerCase();
+                valB = b.status.toLowerCase();
                 break;
             case 'value':
                 valA = a.value;
@@ -111,6 +119,15 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
         return 0;
     });
   }, [filteredContracts, sortKey, sortDirection]);
+  
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+        setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+        setSortKey(key);
+        setSortDirection('asc');
+    }
+  };
 
   const handleCreateNew = () => {
     onStartCreate();
@@ -129,6 +146,23 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
       ...riskOptions,
       { value: 'HighAndCritical', label: 'High / Critical' }
   ];
+
+  // FIX: Refactored SortableHeader to use a 'label' prop instead of children to resolve typing issue.
+  const SortableHeader = ({ label, columnKey }: { label: React.ReactNode; columnKey: string }) => {
+    const isActive = sortKey === columnKey;
+    return (
+        <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+            <button onClick={() => handleSort(columnKey)} className="flex items-center space-x-1 group">
+                <span>{label}</span>
+                <span className={`transition-opacity ${isActive ? 'opacity-100' : 'opacity-20 group-hover:opacity-100'}`}>
+                    {isActive && sortDirection === 'asc' && <ArrowUpIcon className="h-4 w-4" />}
+                    {isActive && sortDirection === 'desc' && <ArrowDownIcon className="h-4 w-4" />}
+                    {!isActive && <ArrowUpIcon className="h-4 w-4" />}
+                </span>
+            </button>
+        </th>
+    );
+  };
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm">
@@ -162,31 +196,13 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 items-end">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 items-end">
             <FilterDropdown label="Types" options={typeOptions} selected={typeFilter} onChange={setTypeFilter} />
             <FilterDropdown label="Statuses" options={statusOptions} selected={statusFilter} onChange={setStatusFilter} />
             <FilterDropdown label="Risk Levels" options={specialRiskOptions} selected={riskFilter} onChange={setRiskFilter} />
             <FilterDropdown label="Frequencies" options={frequencyOptions} selected={frequencyFilter} onChange={setFrequencyFilter} />
-            <div className="lg:col-span-2 flex items-center justify-end space-x-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Sort by:</label>
-                <select 
-                    className="appearance-none bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 pl-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 dark:text-gray-200"
-                    value={sortKey}
-                    onChange={(e) => setSortKey(e.target.value)}
-                >
-                    <option value="endDate">End Date</option>
-                    <option value="updatedAt">Last Updated</option>
-                    <option value="title">Title</option>
-                    <option value="value">Value</option>
-                </select>
-                <button
-                    onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
-                    className="p-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600"
-                    aria-label={`Sort ${sortDirection === 'asc' ? 'descending' : 'ascending'}`}
-                >
-                    {sortDirection === 'asc' ? <ArrowUpIcon className="h-5 w-5 text-gray-600 dark:text-gray-300"/> : <ArrowDownIcon className="h-5 w-5 text-gray-600 dark:text-gray-300"/>}
-                </button>
-                 <button onClick={handleClearFilters} className="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600">
+            <div className="flex items-center justify-end">
+                <button onClick={handleClearFilters} className="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600">
                     Clear All
                 </button>
             </div>
@@ -196,11 +212,16 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
             <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Title</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Counterparty</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Status</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Value</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">End Date</th>
+              {/* FIX: Changed SortableHeader to use the 'label' prop instead of children. */}
+              <SortableHeader columnKey="title" label="Title" />
+              {/* FIX: Changed SortableHeader to use the 'label' prop instead of children. */}
+              <SortableHeader columnKey="counterparty" label="Counterparty" />
+              {/* FIX: Changed SortableHeader to use the 'label' prop instead of children. */}
+              <SortableHeader columnKey="status" label="Status" />
+              {/* FIX: Changed SortableHeader to use the 'label' prop instead of children. */}
+              <SortableHeader columnKey="value" label="Value" />
+              {/* FIX: Changed SortableHeader to use the 'label' prop instead of children. */}
+              <SortableHeader columnKey="endDate" label="End Date" />
               <th scope="col" className="relative px-6 py-3"><span className="sr-only">View</span></th>
             </tr>
           </thead>
