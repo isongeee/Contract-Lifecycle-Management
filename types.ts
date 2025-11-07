@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import React from 'react';
 
@@ -142,6 +141,15 @@ export interface ApprovalStep {
   approvedAt?: string;
 }
 
+export interface Comment {
+    id: string;
+    createdAt: string;
+    content: string;
+    author: UserProfile;
+    versionId: string;
+    resolvedAt?: string;
+}
+
 export interface ContractVersion {
   id: string;
   versionNumber: number;
@@ -157,6 +165,7 @@ export interface ContractVersion {
   frequency: ContractFrequency;
   seasonalMonths?: string[];
   property?: Property;
+  comments?: Comment[];
 }
 
 export interface Clause {
@@ -243,6 +252,7 @@ export interface Contract {
   // E-Signature fields
   signingStatus?: SigningStatus;
   signingStatusUpdatedAt?: string;
+  docusignEnvelopeId?: string;
 
   // Associated data
   renewalRequest?: RenewalRequest;
