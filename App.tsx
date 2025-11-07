@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType, PermissionSet, AuditLog, RenewalRequest, RenewalStatus, SigningStatus } from './types';
 import { ContractStatus, RiskLevel, ApprovalStatus, RenewalStatus as RenewalStatusEnum, RenewalMode, SigningStatus as SigningStatusEnum } from './types';
@@ -159,6 +158,21 @@ export default function App() {
         contractIds.length > 0 ? supabase.from('audit_logs').select('*').in('related_entity_id', contractIds).eq('related_entity_type', 'renewal_request') : Promise.resolve({ data: [] })
     ]);
 
+    const renewalRequestIds = (renewalsRes.data || []).map(r => r.id);
+    const { data: feedbackData } = renewalRequestIds.length > 0 ? await supabase.from('renewal_feedback').select('*').in('renewal_request_id', renewalRequestIds) : { data: [] };
+    const feedbackByRenewalId = (feedbackData || []).reduce((acc, feedback) => {
+        const feedbacks = acc.get(feedback.renewal_request_id) || [];
+        feedbacks.push({
+            id: feedback.id,
+            renewalRequestId: feedback.renewal_request_id,
+            user: usersMap.get(feedback.user_id)!,
+            feedback: feedback.feedback,
+            createdAt: feedback.created_at,
+        });
+        acc.set(feedback.renewal_request_id, feedbacks);
+        return acc;
+    }, new Map<string, any[]>());
+
     const versionIds = (versionsRes.data || []).map(v => v.id);
     const { data: commentsData } = versionIds.length > 0 ? await supabase.from('comments').select('*').in('version_id', versionIds) : { data: [] };
     const commentsByVersionId = (commentsData || []).reduce((acc, comment) => {
@@ -213,7 +227,15 @@ export default function App() {
     }
     for (const renewal of (renewalsRes.data || [])) {
         const contract = contractsById.get(renewal.contract_id);
-        if (contract) contract.renewalRequest = { ...renewal, contractId: renewal.contract_id, companyId: renewal.company_id, renewalOwner: usersMap.get(renewal.renewal_owner_id) };
+        if (contract) {
+            contract.renewalRequest = { 
+                ...renewal, 
+                contractId: renewal.contract_id, 
+                companyId: renewal.company_id, 
+                renewalOwner: usersMap.get(renewal.renewal_owner_id),
+                feedback: feedbackByRenewalId.get(renewal.id) || [],
+            };
+        }
     }
     for (const audit of (auditsRes.data || [])) {
         const contract = contractsById.get(audit.related_entity_id);
@@ -385,7 +407,7 @@ export default function App() {
       company_id: currentUser.companyId, app_id: currentUser.appId,
     };
     
-    const { data: insertedContract, error: contractError } = await supabase.from('contracts').insert(contractRecord).select().single();
+    const { data: insertedContract, error: contractError } = await supabase.from('contracts').insert([contractRecord]).select().single();
     if (contractError) { console.error("Error creating contract:", contractError); return; }
 
     const versionData = newContractData.versions![0];
@@ -396,7 +418,7 @@ export default function App() {
       frequency: versionData.frequency, seasonal_months: versionData.seasonalMonths,
       property_id: versionData.property?.id, company_id: currentUser.companyId, app_id: currentUser.appId,
     };
-    const { error: versionError } = await supabase.from('contract_versions').insert(versionRecord);
+    const { error: versionError } = await supabase.from('contract_versions').insert([versionRecord]);
      if (versionError) { console.error("Error creating version:", versionError); return; }
     
     if (newContractData.propertyAllocations && newContractData.propertyAllocations.length > 0) {
@@ -417,13 +439,13 @@ export default function App() {
   const handleCancelCreateCounterparty = () => setIsCreatingCounterparty(false);
   const handleFinalizeCreateCounterparty = async (newCounterpartyData: Omit<Counterparty, 'id'>) => {
      if (!currentUser?.companyId || !currentUser?.appId) return;
-    const { data: insertedCounterparty, error } = await supabase.from('counterparties').insert({
+    const { data: insertedCounterparty, error } = await supabase.from('counterparties').insert([{
         name: newCounterpartyData.name, type: newCounterpartyData.type, address_line1: newCounterpartyData.addressLine1,
         address_line2: newCounterpartyData.addressLine2, city: newCounterpartyData.city, state: newCounterpartyData.state,
         zip_code: newCounterpartyData.zipCode, country: newCounterpartyData.country, contact_name: newCounterpartyData.contactName,
         contact_email: newCounterpartyData.contactEmail, contact_phone: newCounterpartyData.contactPhone,
         company_id: currentUser.companyId, app_id: currentUser.appId,
-    }).select().single();
+    }]).select().single();
     
     if (error) { console.error("Error creating counterparty:", error); } 
     else if (insertedCounterparty) { setCounterparties(prev => [...prev, { ...insertedCounterparty, addressLine1: insertedCounterparty.address_line1, addressLine2: insertedCounterparty.address_line2, zipCode: insertedCounterparty.zip_code, contactName: insertedCounterparty.contact_name, contactEmail: insertedCounterparty.contact_email, contactPhone: insertedCounterparty.contact_phone }]); }
@@ -434,11 +456,11 @@ export default function App() {
   const handleCancelCreateProperty = () => setIsCreatingProperty(false);
   const handleFinalizeCreateProperty = async (newPropertyData: Omit<Property, 'id'>) => {
     if (!currentUser?.companyId || !currentUser?.appId) return;
-    const { data: insertedProperty, error } = await supabase.from('properties').insert({
+    const { data: insertedProperty, error } = await supabase.from('properties').insert([{
         name: newPropertyData.name, address_line1: newPropertyData.addressLine1, address_line2: newPropertyData.addressLine2,
         city: newPropertyData.city, state: newPropertyData.state, zip_code: newPropertyData.zipCode,
         country: newPropertyData.country, company_id: currentUser.companyId, app_id: currentUser.appId,
-    }).select().single();
+    }]).select().single();
 
      if (error) { console.error("Error creating property:", error); } 
      else if (insertedProperty) { setProperties(prev => [...prev, { ...insertedProperty, addressLine1: insertedProperty.address_line1, addressLine2: insertedProperty.address_line2, zipCode: insertedProperty.zip_code, }]);}
@@ -528,7 +550,7 @@ export default function App() {
   const handleCreateRenewalRequest = async (contract: Contract) => {
     if (!currentUser || !contract) return;
     
-    const { error } = await supabase.from('renewal_requests').insert({
+    const { error } = await supabase.from('renewal_requests').insert([{
         contract_id: contract.id,
         company_id: currentUser.companyId,
         app_id: currentUser.appId,
@@ -536,7 +558,7 @@ export default function App() {
         mode: null, // Mode will be decided by the user
         status: RenewalStatusEnum.QUEUED,
         uplift_percent: contract.upliftPercent || 0,
-    });
+    }]);
 
     if (error) {
         console.error("Error creating renewal request:", error);
@@ -583,13 +605,13 @@ export default function App() {
       
       const latestVersionNumber = contractToUpdate.versions.length > 0 ? Math.max(...contractToUpdate.versions.map(v => v.versionNumber)) : 0;
       
-      const { data: insertedVersion, error: versionError } = await supabase.from('contract_versions').insert({
+      const { data: insertedVersion, error: versionError } = await supabase.from('contract_versions').insert([{
           contract_id: contractId, version_number: latestVersionNumber + 1, author_id: currentUser.id,
           content: newVersionData.content, file_name: newVersionData.fileName, value: newVersionData.value,
           effective_date: newVersionData.effectiveDate, end_date: newVersionData.endDate,
           frequency: newVersionData.frequency, seasonal_months: newVersionData.seasonalMonths,
           property_id: newVersionData.property?.id, company_id: currentUser.companyId, app_id: currentUser.appId,
-      }).select().single();
+      }]).select().single();
       if (versionError || !insertedVersion) { console.error("Error creating new version:", versionError); return; }
 
       const { error: contractUpdateError } = await supabase.from('contracts').update({
@@ -616,7 +638,7 @@ export default function App() {
 
   const handleCreateRole = async (name: string, description: string) => {
     if (!currentUser?.companyId || !currentUser?.appId) return;
-    const { data, error } = await supabase.from('roles').insert({ name, description, permissions: requestorPermissions, company_id: currentUser.companyId, app_id: currentUser.appId, }).select().single();
+    const { data, error } = await supabase.from('roles').insert([{ name, description, permissions: requestorPermissions, company_id: currentUser.companyId, app_id: currentUser.appId, }]).select().single();
     if (error) { console.error("Error creating role:", error); alert("Failed to create role."); return; }
     if (data) { setRoles(prev => [...prev, { ...data, userCount: 0, permissions: data.permissions as any }].sort((a,b) => a.name.localeCompare(b.name))); }
   };
@@ -635,16 +657,19 @@ export default function App() {
   const handleCreateComment = async (versionId: string, content: string) => {
     if (!currentUser?.companyId || !currentUser?.appId) return;
 
-    const { error } = await supabase.from('comments').insert({
-        version_id: versionId,
-        content: content,
-        author_id: currentUser.id,
-        company_id: currentUser.companyId,
-        app_id: currentUser.appId
-    });
+    const { error } = await supabase.from('comments').insert([
+        {
+            version_id: versionId,
+            content: content,
+            author_id: currentUser.id,
+            company_id: currentUser.companyId,
+            app_id: currentUser.appId
+        }
+    ]);
 
     if (error) {
       console.error("Error creating comment:", error);
+      alert(`Failed to post comment: ${error.message}`);
     } else {
       const updatedContracts = await fetchData(currentUser);
       if (selectedContract) {
@@ -669,13 +694,33 @@ export default function App() {
     }
   };
 
+  const handleCreateRenewalFeedback = async (renewalRequestId: string, feedbackText: string) => {
+    if (!currentUser) return;
+    const { error } = await supabase.from('renewal_feedback').insert([{
+        renewal_request_id: renewalRequestId,
+        user_id: currentUser.id,
+        feedback: feedbackText,
+        company_id: currentUser.companyId,
+        app_id: currentUser.appId
+    }]);
+    if (error) {
+        console.error("Error submitting feedback:", error);
+        alert("Failed to submit feedback.");
+    } else {
+        const updatedContracts = await fetchData(currentUser);
+        if (selectedContract) {
+            setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null);
+        }
+    }
+  };
+
   const renderContent = () => {
     if (isLoading || !currentUser) {
         return ( <div className="flex items-center justify-center h-full"> <LoaderIcon className="w-12 h-12 text-primary" /> <span className="ml-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Loading Data...</span> </div> )
     }
     switch(activeView) {
       case 'dashboard': return <Dashboard contracts={contracts} onMetricClick={handleMetricNavigation} currentUser={currentUser} onSelectContract={handleSelectContract} />;
-      case 'contracts': return selectedContract ? ( <ContractDetail contract={selectedContract} contracts={contracts} onSelectContract={handleSelectContract} users={users} properties={properties} currentUser={currentUser} onBack={handleBackToList} onTransition={handleContractTransition} onCreateNewVersion={handleCreateNewVersion} onRenewalDecision={handleRenewalDecision} onCreateRenewalRequest={handleCreateRenewalRequest} onRenewAsIs={handleRenewAsIs} onUpdateSigningStatus={handleSigningStatusUpdate} onCreateComment={handleCreateComment} onResolveComment={handleResolveComment} /> ) : ( <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={handleStartCreate} initialFilters={initialFilters} currentUser={currentUser} /> );
+      case 'contracts': return selectedContract ? ( <ContractDetail contract={selectedContract} contracts={contracts} onSelectContract={handleSelectContract} users={users} properties={properties} currentUser={currentUser} onBack={handleBackToList} onTransition={handleContractTransition} onCreateNewVersion={handleCreateNewVersion} onRenewalDecision={handleRenewalDecision} onCreateRenewalRequest={handleCreateRenewalRequest} onRenewAsIs={handleRenewAsIs} onUpdateSigningStatus={handleSigningStatusUpdate} onCreateComment={handleCreateComment} onResolveComment={handleResolveComment} onCreateRenewalFeedback={handleCreateRenewalFeedback} /> ) : ( <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={handleStartCreate} initialFilters={initialFilters} currentUser={currentUser} /> );
       case 'renewals': return <RenewalsPage contracts={contracts} onSelectContract={handleSelectContract} users={users} notificationSettings={userNotificationSettings} onUpdateNotificationSettings={setUserNotificationSettings} />;
       case 'approvals': return <ApprovalsPage contracts={contracts} onTransition={handleContractTransition} currentUser={currentUser} />;
       case 'signing': return <SigningPage contracts={contracts} onSelectContract={handleSelectContract} onUpdateSigningStatus={handleSigningStatusUpdate} onMarkAsExecuted={handleMarkAsExecuted} />;

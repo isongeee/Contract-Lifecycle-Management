@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { Contract, UserProfile } from '../types';
 import { ContractStatus, ContractType, RiskLevel, ContractFrequency } from '../types';
 import StatusTag from './StatusTag';
@@ -38,9 +38,73 @@ const statusOptions = Object.values(ContractStatus).map(s => ({ value: s, label:
 const riskOptions = Object.values(RiskLevel).map(r => ({ value: r, label: r }));
 const frequencyOptions = Object.values(ContractFrequency).map(f => ({ value: f, label: f }));
 
+const defaultVisibleStatuses = Object.values(ContractStatus).filter(s => s !== ContractStatus.ARCHIVED && s !== ContractStatus.SUPERSEDED);
+
+const StatusFilterDropdown = ({ selected, onChange }: { selected: Set<ContractStatus>; onChange: (statuses: Set<ContractStatus>) => void; }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleToggle = (status: ContractStatus) => {
+        const newSet = new Set(selected);
+        if (newSet.has(status)) {
+            newSet.delete(status);
+        } else {
+            newSet.add(status);
+        }
+        onChange(newSet);
+    };
+    
+    const handleSelectAll = (isChecked: boolean) => {
+        onChange(isChecked ? new Set(Object.values(ContractStatus)) : new Set());
+    };
+    
+    const allSelected = selected.size === Object.values(ContractStatus).length;
+
+    return (
+        <div className="relative" ref={dropdownRef}>
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="appearance-none w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 pl-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 dark:text-gray-200 text-left flex justify-between items-center"
+            >
+                <span>{selected.size === 0 ? "Select Status" : `${selected.size} Status${selected.size > 1 ? 'es' : ''} selected`}</span>
+                <ChevronDownIcon className="h-4 w-4" />
+            </button>
+            {isOpen && (
+                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    <div className="p-2 border-b border-gray-200 dark:border-gray-600">
+                        <label className="flex items-center space-x-2 px-2 py-1">
+                            <input type="checkbox" checked={allSelected} onChange={e => handleSelectAll(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">All Statuses</span>
+                        </label>
+                    </div>
+                    <div className="p-2">
+                        {Object.values(ContractStatus).map(status => (
+                            <label key={status} className="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600">
+                                <input type="checkbox" checked={selected.has(status)} onChange={() => handleToggle(status)} className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                                <StatusTag type="contract" status={status} />
+                            </label>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+
 export default function ContractsList({ contracts, onSelectContract, onStartCreate, initialFilters = {}, currentUser }: ContractsListProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState(initialFilters.status || '');
+  const [visibleStatuses, setVisibleStatuses] = useState<Set<ContractStatus>>(new Set(defaultVisibleStatuses));
   const [typeFilter, setTypeFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
   const [frequencyFilter, setFrequencyFilter] = useState('');
@@ -49,15 +113,19 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
-    setStatusFilter(initialFilters.status || '');
+      if (initialFilters.status) {
+          setVisibleStatuses(new Set([initialFilters.status as ContractStatus]));
+      } else {
+          setVisibleStatuses(new Set(defaultVisibleStatuses));
+      }
+    
     setOwnerFilter(initialFilters.ownerId || '');
     if (initialFilters.riskLevels?.includes(RiskLevel.HIGH) && initialFilters.riskLevels?.includes(RiskLevel.CRITICAL)) {
         setRiskFilter('HighAndCritical');
     } else {
         setRiskFilter('');
     }
-    // Reset other filters unless they are the primary one being set
-    if (!initialFilters.status) setStatusFilter('');
+    // Reset other filters
     if (!initialFilters.ownerId) setOwnerFilter('');
     if (!initialFilters.riskLevels) setRiskFilter('');
     setTypeFilter('');
@@ -77,13 +145,13 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
     return (
       (contract.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
        contract.counterparty.name.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (statusFilter === '' || contract.status === statusFilter) &&
+      (visibleStatuses.has(contract.status)) &&
       (typeFilter === '' || contract.type === typeFilter) &&
       (ownerFilter === '' || contract.owner.id === ownerFilter) &&
       (frequencyFilter === '' || contract.frequency === frequencyFilter) &&
       riskMatch()
     );
-  }), [contracts, searchTerm, statusFilter, typeFilter, riskFilter, frequencyFilter, ownerFilter]);
+  }), [contracts, searchTerm, visibleStatuses, typeFilter, riskFilter, frequencyFilter, ownerFilter]);
 
   const sortedContracts = useMemo(() => {
     return [...filteredContracts].sort((a, b) => {
@@ -135,7 +203,7 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
   
   const handleClearFilters = () => {
     setSearchTerm('');
-    setStatusFilter('');
+    setVisibleStatuses(new Set(defaultVisibleStatuses));
     setTypeFilter('');
     setRiskFilter('');
     setFrequencyFilter('');
@@ -198,7 +266,7 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 items-end">
             <FilterDropdown label="Types" options={typeOptions} selected={typeFilter} onChange={setTypeFilter} />
-            <FilterDropdown label="Statuses" options={statusOptions} selected={statusFilter} onChange={setStatusFilter} />
+            <StatusFilterDropdown selected={visibleStatuses} onChange={setVisibleStatuses} />
             <FilterDropdown label="Risk Levels" options={specialRiskOptions} selected={riskFilter} onChange={setRiskFilter} />
             <FilterDropdown label="Frequencies" options={frequencyOptions} selected={frequencyFilter} onChange={setFrequencyFilter} />
             <div className="flex items-center justify-end">
@@ -212,15 +280,10 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
             <tr>
-              {/* FIX: Changed SortableHeader to use the 'label' prop instead of children. */}
               <SortableHeader columnKey="title" label="Title" />
-              {/* FIX: Changed SortableHeader to use the 'label' prop instead of children. */}
               <SortableHeader columnKey="counterparty" label="Counterparty" />
-              {/* FIX: Changed SortableHeader to use the 'label' prop instead of children. */}
               <SortableHeader columnKey="status" label="Status" />
-              {/* FIX: Changed SortableHeader to use the 'label' prop instead of children. */}
               <SortableHeader columnKey="value" label="Value" />
-              {/* FIX: Changed SortableHeader to use the 'label' prop instead of children. */}
               <SortableHeader columnKey="endDate" label="End Date" />
               <th scope="col" className="relative px-6 py-3"><span className="sr-only">View</span></th>
             </tr>

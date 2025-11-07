@@ -1,13 +1,16 @@
+
 import React, { useState, useMemo } from 'react';
-import type { Contract, RenewalMode } from '../types';
+import type { Contract, RenewalMode, UserProfile } from '../types';
 import { XIcon, RefreshCwIcon, FileTextIcon, EditIcon, XCircleIcon, SparklesIcon, LoaderIcon, UserIcon } from './icons';
 import { summarizePerformanceMetrics } from '../services/geminiService';
 
 interface RenewalDecisionModalProps {
     contract: Contract;
     contracts: Contract[];
+    currentUser: UserProfile;
     onClose: () => void;
     onConfirm: (mode: RenewalMode, notes?: string) => void;
+    onCreateRenewalFeedback: (renewalRequestId: string, feedbackText: string) => void;
 }
 
 const decisionOptions = [
@@ -50,16 +53,13 @@ const InfoItem = ({ label, value, className = '' }: { label: string; value: Reac
     </div>
 );
 
-const mockStakeholderFeedback = [
-    { name: 'Bob Williams', role: 'Sales Director', feedback: 'The reporting from this vendor has been inconsistent. We need to tighten the SLAs around data delivery in the next term.'},
-    { name: 'Diana Prince', role: 'Procurement', feedback: 'Overall, the service has been good, but we should explore if there are opportunities for cost savings or bundling additional services.'},
-];
 
-export default function RenewalDecisionModal({ contract, contracts, onClose, onConfirm }: RenewalDecisionModalProps) {
+export default function RenewalDecisionModal({ contract, contracts, currentUser, onClose, onConfirm, onCreateRenewalFeedback }: RenewalDecisionModalProps) {
     const [selectedMode, setSelectedMode] = useState<RenewalMode | null>(null);
     const [justification, setJustification] = useState('');
     const [performanceSummary, setPerformanceSummary] = useState('');
     const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+    const [newFeedback, setNewFeedback] = useState('');
 
     const lifetimeValue = useMemo(() => {
         let total = contract.value;
@@ -87,6 +87,13 @@ export default function RenewalDecisionModal({ contract, contracts, onClose, onC
         setIsGeneratingSummary(false);
     };
 
+    const handleAddFeedback = () => {
+        if (newFeedback.trim() && contract.renewalRequest) {
+            onCreateRenewalFeedback(contract.renewalRequest.id, newFeedback);
+            setNewFeedback('');
+        }
+    };
+
     const isConfirmDisabled = selectedMode === 'terminate' && justification.trim() === '';
 
     const handleConfirm = () => {
@@ -97,6 +104,7 @@ export default function RenewalDecisionModal({ contract, contracts, onClose, onC
 
     const upliftAmount = contract.value * ((contract.renewalRequest?.upliftPercent || 0) / 100);
     const projectedValue = contract.value + upliftAmount;
+    const stakeholderFeedback = contract.renewalRequest?.feedback || [];
 
     return (
         <div className="relative z-20" aria-labelledby="modal-title" role="dialog" aria-modal="true">
@@ -151,17 +159,28 @@ export default function RenewalDecisionModal({ contract, contracts, onClose, onC
                                </div>
                                {/* Stakeholder Feedback */}
                                <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border dark:border-gray-600">
-                                   <h5 className="font-semibold text-gray-700 dark:text-gray-300">Stakeholder Feedback (Simulated)</h5>
-                                   <div className="mt-2 space-y-3">
-                                       {mockStakeholderFeedback.map((fb, i) => (
-                                           <div key={i} className="flex items-start space-x-3">
-                                               <UserIcon className="w-8 h-8 p-1.5 text-gray-500 bg-gray-100 dark:bg-gray-700 rounded-full" />
+                                   <h5 className="font-semibold text-gray-700 dark:text-gray-300">Stakeholder Feedback</h5>
+                                   <div className="mt-2 space-y-3 max-h-40 overflow-y-auto">
+                                       {stakeholderFeedback.length > 0 ? stakeholderFeedback.map((fb) => (
+                                           <div key={fb.id} className="flex items-start space-x-3">
+                                               <img src={fb.user.avatarUrl} alt="" className="h-8 w-8 rounded-full" />
                                                <div>
-                                                   <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{fb.name} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">({fb.role})</span></p>
+                                                   <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{fb.user.firstName} {fb.user.lastName} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">({fb.user.role})</span></p>
                                                    <p className="text-sm text-gray-600 dark:text-gray-400 italic">"{fb.feedback}"</p>
                                                </div>
                                            </div>
-                                       ))}
+                                       )) : (
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">No feedback has been submitted for this renewal yet.</p>
+                                       )}
+                                   </div>
+                                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600 flex items-start space-x-3">
+                                        <img src={currentUser.avatarUrl} alt="" className="h-8 w-8 rounded-full" />
+                                        <div className="flex-1">
+                                            <textarea value={newFeedback} onChange={e => setNewFeedback(e.target.value)} placeholder="Add your feedback..." rows={2} className="w-full text-sm p-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-primary focus:border-primary bg-white dark:bg-gray-900" />
+                                            <div className="text-right mt-2">
+                                                <button onClick={handleAddFeedback} className="px-3 py-1.5 text-xs font-semibold text-white bg-primary-600 rounded-md hover:bg-primary-700">Submit Feedback</button>
+                                            </div>
+                                        </div>
                                    </div>
                                </div>
                             </div>

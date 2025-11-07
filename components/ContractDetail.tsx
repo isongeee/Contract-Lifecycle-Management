@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type { Contract, Clause, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, AuditLog, RenewalStatus, RenewalMode, SigningStatus, Comment } from '../types';
 import { ContractStatus, ApprovalStatus, ContractFrequency, RenewalStatus as RenewalStatusEnum, SigningStatus as SigningStatusEnum, RenewalMode as RenewalModeEnum } from '../types';
@@ -31,6 +32,7 @@ interface ContractDetailProps {
   onUpdateSigningStatus: (contractId: string, status: SigningStatus) => void;
   onCreateComment: (versionId: string, content: string) => void;
   onResolveComment: (commentId: string, isResolved: boolean) => void;
+  onCreateRenewalFeedback: (renewalRequestId: string, feedbackText: string) => void;
 }
 
 const ContractActions = ({ contract, onRequestTransition, onOpenApprovalModal, onStartCreateNewVersion }: { contract: Contract, onRequestTransition: (action: ContractAction) => void, onOpenApprovalModal: () => void, onStartCreateNewVersion: () => void }) => {
@@ -481,7 +483,7 @@ const daysUntil = (dateStr: string) => {
 };
 
 
-export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalDecision, onCreateRenewalRequest, onSelectContract, onRenewAsIs, onUpdateSigningStatus, onCreateComment, onResolveComment }: ContractDetailProps) {
+export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalDecision, onCreateRenewalRequest, onSelectContract, onRenewAsIs, onUpdateSigningStatus, onCreateComment, onResolveComment, onCreateRenewalFeedback }: ContractDetailProps) {
   const [contract, setContract] = useState(initialContract);
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const [isRequestingApproval, setIsRequestingApproval] = useState(false);
@@ -726,6 +728,8 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                     onRenewalDecision(contract.renewalRequest!.id, mode, notes);
                     setIsMakingDecision(false);
                 }}
+                currentUser={currentUser}
+                onCreateRenewalFeedback={onCreateRenewalFeedback}
             />
         )}
     </div>

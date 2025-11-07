@@ -190,6 +190,14 @@ export interface AuditLog {
     newValue?: string;
 }
 
+export interface RenewalFeedback {
+    id: string;
+    renewalRequestId: string;
+    user: UserProfile;
+    feedback: string;
+    createdAt: string;
+}
+
 export interface RenewalRequest {
     id: string;
     contractId: string;
@@ -201,6 +209,7 @@ export interface RenewalRequest {
     internalDecisionDeadline?: string;
     upliftPercent?: number;
     notes?: string;
+    feedback?: RenewalFeedback[];
 }
 
 export interface Contract {
