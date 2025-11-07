@@ -31,6 +31,24 @@ export const summarizeContractRisk = async (contractText: string): Promise<strin
   }
 };
 
+export const summarizePerformanceMetrics = async (contractText: string): Promise<string> => {
+  if (!API_KEY) return "API Key not configured.";
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `You are a contract manager. Analyze the following contract text to identify key performance indicators (KPIs), service level agreements (SLAs), and critical obligations. Provide a concise, bulleted summary of these performance-related items. If no specific metrics are found, summarize the main obligations. Contract Text: \n\n${contractText}`,
+      config: {
+        temperature: 0.3,
+      },
+    });
+    return response.text;
+  } catch (error) {
+    console.error("Error summarizing performance metrics:", error);
+    return "An error occurred while analyzing the contract's performance metrics.";
+  }
+};
+
+
 export const extractClauses = async (contractText: string): Promise<Clause[]> => {
   if (!API_KEY) {
       console.warn("API Key not configured.");
@@ -74,5 +92,39 @@ export const extractClauses = async (contractText: string): Promise<Clause[]> =>
   } catch (error) {
     console.error("Error extracting clauses:", error);
     return [];
+  }
+};
+
+export const generateRenewalDraft = async (previousContractText: string, userPrompt: string): Promise<string> => {
+  if (!API_KEY) return "API Key not configured. Please check your environment variables.";
+  try {
+    const response = await ai.models.generateContent({
+      // Use 'gemini-2.5-pro' for complex drafting tasks
+      model: 'gemini-2.5-pro',
+      contents: `You are an expert contract lawyer. Your task is to draft a renewal document.
+      Based on the provided "PREVIOUS CONTRACT TEXT" and the "USER INSTRUCTIONS", generate a complete and professional new contract draft.
+      Ensure the new draft is a standalone document, incorporating all necessary clauses from the previous version, modified according to the user's instructions.
+      Do not just output the changed clauses; provide the full contract text.
+
+      PREVIOUS CONTRACT TEXT:
+      ---
+      ${previousContractText}
+      ---
+      
+      USER INSTRUCTIONS FOR RENEWAL:
+      ---
+      ${userPrompt}
+      ---
+      
+      NEW DRAFT:`,
+       config: {
+        temperature: 0.4,
+      },
+    });
+    // Correctly get text from response.text
+    return response.text;
+  } catch (error) {
+    console.error("Error generating renewal draft:", error);
+    return "An error occurred while generating the contract draft. Please try again.";
   }
 };

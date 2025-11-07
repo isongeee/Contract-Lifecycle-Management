@@ -1,12 +1,13 @@
 
 import React from 'react';
-import { ContractStatus, RiskLevel, RenewalStatus } from '../types';
-import { STATUS_COLORS, RISK_COLORS, RENEWAL_STATUS_COLORS } from '../constants';
+import { ContractStatus, RiskLevel, RenewalStatus, SigningStatus } from '../types';
+import { STATUS_COLORS, RISK_COLORS, RENEWAL_STATUS_COLORS, SIGNING_STATUS_COLORS } from '../constants';
 
 type StatusTagProps = 
   | { type: 'contract'; status: ContractStatus }
   | { type: 'risk'; status: RiskLevel }
-  | { type: 'renewal'; status: RenewalStatus };
+  | { type: 'renewal'; status: RenewalStatus }
+  | { type: 'signing'; status: SigningStatus };
 
 
 export default function StatusTag(props: StatusTagProps) {
@@ -16,7 +17,9 @@ export default function StatusTag(props: StatusTagProps) {
     ? STATUS_COLORS[status as ContractStatus] 
     : type === 'risk'
     ? RISK_COLORS[status as RiskLevel]
-    : RENEWAL_STATUS_COLORS[status as RenewalStatus];
+    : type === 'renewal'
+    ? RENEWAL_STATUS_COLORS[status as RenewalStatus]
+    : SIGNING_STATUS_COLORS[status as SigningStatus];
 
   return (
     <span

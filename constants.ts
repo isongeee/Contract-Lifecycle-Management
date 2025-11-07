@@ -1,5 +1,5 @@
 
-import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet, UserNotificationSettings, CounterpartyType, AllocationType, RenewalStatus, AutoRenewType } from './types';
+import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet, UserNotificationSettings, CounterpartyType, AllocationType, RenewalStatus, AutoRenewType, ReviewChecklistItem, SigningStatus } from './types';
 import type { UserProfile, Counterparty, Property } from './types';
 
 export const STATUS_COLORS: Record<ContractStatus, string> = {
@@ -27,6 +27,12 @@ export const RENEWAL_STATUS_COLORS: Record<RenewalStatus, string> = {
   [RenewalStatus.CANCELLED]: 'bg-red-200 text-red-800 dark:bg-red-900/40 dark:text-red-200',
 };
 
+export const SIGNING_STATUS_COLORS: Record<SigningStatus, string> = {
+  [SigningStatus.AWAITING_INTERNAL]: 'bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-100',
+  [SigningStatus.SENT_TO_COUNTERPARTY]: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200',
+  [SigningStatus.VIEWED_BY_COUNTERPARTY]: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200',
+  [SigningStatus.SIGNED_BY_COUNTERPARTY]: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200',
+};
 
 export const RISK_COLORS: Record<RiskLevel, string> = {
   [RiskLevel.LOW]: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
@@ -367,3 +373,13 @@ export const MOCK_USER_NOTIFICATION_SETTINGS: UserNotificationSettings = {
         system: { email: false, inApp: true },
     }
 };
+
+export const MOCK_REVIEW_CHECKLIST: ReviewChecklistItem[] = [
+    { id: 'chk-1', text: 'Verify counterparty legal name and address are current.', isCompleted: false },
+    { id: 'chk-2', text: 'Confirm effective and end dates for the new term.', isCompleted: false },
+    { id: 'chk-3', text: 'Review and adjust pricing, rates, or fees as needed.', isCompleted: false },
+    { id: 'chk-4', text: 'Check if liability and insurance clauses meet current corporate standards.', isCompleted: false },
+    { id: 'chk-5', text: 'Update any references to personnel, locations, or regulations.', isCompleted: false },
+    { id: 'chk-6', text: 'Incorporate any new standard clauses (e.g., Data Privacy, ESG).', isCompleted: false },
+    { id: 'chk-7', text: 'Secure internal approvals from all required stakeholders.', isCompleted: false },
+];

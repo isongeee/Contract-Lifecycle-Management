@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType, PermissionSet, AuditLog, RenewalRequest, RenewalStatus } from './types';
-import { ContractStatus, RiskLevel, ApprovalStatus, RenewalStatus as RenewalStatusEnum, RenewalMode } from './types';
+import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType, PermissionSet, AuditLog, RenewalRequest, RenewalStatus, SigningStatus } from './types';
+import { ContractStatus, RiskLevel, ApprovalStatus, RenewalStatus as RenewalStatusEnum, RenewalMode, SigningStatus as SigningStatusEnum } from './types';
 import { MOCK_TEMPLATES, MOCK_ROLES, MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS, requestorPermissions } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -24,6 +24,7 @@ import OrgSignUpPage from './components/OrgSignUpPage';
 import UserSignUpPage from './components/UserSignUpPage';
 import CompanySettingsPage from './components/CompanySettingsPage';
 import RenewalsPage from './components/RenewalsPage';
+import SigningPage from './components/SigningPage';
 import { supabase } from './lib/supabaseClient';
 import { LoaderIcon } from './components/icons';
 import { Session } from '@supabase/supabase-js';
@@ -176,6 +177,8 @@ export default function App() {
         startDate: c.start_date, autoRenew: c.auto_renew, noticePeriodDays: c.notice_period_days,
         renewalTermMonths: c.renewal_term_months, upliftPercent: c.uplift_percent,
         parentContractId: c.parent_contract_id,
+        signingStatus: c.signing_status,
+        signingStatusUpdatedAt: c.signing_status_updated_at,
         versions: [], approvalSteps: [], propertyAllocations: [], auditLogs: [],
       });
     }
@@ -430,10 +433,33 @@ export default function App() {
     if (!currentUser) return;
     let rpcPayload = payload;
     if (action === ContractStatus.PENDING_APPROVAL && payload.approvers) { rpcPayload = { ...payload, approvers: payload.approvers.map((a: UserProfile) => a.id) }; }
+    if (action === ContractStatus.SENT_FOR_SIGNATURE) { rpcPayload = { ...rpcPayload, signing_status: SigningStatusEnum.AWAITING_INTERNAL }; }
     
     const { error } = await supabase.rpc('handle_contract_transition', { p_contract_id: contractId, p_action: action, p_payload: rpcPayload, });
     if (error) { console.error("Error transitioning contract state:", error); alert(`Failed to update contract: ${error.message}`); } 
     else { const updatedContracts = await fetchData(currentUser); if (selectedContract?.id === contractId) { setSelectedContract(updatedContracts.find(c => c.id === contractId) || null); } }
+  };
+
+  const handleSigningStatusUpdate = async (contractId: string, newStatus: SigningStatus) => {
+    if (!currentUser) return;
+    const { error } = await supabase
+        .from('contracts')
+        .update({ signing_status: newStatus, signing_status_updated_at: new Date().toISOString() })
+        .eq('id', contractId);
+
+    if (error) {
+        console.error("Error updating signing status:", error);
+        alert(`Failed to update signing status: ${error.message}`);
+    } else {
+        const updatedContracts = await fetchData(currentUser);
+        if (selectedContract?.id === contractId) {
+            setSelectedContract(updatedContracts.find(c => c.id === contractId) || null);
+        }
+    }
+  };
+
+  const handleMarkAsExecuted = (contractId: string) => {
+      handleContractTransition(contractId, ContractStatus.FULLY_EXECUTED);
   };
 
   const handleRenewalStatusUpdate = async (renewalRequestId: string, newStatus: RenewalStatus | null) => {
@@ -443,7 +469,7 @@ export default function App() {
     else { const updatedContracts = await fetchData(currentUser); if (selectedContract?.renewalRequest?.id === renewalRequestId) { setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null); } }
   };
 
-  const handleRenewalDecision = async (renewalRequestId: string, mode: RenewalMode) => {
+  const handleRenewalDecision = async (renewalRequestId: string, mode: RenewalMode, notes?: string) => {
     if (!currentUser) return;
 
     let newStatus: RenewalStatus;
@@ -455,7 +481,7 @@ export default function App() {
         default: return; // Should not happen
     }
     
-    const { error } = await supabase.from('renewal_requests').update({ mode: mode, status: newStatus }).eq('id', renewalRequestId);
+    const { error } = await supabase.from('renewal_requests').update({ mode, status: newStatus, notes }).eq('id', renewalRequestId);
     
     if (error) {
         console.error("Error updating renewal decision:", error);
@@ -540,7 +566,8 @@ export default function App() {
           value: newVersionData.value, effective_date: newVersionData.effectiveDate,
           end_date: newVersionData.endDate, frequency: newVersionData.frequency,
           seasonal_months: newVersionData.seasonalMonths, property_id: newVersionData.property?.id,
-          status: ContractStatus.IN_REVIEW, approval_completed_at: null, approval_started_at: null,
+          status: ContractStatus.DRAFT,
+          approval_completed_at: null, approval_started_at: null,
           draft_version_id: insertedVersion.id,
       }).eq('id', contractId);
       if (contractUpdateError) { console.error("Error updating contract:", contractUpdateError); return; }
@@ -550,6 +577,49 @@ export default function App() {
 
       const updatedContracts = await fetchData(currentUser);
       if (selectedContract?.id === contractId) { setSelectedContract(updatedContracts.find(c => c.id === contractId) || null); }
+  };
+
+  const handleFinalizeRenewalDraft = async (contract: Contract, draftContent: string) => {
+    if (!currentUser || !contract.renewalRequest) return;
+    
+    const latestVersion = contract.versions[contract.versions.length - 1];
+    const newVersionNumber = latestVersion.versionNumber + 1;
+    
+    const { data: insertedVersion, error: versionError } = await supabase
+        .from('contract_versions')
+        .insert({
+            contract_id: contract.id,
+            version_number: newVersionNumber,
+            author_id: currentUser.id,
+            content: draftContent,
+            file_name: `Renewal Draft v${newVersionNumber}.txt`,
+            value: latestVersion.value, // Assuming value is same for now
+            effective_date: latestVersion.effectiveDate, // These may change
+            end_date: latestVersion.endDate, // based on the draft
+            frequency: latestVersion.frequency,
+            company_id: currentUser.companyId,
+            app_id: currentUser.appId,
+        })
+        .select()
+        .single();
+        
+    if (versionError) {
+        console.error("Error creating renewal draft version:", versionError);
+        alert("Failed to save draft.");
+        return;
+    }
+    
+    const [contractUpdateRes, renewalUpdateRes] = await Promise.all([
+        supabase.from('contracts').update({ draft_version_id: insertedVersion.id }).eq('id', contract.id),
+        supabase.from('renewal_requests').update({ status: RenewalStatusEnum.APPROVING }).eq('id', contract.renewalRequest.id)
+    ]);
+    
+    if (contractUpdateRes.error || renewalUpdateRes.error) {
+        console.error("Error finalizing draft:", contractUpdateRes.error, renewalUpdateRes.error);
+        alert("Failed to finalize draft.");
+    } else {
+        await fetchData(currentUser);
+    }
   };
 
   const handleUpdateRolePermissions = async (roleId: string, newPermissions: PermissionSet) => {
@@ -583,9 +653,10 @@ export default function App() {
     }
     switch(activeView) {
       case 'dashboard': return <Dashboard contracts={contracts} onMetricClick={handleMetricNavigation} currentUser={currentUser} />;
-      case 'contracts': return selectedContract ? ( <ContractDetail contract={selectedContract} contracts={contracts} onSelectContract={handleSelectContract} users={users} properties={properties} currentUser={currentUser} onBack={handleBackToList} onTransition={handleContractTransition} onCreateNewVersion={handleCreateNewVersion} onRenewalStatusUpdate={handleRenewalStatusUpdate} onActivateRenewal={handleActivateRenewal} onCreateRenewalRequest={handleCreateRenewalRequest} onRenewalDecision={handleRenewalDecision} /> ) : ( <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={handleStartCreate} initialFilters={initialFilters} currentUser={currentUser} /> );
+      case 'contracts': return selectedContract ? ( <ContractDetail contract={selectedContract} contracts={contracts} onSelectContract={handleSelectContract} users={users} properties={properties} currentUser={currentUser} onBack={handleBackToList} onTransition={handleContractTransition} onCreateNewVersion={handleCreateNewVersion} onRenewalStatusUpdate={handleRenewalStatusUpdate} onActivateRenewal={handleActivateRenewal} onCreateRenewalRequest={handleCreateRenewalRequest} onRenewalDecision={handleRenewalDecision} onFinalizeDraft={handleFinalizeRenewalDraft} onUpdateSigningStatus={handleSigningStatusUpdate} /> ) : ( <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={handleStartCreate} initialFilters={initialFilters} currentUser={currentUser} /> );
       case 'renewals': return <RenewalsPage contracts={contracts} onSelectContract={handleSelectContract} users={users} notificationSettings={userNotificationSettings} onUpdateNotificationSettings={setUserNotificationSettings} />;
       case 'approvals': return <ApprovalsPage contracts={contracts} onTransition={handleContractTransition} currentUser={currentUser} />;
+      case 'signing': return <SigningPage contracts={contracts} onSelectContract={handleSelectContract} onUpdateSigningStatus={handleSigningStatusUpdate} onMarkAsExecuted={handleMarkAsExecuted} />;
       case 'templates': return selectedTemplate ? ( <TemplateDetail template={selectedTemplate} onBack={handleBackToTemplatesList} /> ) : ( <TemplatesList templates={templates} onSelectTemplate={handleSelectTemplate} /> );
       case 'counterparties': return selectedCounterparty ? ( <CounterpartyDetail counterparty={selectedCounterparty} contracts={contracts.filter(c => c.counterparty.id === selectedCounterparty.id)} onBack={handleBackToCounterpartiesList} onSelectContract={handleSelectContract} /> ) : ( <CounterpartiesList counterparties={counterparties} contracts={contracts} onSelectCounterparty={handleSelectCounterparty} onStartCreate={handleStartCreateCounterparty} currentUser={currentUser} /> );
       case 'properties': return selectedProperty ? ( <PropertyDetail property={selectedProperty} contracts={contracts.filter(c => c.property?.id === selectedProperty.id)} onBack={handleBackToPropertiesList} onSelectContract={handleSelectContract} /> ) : ( <PropertiesList properties={properties} contracts={contracts} onSelectProperty={handleSelectProperty} onStartCreate={handleStartCreateProperty} currentUser={currentUser} /> );

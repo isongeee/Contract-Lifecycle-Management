@@ -1,9 +1,9 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import type { Contract, Clause, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, AuditLog, RenewalStatus, RenewalMode } from '../types';
-import { ContractStatus, ApprovalStatus, ContractFrequency, RenewalStatus as RenewalStatusEnum } from '../types';
+import type { Contract, Clause, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, AuditLog, RenewalStatus, RenewalMode, SigningStatus } from '../types';
+import { ContractStatus, ApprovalStatus, ContractFrequency, RenewalStatus as RenewalStatusEnum, SigningStatus as SigningStatusEnum } from '../types';
 import StatusTag from './StatusTag';
-import { ArrowLeftIcon, SparklesIcon, LoaderIcon, CopyIcon, FileTextIcon, ChevronDownIcon, ArchiveIcon, CheckCircleIcon, XCircleIcon, HomeIcon, ClockIcon, RefreshCwIcon } from './icons';
+import { ArrowLeftIcon, SparklesIcon, LoaderIcon, CopyIcon, FileTextIcon, ChevronDownIcon, ArchiveIcon, CheckCircleIcon, XCircleIcon, HomeIcon, ClockIcon, RefreshCwIcon, PenSquareIcon } from './icons';
 import { APPROVAL_STATUS_COLORS, RENEWAL_STATUS_COLORS } from '../constants';
 import { summarizeContractRisk, extractClauses } from '../services/geminiService';
 import CreateVersionModal from './CreateVersionModal';
@@ -11,6 +11,7 @@ import RequestApprovalModal from './RequestApprovalModal';
 import ConfirmStatusChangeModal from './ConfirmStatusChangeModal';
 import { supabase } from '../lib/supabaseClient';
 import RenewalDecisionModal from './RenewalDecisionModal';
+import RenewalWorkspace from './RenewalWorkspace';
 
 type ContractAction = ContractStatus | 'APPROVE_STEP' | 'REJECT_STEP';
 
@@ -24,10 +25,12 @@ interface ContractDetailProps {
   onTransition: (contractId: string, action: ContractAction, payload?: any) => void;
   onCreateNewVersion: (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => void;
   onRenewalStatusUpdate: (renewalRequestId: string, newStatus: RenewalStatus | null) => void;
-  onRenewalDecision: (renewalRequestId: string, mode: RenewalMode) => void;
+  onRenewalDecision: (renewalRequestId: string, mode: RenewalMode, notes?: string) => void;
   onActivateRenewal: (contract: Contract) => void;
   onCreateRenewalRequest: (contract: Contract) => void;
   onSelectContract: (contract: Contract) => void;
+  onFinalizeDraft: (contract: Contract, draftContent: string) => void;
+  onUpdateSigningStatus: (contractId: string, status: SigningStatus) => void;
 }
 
 const ContractActions = ({ contract, onRequestTransition, onOpenApprovalModal, onStartCreateNewVersion }: { contract: Contract, onRequestTransition: (action: ContractAction) => void, onOpenApprovalModal: () => void, onStartCreateNewVersion: () => void }) => {
@@ -42,7 +45,7 @@ const ContractActions = ({ contract, onRequestTransition, onOpenApprovalModal, o
             case ContractStatus.APPROVED:
                 return <button onClick={() => onRequestTransition(ContractStatus.SENT_FOR_SIGNATURE)} className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700">Send for Signature</button>;
             case ContractStatus.SENT_FOR_SIGNATURE:
-                 return <button onClick={() => onRequestTransition(ContractStatus.FULLY_EXECUTED)} className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700">Mark as Executed</button>;
+                 return <button onClick={() => onRequestTransition(ContractStatus.FULLY_EXECUTED)} className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700" disabled={contract.signingStatus !== SigningStatusEnum.SIGNED_BY_COUNTERPARTY}>Mark as Executed</button>;
             case ContractStatus.FULLY_EXECUTED:
                 const effectiveDate = new Date(contract.effectiveDate);
                 if (effectiveDate <= new Date()) {
@@ -419,8 +422,58 @@ const RenewalCard = ({ contract, onRenewalStatusUpdate, onActivateRenewal, onOpe
     )
 };
 
+const SigningProgressWidget = ({ contract, onUpdateSigningStatus, onMarkAsExecuted }: { contract: Contract; onUpdateSigningStatus: (contractId: string, status: SigningStatus) => void; onMarkAsExecuted: (contractId: string) => void }) => {
+    if (contract.status !== ContractStatus.SENT_FOR_SIGNATURE) return null;
 
-export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalStatusUpdate, onActivateRenewal, onCreateRenewalRequest, onSelectContract, onRenewalDecision }: ContractDetailProps) {
+    const steps = [
+        { status: SigningStatusEnum.AWAITING_INTERNAL, label: 'Awaiting Internal Signature' },
+        { status: SigningStatusEnum.SENT_TO_COUNTERPARTY, label: 'Sent to Counterparty' },
+        { status: SigningStatusEnum.VIEWED_BY_COUNTERPARTY, label: 'Viewed by Counterparty' },
+        { status: SigningStatusEnum.SIGNED_BY_COUNTERPARTY, label: 'Signed by Counterparty' },
+    ];
+    
+    const currentStepIndex = contract.signingStatus ? steps.findIndex(step => step.status === contract.signingStatus) : -1;
+
+    const nextAction = () => {
+        if (currentStepIndex < steps.length - 1) {
+            const nextStep = steps[currentStepIndex + 1];
+            return <button onClick={() => onUpdateSigningStatus(contract.id, nextStep.status)} className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700">Advance to: {nextStep.label}</button>;
+        }
+        if (currentStepIndex === steps.length - 1) {
+            return <button onClick={() => onMarkAsExecuted(contract.id)} className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700">Mark as Fully Executed</button>;
+        }
+        return null;
+    }
+
+    return (
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center"><PenSquareIcon className="w-5 h-5 mr-2 text-gray-400"/>Signing Progress</h3>
+            <ol className="relative border-l border-gray-200 dark:border-gray-700">
+                {steps.map((step, index) => {
+                    const isCompleted = currentStepIndex >= index;
+                    const isActive = currentStepIndex === index;
+                    return (
+                        <li key={step.status} className="mb-6 ml-6">
+                            <span className={`absolute flex items-center justify-center w-6 h-6 rounded-full -left-3 ring-8 ring-white dark:ring-gray-800 ${isCompleted ? 'bg-green-500' : 'bg-gray-300'}`}>
+                                {isCompleted && <CheckCircleIcon className="w-4 h-4 text-white" />}
+                            </span>
+                            <div>
+                                <h4 className={`text-md font-semibold ${isActive ? 'text-primary-600 dark:text-primary-300' : 'text-gray-900 dark:text-gray-100'}`}>{step.label}</h4>
+                                {isActive && <time className="block mb-2 text-sm font-normal leading-none text-gray-400 dark:text-gray-500">Current Step (Updated {new Date(contract.signingStatusUpdatedAt || Date.now()).toLocaleDateString()})</time>}
+                            </div>
+                        </li>
+                    )
+                })}
+            </ol>
+            <div className="mt-6 flex justify-end">
+                {nextAction()}
+            </div>
+        </div>
+    )
+};
+
+
+export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalStatusUpdate, onActivateRenewal, onCreateRenewalRequest, onSelectContract, onRenewalDecision, onFinalizeDraft, onUpdateSigningStatus }: ContractDetailProps) {
   const [contract, setContract] = useState(initialContract);
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const [isRequestingApproval, setIsRequestingApproval] = useState(false);
@@ -456,6 +509,16 @@ export default function ContractDetail({ contract: initialContract, contracts, p
     onCreateNewVersion(contract.id, newVersionData);
     setIsCreatingVersion(false);
   };
+
+  const handleSendRenewalForApproval = (draftContent: string) => {
+    onFinalizeDraft(contract, draftContent);
+  };
+
+  const handleMarkAsExecuted = () => onTransition(contract.id, ContractStatus.FULLY_EXECUTED);
+
+  if (contract.renewalRequest && [RenewalStatusEnum.REVIEWING, RenewalStatusEnum.DRAFTING].includes(contract.renewalRequest.status)) {
+    return <RenewalWorkspace contract={contract} onBack={onBack} onSendForApproval={handleSendRenewalForApproval} />;
+  }
 
   if (!viewedVersion) {
     return (
@@ -595,6 +658,7 @@ export default function ContractDetail({ contract: initialContract, contracts, p
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
                 <RenewalCard contract={contract} onRenewalStatusUpdate={onRenewalStatusUpdate} onActivateRenewal={onActivateRenewal} onOpenDecisionModal={() => setIsMakingDecision(true)} />
+                <SigningProgressWidget contract={contract} onUpdateSigningStatus={onUpdateSigningStatus} onMarkAsExecuted={handleMarkAsExecuted} />
                 <AssociatedPropertiesCard contract={contract} properties={properties} />
                 <FinancialsAndAllocationCard contract={contract} viewedVersion={viewedVersion} properties={properties} />
                 <AiAnalysis onSummary={handleSummarizeRisk} onExtract={handleExtractClauses} riskSummary={contract.riskSummary} extractedClauses={contract.extractedClauses} isLoadingSummary={isLoadingSummary} isLoadingClauses={isLoadingClauses} />
@@ -616,9 +680,11 @@ export default function ContractDetail({ contract: initialContract, contracts, p
         {confirmModalState.isOpen && confirmModalState.action && ( <ConfirmStatusChangeModal isOpen={confirmModalState.isOpen} onClose={() => setConfirmModalState({ isOpen: false, action: null, payload: undefined })} onConfirm={() => { if (confirmModalState.action) { onTransition(contract.id, confirmModalState.action, confirmModalState.payload); } setConfirmModalState({ isOpen: false, action: null, payload: undefined }); }} contractTitle={contract.title} currentStatus={contract.status} action={confirmModalState.action} /> )}
         {isMakingDecision && contract.renewalRequest && (
             <RenewalDecisionModal
+                contract={contract}
+                contracts={contracts}
                 onClose={() => setIsMakingDecision(false)}
-                onConfirm={(mode) => {
-                    onRenewalDecision(contract.renewalRequest!.id, mode);
+                onConfirm={(mode, notes) => {
+                    onRenewalDecision(contract.renewalRequest!.id, mode, notes);
                     setIsMakingDecision(false);
                 }}
             />

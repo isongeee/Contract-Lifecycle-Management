@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboardIcon, FileTextIcon, UsersIcon, BookTextIcon, CheckCircleIcon, SettingsIcon, HomeIcon, BuildingOfficeIcon, UserIcon, RefreshCwIcon } from './icons';
+import { LayoutDashboardIcon, FileTextIcon, UsersIcon, BookTextIcon, CheckCircleIcon, SettingsIcon, HomeIcon, BuildingOfficeIcon, UserIcon, RefreshCwIcon, PenSquareIcon } from './icons';
 import type { UserProfile } from '../types';
 
 const NavItem: React.FC<{ icon: React.ReactNode; label: string; active?: boolean; onClick: () => void; }> = ({ icon, label, active = false, onClick }) => (
@@ -25,6 +25,7 @@ const navItems = [
     { id: 'properties', label: 'Properties', icon: <HomeIcon className="h-5 w-5" /> },
     { id: 'templates', label: 'Templates', icon: <BookTextIcon className="h-5 w-5" /> },
     { id: 'approvals', label: 'Approvals', icon: <CheckCircleIcon className="h-5 w-5" /> },
+    { id: 'signing', label: 'Signing', icon: <PenSquareIcon className="h-5 w-5" /> },
 ];
 
 export default function Sidebar({ activeView, onNavigate, currentUser }: { activeView: string; onNavigate: (view: string) => void; currentUser: UserProfile | null }) {

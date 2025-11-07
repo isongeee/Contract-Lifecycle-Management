@@ -27,6 +27,14 @@ export enum ContractStatus {
   SUPERSEDED = 'Superseded',
 }
 
+export enum SigningStatus {
+  AWAITING_INTERNAL = 'Awaiting Internal Signature',
+  SENT_TO_COUNTERPARTY = 'Sent to Counterparty',
+  VIEWED_BY_COUNTERPARTY = 'Viewed by Counterparty',
+  SIGNED_BY_COUNTERPARTY = 'Signed by Counterparty',
+}
+
+
 export enum RenewalStatus {
     QUEUED = 'queued',
     REVIEWING = 'reviewing',
@@ -232,6 +240,10 @@ export interface Contract {
   upliftPercent?: number;
   parentContractId?: string;
   
+  // E-Signature fields
+  signingStatus?: SigningStatus;
+  signingStatusUpdatedAt?: string;
+
   // Associated data
   renewalRequest?: RenewalRequest;
   auditLogs?: AuditLog[];
@@ -280,4 +292,10 @@ export interface UserNotificationSettings {
     tasks: { email: boolean; inApp: boolean };
     system: { email: boolean; inApp: boolean };
   };
+}
+
+export interface ReviewChecklistItem {
+  id: string;
+  text: string;
+  isCompleted: boolean;
 }
