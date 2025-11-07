@@ -472,6 +472,16 @@ const SigningProgressWidget = ({ contract, onUpdateSigningStatus, onMarkAsExecut
     )
 };
 
+const daysUntil = (dateStr: string) => {
+    if (!dateStr) return Infinity;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endDate = new Date(dateStr);
+    endDate.setHours(0, 0, 0, 0);
+    const diffTime = endDate.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
+
 
 export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalStatusUpdate, onActivateRenewal, onCreateRenewalRequest, onSelectContract, onRenewalDecision, onFinalizeDraft, onUpdateSigningStatus, onCreateComment, onResolveComment }: ContractDetailProps) {
   const [contract, setContract] = useState(initialContract);
@@ -486,6 +496,12 @@ export default function ContractDetail({ contract: initialContract, contracts, p
 
   const [viewedVersionId, setViewedVersionId] = useState<string | null>(
     initialContract.versions.length > 0 ? initialContract.versions[initialContract.versions.length - 1].id : null
+  );
+
+  const canInitiateRenewal = (
+    (contract.status === ContractStatus.EXPIRED || 
+    (contract.status === ContractStatus.ACTIVE && daysUntil(contract.endDate) <= 90)) 
+    && !contract.renewalRequest
   );
 
   const parentContract = useMemo(() => {
@@ -658,7 +674,7 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                 </div>
                 <div className="flex items-center space-x-3">
                     <ContractActions contract={contract} onRequestTransition={handleRequestTransition} onOpenApprovalModal={() => setIsRequestingApproval(true)} onStartCreateNewVersion={() => setIsCreatingVersion(true)} />
-                     {contract.status === ContractStatus.EXPIRED && !contract.renewalRequest && (
+                     {canInitiateRenewal && (
                         <button 
                             onClick={() => onCreateRenewalRequest(contract)}
                             className="flex items-center px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"

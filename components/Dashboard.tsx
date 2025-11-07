@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import type { Contract, UserProfile } from '../types';
 import { ContractStatus, RiskLevel } from '../types';
@@ -66,7 +67,7 @@ const ContractsByStatus = ({ contracts }: { contracts: Contract[] }) => {
     );
 };
 
-const ExpiringContracts = ({ contracts }: { contracts: Contract[] }) => {
+const ExpiringContracts = ({ contracts, onSelectContract }: { contracts: Contract[]; onSelectContract: (contract: Contract) => void; }) => {
     const expiringSoon = useMemo(() => {
         return contracts
             .map(c => ({ ...c, daysLeft: daysUntil(c.endDate) }))
@@ -80,16 +81,18 @@ const ExpiringContracts = ({ contracts }: { contracts: Contract[] }) => {
             {expiringSoon.length > 0 ? (
                 <ul className="space-y-4">
                     {expiringSoon.map(c => (
-                        <li key={c.id} className="flex items-center space-x-3">
-                            <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-yellow-100 text-yellow-700 rounded-full">
-                                <ClockIcon className="w-5 h-5"/>
-                            </div>
-                            <div className="flex-1">
-                                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{c.title}</p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">
-                                    Expires in <span className="font-bold">{c.daysLeft} days</span> on {c.endDate}
-                                </p>
-                            </div>
+                        <li key={c.id}>
+                            <button onClick={() => onSelectContract(c)} className="w-full text-left flex items-center space-x-3 p-2 -m-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                                <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-yellow-100 text-yellow-700 rounded-full">
+                                    <ClockIcon className="w-5 h-5"/>
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{c.title}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        Expires in <span className="font-bold">{c.daysLeft} days</span> on {c.endDate}
+                                    </p>
+                                </div>
+                            </button>
                         </li>
                     ))}
                 </ul>
@@ -103,7 +106,7 @@ const ExpiringContracts = ({ contracts }: { contracts: Contract[] }) => {
 };
 
 
-export default function Dashboard({ contracts, onMetricClick, currentUser }: { contracts: Contract[]; onMetricClick: (metric: 'active' | 'pending' | 'high-risk' | 'my-contracts') => void; currentUser: UserProfile; }) {
+export default function Dashboard({ contracts, onMetricClick, currentUser, onSelectContract }: { contracts: Contract[]; onMetricClick: (metric: 'active' | 'pending' | 'high-risk' | 'my-contracts') => void; currentUser: UserProfile; onSelectContract: (contract: Contract) => void; }) {
 
     const metrics = useMemo(() => {
         const activeContracts = contracts.filter(c => c.status === ContractStatus.ACTIVE);
@@ -164,7 +167,7 @@ export default function Dashboard({ contracts, onMetricClick, currentUser }: { c
                     <ContractsByStatus contracts={contracts} />
                 </div>
                 <div className="lg:col-span-2">
-                    <ExpiringContracts contracts={contracts} />
+                    <ExpiringContracts contracts={contracts} onSelectContract={onSelectContract} />
                 </div>
             </div>
         </div>
