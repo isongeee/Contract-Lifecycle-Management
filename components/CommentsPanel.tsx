@@ -13,18 +13,52 @@ interface CommentsPanelProps {
     onResolveComment: (commentId: string, isResolved: boolean) => void;
 }
 
-const renderWithMentions = (content: string) => {
-    const parts = content.split(/(@[\w\s]+)/g);
-    return parts.map((part, i) => {
-        if (part.startsWith('@')) {
-            return (
-                <strong key={i} className="text-primary-600 dark:text-primary-400 font-semibold">
-                    {part}
-                </strong>
-            );
+const renderWithMentions = (content: string, users: UserProfile[]) => {
+    if (!users || users.length === 0) {
+        return [content];
+    }
+
+    // Escape special regex characters.
+    const escapeRegex = (str: string) => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+
+    // Create a regex that matches any of the user names.
+    // Sort by length descending to match longer names first (e.g., "Nilo test" before "Nilo")
+    const userNames = users
+        .map(u => `${u.firstName} ${u.lastName}`)
+        .sort((a, b) => b.length - a.length);
+
+    // The regex captures the @ and the name. \b ensures we don't match partial names within longer words.
+    const regex = new RegExp(`(@(?:${userNames.map(escapeRegex).join('|')}))\\b`, 'gi');
+    
+    const result: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(content)) !== null) {
+        // Add text before the match
+        const preMatch = content.substring(lastIndex, match.index);
+        if (preMatch) {
+            result.push(preMatch);
         }
-        return part;
-    });
+        
+        // Add the styled mention
+        result.push(
+            <span key={match.index} className="bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-200 font-semibold rounded px-1 py-0.5 mx-px">
+                {match[0]}
+            </span>
+        );
+
+        lastIndex = regex.lastIndex;
+    }
+
+    // Add any remaining text after the last match
+    const rest = content.substring(lastIndex);
+    if (rest) {
+        result.push(rest);
+    }
+
+    // If no matches, return the original content
+    return result.length > 0 ? result : [content];
 };
 
 
@@ -137,7 +171,7 @@ export default function CommentsPanel({ comments, users, currentUser, versionId,
                         <div className="flex-1">
                             <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-2">
                                 <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{`${comment.author.firstName} ${comment.author.lastName}`}</p>
-                                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{renderWithMentions(comment.content)}</p>
+                                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{renderWithMentions(comment.content, users)}</p>
                             </div>
                             <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex space-x-2">
                                 <span>{new Date(comment.createdAt).toLocaleString()}</span>
@@ -156,7 +190,7 @@ export default function CommentsPanel({ comments, users, currentUser, versionId,
                                     <div className="flex-1">
                                         <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-2">
                                             <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{`${comment.author.firstName} ${comment.author.lastName}`}</p>
-                                            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap line-through">{renderWithMentions(comment.content)}</p>
+                                            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap line-through">{renderWithMentions(comment.content, users)}</p>
                                         </div>
                                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex space-x-2">
                                             <span>Resolved on {new Date(comment.resolvedAt!).toLocaleString()}</span>
