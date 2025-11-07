@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Contract, Counterparty, UserProfile, Property, AllocationType, ContractPropertyAllocation } from '../types';
+import type { Contract, Counterparty, UserProfile, Property, AllocationType, ContractPropertyAllocation, ContractTemplate } from '../types';
 import { ContractType, ContractStatus, RiskLevel, ContractFrequency } from '../types';
 import { UploadCloudIcon, XIcon, PlusIcon, Trash2Icon } from './icons';
 
 interface CreateContractWorkflowProps {
+  templates: ContractTemplate[];
   properties: Property[];
   counterparties: Counterparty[];
   users: UserProfile[];
@@ -87,13 +87,14 @@ const Stage1_Upload = ({ onNext, onFileSelect, fileName }: { onNext: () => void;
 };
 
 interface Stage2Props {
-    data: Partial<Contract>;
-    setData: (field: keyof Contract | Partial<Contract>, value?: any) => void;
+    data: Partial<Contract> & { content?: string };
+    setData: (field: keyof Contract | Partial<Contract> | any, value?: any) => void;
     onBack: () => void;
     onNext: () => void;
     onToggleMonth: (monthYearKey: string) => void;
     counterparties: Counterparty[];
     users: UserProfile[];
+    templates: ContractTemplate[];
 }
 
 const FormRow = ({ children }: { children?: React.ReactNode }) => <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-6">{children}</div>
@@ -138,7 +139,7 @@ const getMonthsInRange = (startDateStr: string, endDateStr: string): { year: num
 };
 
 
-const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, counterparties, users }: Stage2Props) => {
+const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, counterparties, users, templates }: Stage2Props) => {
     const availableMonthsByYear = useMemo(() => getMonthsInRange(data.effectiveDate!, data.endDate!), [data.effectiveDate, data.endDate]);
 
     const isFormValid = useMemo(() => {
@@ -155,6 +156,15 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
         
         return true;
     }, [data.title, data.counterparty, data.effectiveDate, data.endDate]);
+
+    const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newType = e.target.value as ContractType;
+        const matchingTemplate = templates.find(t => t.type === newType);
+        setData({
+            type: newType,
+            content: matchingTemplate ? matchingTemplate.content : `This is a draft for a new ${newType} contract.`
+        });
+    };
 
     return (
         <div>
@@ -176,7 +186,7 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
                         )}
                     </FormField>
                     <FormField label="Contract Type">
-                        <SelectInput value={data.type} onChange={e => setData('type', e.target.value as ContractType)}>
+                        <SelectInput value={data.type} onChange={handleTypeChange}>
                             {Object.values(ContractType).map(type => <option key={type} value={type}>{type}</option>)}
                         </SelectInput>
                     </FormField>
@@ -657,9 +667,9 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
 }
 
 
-export default function CreateContractWorkflow({ onCancel, onFinish, properties, counterparties, users, currentUser }: CreateContractWorkflowProps) {
+export default function CreateContractWorkflow({ templates, onCancel, onFinish, properties, counterparties, users, currentUser }: CreateContractWorkflowProps) {
   const [currentStep, setCurrentStep] = useState(1);
-  const [newContractData, setNewContractData] = useState<Partial<Contract> & { propertyAllocations?: any[], fileName?: string }>({
+  const [newContractData, setNewContractData] = useState<Partial<Contract> & { propertyAllocations?: any[], fileName?: string, content?: string }>({
       title: '',
       type: ContractType.MSA,
       status: ContractStatus.DRAFT,
@@ -674,6 +684,8 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
       seasonalMonths: [],
       propertyAllocations: [],
       fileName: '',
+      // FIX: Use the `templates` prop instead of the undefined `MOCK_TEMPLATES` constant.
+      content: templates.find(t => t.type === ContractType.MSA)?.content || '',
   });
 
   useEffect(() => {
@@ -736,7 +748,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
   };
   
   const handleFinalize = () => {
-    let finalContent = `This contract for ${newContractData.title || 'a new matter'} was created via the wizard.`;
+    let finalContent = newContractData.content || `This contract for ${newContractData.title || 'a new matter'} was created via the wizard.`;
     const isSeasonal = newContractData.frequency === ContractFrequency.SEASONAL && newContractData.seasonalMonths && newContractData.seasonalMonths.length > 0;
     
     if (newContractData.propertyAllocations && newContractData.propertyAllocations.length > 0) {
@@ -746,12 +758,12 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
                 const prop = properties.find(p => p.id === alloc.propertyId);
                 const propName = prop?.name || (alloc.propertyId === 'portfolio' ? 'Portfolio-wide Total' : 'Unknown Property');
                 const monthlyDetails = Object.entries(alloc.monthlyValues)
-                    .map(([month, value]) => `    - ${month}: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value as number)}`)
+                    .map(([month, value]) => `    - ${month.replace('-', '/')}: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value as number)}`)
                     .join('\n');
                 return `- ${propName}:\n${monthlyDetails}`;
             }).join('\n');
             finalContent += `\n\n--- SEASONAL COST ALLOCATION ---\n${allocationDetails}`;
-        } else if (newContractData.propertyAllocations.length > 1) {
+        } else if (newContractData.allocation === 'multi') {
             const totalValue = newContractData.value || 0;
             allocationDetails = newContractData.propertyAllocations.map(alloc => {
                 const prop = properties.find(p => p.id === alloc.propertyId);
@@ -761,7 +773,6 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
             finalContent += `\n\n--- MULTI-PROPERTY COST ALLOCATION ---\n${allocationDetails}`;
         }
     }
-
 
     const finalContractData = { ...newContractData };
     
@@ -790,7 +801,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
           case 1:
               return <Stage1_Upload onNext={handleNext} onFileSelect={handleFileSelect} fileName={newContractData.fileName} />;
           case 2:
-              return <Stage2_Information data={newContractData} setData={updateData} onBack={handleBack} onNext={handleNext} onToggleMonth={handleToggleMonth} counterparties={counterparties} users={users} />;
+              return <Stage2_Information data={newContractData} setData={updateData} onBack={handleBack} onNext={handleNext} onToggleMonth={handleToggleMonth} counterparties={counterparties} users={users} templates={templates} />;
           case 3:
               return <Stage3_PropertyAndCost data={newContractData} setData={updateData} properties={properties} onBack={handleBack} onNext={handleNext} />;
           case 4:
