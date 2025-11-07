@@ -59,14 +59,18 @@ const ContractActions = ({ contract, onRequestTransition, onOpenApprovalModal, o
                 return null;
         }
     }
+
+    const canCreateNewVersion = [ContractStatus.DRAFT, ContractStatus.IN_REVIEW].includes(contract.status);
     
     return (
         <div className="flex space-x-3">
             {mainAction()}
-            <button onClick={onStartCreateNewVersion} className="flex items-center px-4 py-2 text-sm font-semibold text-primary-700 bg-primary-100 rounded-lg hover:bg-primary-200">
-                <CopyIcon className="w-4 h-4 mr-2" />
-                Create New Version
-            </button>
+            {canCreateNewVersion && (
+                <button onClick={onStartCreateNewVersion} className="flex items-center px-4 py-2 text-sm font-semibold text-primary-700 bg-primary-100 rounded-lg hover:bg-primary-200">
+                    <CopyIcon className="w-4 h-4 mr-2" />
+                    Create New Version
+                </button>
+            )}
             <div className="relative">
                 <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
                     <ChevronDownIcon className="w-5 h-5" />
@@ -673,7 +677,6 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                     </div>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <ContractActions contract={contract} onRequestTransition={handleRequestTransition} onOpenApprovalModal={() => setIsRequestingApproval(true)} onStartCreateNewVersion={() => setIsCreatingVersion(true)} />
                      {canInitiateRenewal && (
                         <button 
                             onClick={() => onCreateRenewalRequest(contract)}
@@ -683,6 +686,7 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                             Start Renewal Process
                         </button>
                     )}
+                    <ContractActions contract={contract} onRequestTransition={handleRequestTransition} onOpenApprovalModal={() => setIsRequestingApproval(true)} onStartCreateNewVersion={() => setIsCreatingVersion(true)} />
                 </div>
             </div>
              <dl className="mt-6 grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">

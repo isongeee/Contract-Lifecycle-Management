@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Contract, Counterparty, UserProfile, Property, AllocationType, ContractPropertyAllocation } from '../types';
 import { ContractType, ContractStatus, RiskLevel, ContractFrequency } from '../types';
@@ -677,6 +676,36 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
   });
 
   useEffect(() => {
+    // Auto-calculate end date based on frequency
+    if (newContractData.effectiveDate && newContractData.frequency && !newContractData.endDate) {
+        const startDate = new Date(newContractData.effectiveDate + 'T00:00:00Z'); // Use UTC to avoid timezone issues
+        if (isNaN(startDate.getTime())) return;
+
+        let endDate = new Date(startDate);
+
+        switch (newContractData.frequency) {
+            case ContractFrequency.MONTHLY:
+                endDate.setUTCMonth(startDate.getUTCMonth() + 1);
+                break;
+            case ContractFrequency.QUARTERLY:
+                endDate.setUTCMonth(startDate.getUTCMonth() + 3);
+                break;
+            case ContractFrequency.ANNUALLY:
+                endDate.setUTCFullYear(startDate.getUTCFullYear() + 1);
+                break;
+            default:
+                // For Seasonal or other types, don't auto-calculate
+                return;
+        }
+        
+        endDate.setUTCDate(startDate.getUTCDate() - 1);
+        
+        updateData('endDate', endDate.toISOString().split('T')[0]);
+    }
+  }, [newContractData.effectiveDate, newContractData.frequency]);
+
+
+  useEffect(() => {
     if (newContractData.frequency === ContractFrequency.SEASONAL && newContractData.effectiveDate && newContractData.endDate && newContractData.seasonalMonths && newContractData.seasonalMonths.length > 0) {
       const start = new Date(newContractData.effectiveDate);
       const end = new Date(newContractData.endDate);
@@ -714,6 +743,10 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
   ) => {
     setNewContractData((prev) => {
       if (typeof fieldOrUpdates === 'string') {
+        // When frequency or effectiveDate changes, clear the endDate to allow recalculation
+        if ((fieldOrUpdates === 'frequency' || fieldOrUpdates === 'effectiveDate') && prev.endDate) {
+            return { ...prev, [fieldOrUpdates]: value, endDate: '' };
+        }
         return { ...prev, [fieldOrUpdates]: value };
       }
       return { ...prev, ...fieldOrUpdates };
