@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type { Contract, Clause, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, AuditLog, RenewalStatus, RenewalMode, SigningStatus, Comment } from '../types';
 import { ContractStatus, ApprovalStatus, ContractFrequency, RenewalStatus as RenewalStatusEnum, SigningStatus as SigningStatusEnum } from '../types';
@@ -503,7 +502,7 @@ export default function ContractDetail({ contract: initialContract, contracts, p
   }, [initialContract]);
 
   const latestVersion = useMemo(() => 
-    contract.versions.length > 0 ? contract.versions.sort((a,b) => b.versionNumber - a.versionNumber)[0] : null
+    contract.versions.length > 0 ? contract.versions[contract.versions.length - 1] : null
   , [contract.versions]);
     
   const viewedVersion = useMemo(() => 
