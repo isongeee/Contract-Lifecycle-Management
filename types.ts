@@ -37,11 +37,7 @@ export enum SigningStatus {
 
 export enum RenewalStatus {
     QUEUED = 'queued',
-    REVIEWING = 'reviewing',
-    DRAFTING = 'drafting',
-    APPROVING = 'approving',
-    SIGNING = 'signing',
-    EXECUTED = 'executed',
+    IN_PROGRESS = 'in_progress',
     ACTIVATED = 'activated',
     CANCELLED = 'cancelled',
 }

@@ -453,7 +453,23 @@ export default function App() {
     
     const { error } = await supabase.rpc('handle_contract_transition', { p_contract_id: contractId, p_action: action, p_payload: rpcPayload, });
     if (error) { console.error("Error transitioning contract state:", error); alert(`Failed to update contract: ${error.message}`); } 
-    else { const updatedContracts = await fetchData(currentUser); if (selectedContract?.id === contractId) { setSelectedContract(updatedContracts.find(c => c.id === contractId) || null); } }
+    else { 
+        // If activating a child contract, supersede the parent.
+        if (action === ContractStatus.ACTIVE) {
+            const contract = contracts.find(c => c.id === contractId);
+            if (contract?.parentContractId) {
+                const parent = contracts.find(c => c.id === contract.parentContractId);
+                if (parent) {
+                    await supabase.from('contracts').update({ status: ContractStatus.SUPERSEDED }).eq('id', parent.id);
+                    if (parent.renewalRequest) {
+                        await supabase.from('renewal_requests').update({ status: RenewalStatusEnum.ACTIVATED }).eq('id', parent.renewalRequest.id);
+                    }
+                }
+            }
+        }
+        const updatedContracts = await fetchData(currentUser); 
+        if (selectedContract?.id === contractId) { setSelectedContract(updatedContracts.find(c => c.id === contractId) || null); } 
+    }
   };
 
   const handleSigningStatusUpdate = async (contractId: string, newStatus: SigningStatus) => {
@@ -478,36 +494,35 @@ export default function App() {
       handleContractTransition(contractId, ContractStatus.FULLY_EXECUTED);
   };
 
-  const handleRenewalStatusUpdate = async (renewalRequestId: string, newStatus: RenewalStatus | null) => {
-    if (!currentUser) return;
-    const { error } = await supabase.from('renewal_requests').update({ status: newStatus }).eq('id', renewalRequestId);
-    if (error) { console.error("Error updating renewal status:", error); alert(`Failed to update renewal status: ${error.message}`); } 
-    else { const updatedContracts = await fetchData(currentUser); if (selectedContract?.renewalRequest?.id === renewalRequestId) { setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null); } }
-  };
-
   const handleRenewalDecision = async (renewalRequestId: string, mode: RenewalMode, notes?: string) => {
-    if (!currentUser) return;
+      if (!currentUser) return;
 
-    let newStatus: RenewalStatus;
-    switch (mode) {
-        case RenewalMode.RENEW_AS_IS: newStatus = RenewalStatusEnum.SIGNING; break;
-        case RenewalMode.NEW_CONTRACT: newStatus = RenewalStatusEnum.REVIEWING; break;
-        case RenewalMode.AMENDMENT: newStatus = RenewalStatusEnum.REVIEWING; break;
-        case RenewalMode.TERMINATE: newStatus = RenewalStatusEnum.CANCELLED; break;
-        default: return; // Should not happen
-    }
-    
-    const { error } = await supabase.from('renewal_requests').update({ mode, status: newStatus, notes }).eq('id', renewalRequestId);
-    
-    if (error) {
-        console.error("Error updating renewal decision:", error);
-        alert(`Failed to update renewal decision: ${error.message}`);
-    } else {
-        const updatedContracts = await fetchData(currentUser);
-        if (selectedContract?.renewalRequest?.id === renewalRequestId) {
-            setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null);
-        }
-    }
+      const contractToUpdate = contracts.find(c => c.renewalRequest?.id === renewalRequestId);
+      if (!contractToUpdate) return;
+      
+      const { error } = await supabase.from('renewal_requests').update({ 
+          mode, 
+          status: mode === RenewalMode.TERMINATE ? RenewalStatusEnum.CANCELLED : RenewalStatusEnum.IN_PROGRESS,
+          notes 
+      }).eq('id', renewalRequestId);
+      
+      if (error) {
+          console.error("Error updating renewal decision:", error);
+          alert(`Failed to update renewal decision: ${error.message}`);
+          return;
+      }
+      
+      // Trigger main contract status changes
+      if (mode === RenewalMode.NEW_CONTRACT || mode === RenewalMode.AMENDMENT) {
+          await handleContractTransition(contractToUpdate.id, ContractStatus.IN_REVIEW);
+      } else if (mode === RenewalMode.TERMINATE) {
+          await handleContractTransition(contractToUpdate.id, ContractStatus.TERMINATED);
+      }
+
+      const updatedContracts = await fetchData(currentUser);
+      if (selectedContract?.id === contractToUpdate.id) {
+          setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null);
+      }
   };
   
   const handleCreateRenewalRequest = async (contract: Contract) => {
@@ -518,7 +533,7 @@ export default function App() {
         company_id: currentUser.companyId,
         app_id: currentUser.appId,
         renewal_owner_id: contract.owner.id,
-        mode: RenewalMode.NEW_CONTRACT,
+        mode: null, // Mode will be decided by the user
         status: RenewalStatusEnum.QUEUED,
         uplift_percent: contract.upliftPercent || 0,
     });
@@ -534,32 +549,31 @@ export default function App() {
     }
   };
 
+  const handleRenewAsIs = async (contract: Contract) => {
+    if (!currentUser || !contract.renewalRequest) return;
+    
+    const newEndDate = new Date(contract.endDate);
+    newEndDate.setMonth(newEndDate.getMonth() + (contract.renewalTermMonths || 12));
+    const newValue = contract.value * (1 + ((contract.upliftPercent || 0) / 100));
 
-  const handleActivateRenewal = async (parentContract: Contract) => {
-    if (!currentUser || !currentUser.companyId || !currentUser.appId || !parentContract.renewalRequest) return;
-
-    const parentEndDate = new Date(parentContract.endDate);
-    const newStartDate = new Date(parentEndDate.setDate(parentEndDate.getDate() + 1)).toISOString().split('T')[0];
-    const newEndDate = new Date(new Date(newStartDate).setMonth(new Date(newStartDate).getMonth() + (parentContract.renewalTermMonths || 12))).toISOString().split('T')[0];
-    const newValue = parentContract.value * (1 + (parentContract.upliftPercent || 0) / 100);
-
-    const { data: newContract, error: insertError } = await supabase.from('contracts').insert({
-        title: parentContract.title, type: parentContract.type, risk_level: parentContract.riskLevel,
-        counterparty_id: parentContract.counterparty.id, property_id: parentContract.property?.id,
-        owner_id: parentContract.owner.id, frequency: parentContract.frequency,
-        seasonal_months: parentContract.seasonalMonths, allocation: parentContract.allocation,
-        start_date: newStartDate, effective_date: newStartDate, end_date: newEndDate,
-        value: newValue, status: ContractStatus.ACTIVE, parent_contract_id: parentContract.id,
-        company_id: currentUser.companyId, app_id: currentUser.appId,
-    }).select().single();
-    if (insertError) { console.error("Error creating renewed contract:", insertError); alert(`Failed to activate renewal: ${insertError.message}`); return; }
-
-    const [parentUpdate, renewalUpdate] = await Promise.all([
-      supabase.from('contracts').update({ status: ContractStatus.SUPERSEDED }).eq('id', parentContract.id),
-      supabase.from('renewal_requests').update({ status: RenewalStatusEnum.ACTIVATED }).eq('id', parentContract.renewalRequest.id)
+    const [contractUpdate, renewalUpdate] = await Promise.all([
+        supabase.from('contracts').update({
+            end_date: newEndDate.toISOString().split('T')[0],
+            value: newValue,
+        }).eq('id', contract.id),
+        supabase.from('renewal_requests').update({ status: RenewalStatusEnum.ACTIVATED }).eq('id', contract.renewalRequest.id)
     ]);
-    if (parentUpdate.error || renewalUpdate.error) { console.error("Error finalizing renewal:", parentUpdate.error, renewalUpdate.error); }
-    else { alert("Renewal activated successfully!"); const updatedContracts = await fetchData(currentUser); const newSelectedContract = updatedContracts.find(c => c.id === newContract.id); setSelectedContract(newSelectedContract || null); }
+    
+    if (contractUpdate.error || renewalUpdate.error) {
+        console.error("Error finalizing 'Renew As-Is':", contractUpdate.error, renewalUpdate.error);
+        alert("Failed to finalize renewal.");
+    } else {
+        alert("Contract renewed as-is successfully!");
+        const updatedContracts = await fetchData(currentUser);
+        if (selectedContract?.id === contract.id) {
+            setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null);
+        }
+    }
   };
 
   const handleCreateNewVersion = async (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => {
@@ -592,49 +606,6 @@ export default function App() {
 
       const updatedContracts = await fetchData(currentUser);
       if (selectedContract?.id === contractId) { setSelectedContract(updatedContracts.find(c => c.id === contractId) || null); }
-  };
-
-  const handleFinalizeRenewalDraft = async (contract: Contract, draftContent: string) => {
-    if (!currentUser || !contract.renewalRequest) return;
-    
-    const latestVersion = contract.versions[contract.versions.length - 1];
-    const newVersionNumber = latestVersion.versionNumber + 1;
-    
-    const { data: insertedVersion, error: versionError } = await supabase
-        .from('contract_versions')
-        .insert({
-            contract_id: contract.id,
-            version_number: newVersionNumber,
-            author_id: currentUser.id,
-            content: draftContent,
-            file_name: `Renewal Draft v${newVersionNumber}.txt`,
-            value: latestVersion.value, // Assuming value is same for now
-            effective_date: latestVersion.effectiveDate, // These may change
-            end_date: latestVersion.endDate, // based on the draft
-            frequency: latestVersion.frequency,
-            company_id: currentUser.companyId,
-            app_id: currentUser.appId,
-        })
-        .select()
-        .single();
-        
-    if (versionError) {
-        console.error("Error creating renewal draft version:", versionError);
-        alert("Failed to save draft.");
-        return;
-    }
-    
-    const [contractUpdateRes, renewalUpdateRes] = await Promise.all([
-        supabase.from('contracts').update({ draft_version_id: insertedVersion.id }).eq('id', contract.id),
-        supabase.from('renewal_requests').update({ status: RenewalStatusEnum.APPROVING }).eq('id', contract.renewalRequest.id)
-    ]);
-    
-    if (contractUpdateRes.error || renewalUpdateRes.error) {
-        console.error("Error finalizing draft:", contractUpdateRes.error, renewalUpdateRes.error);
-        alert("Failed to finalize draft.");
-    } else {
-        await fetchData(currentUser);
-    }
   };
 
   const handleUpdateRolePermissions = async (roleId: string, newPermissions: PermissionSet) => {
@@ -704,7 +675,7 @@ export default function App() {
     }
     switch(activeView) {
       case 'dashboard': return <Dashboard contracts={contracts} onMetricClick={handleMetricNavigation} currentUser={currentUser} onSelectContract={handleSelectContract} />;
-      case 'contracts': return selectedContract ? ( <ContractDetail contract={selectedContract} contracts={contracts} onSelectContract={handleSelectContract} users={users} properties={properties} currentUser={currentUser} onBack={handleBackToList} onTransition={handleContractTransition} onCreateNewVersion={handleCreateNewVersion} onRenewalStatusUpdate={handleRenewalStatusUpdate} onActivateRenewal={handleActivateRenewal} onCreateRenewalRequest={handleCreateRenewalRequest} onRenewalDecision={handleRenewalDecision} onFinalizeDraft={handleFinalizeRenewalDraft} onUpdateSigningStatus={handleSigningStatusUpdate} onCreateComment={handleCreateComment} onResolveComment={handleResolveComment} /> ) : ( <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={handleStartCreate} initialFilters={initialFilters} currentUser={currentUser} /> );
+      case 'contracts': return selectedContract ? ( <ContractDetail contract={selectedContract} contracts={contracts} onSelectContract={handleSelectContract} users={users} properties={properties} currentUser={currentUser} onBack={handleBackToList} onTransition={handleContractTransition} onCreateNewVersion={handleCreateNewVersion} onRenewalDecision={handleRenewalDecision} onCreateRenewalRequest={handleCreateRenewalRequest} onRenewAsIs={handleRenewAsIs} onUpdateSigningStatus={handleSigningStatusUpdate} onCreateComment={handleCreateComment} onResolveComment={handleResolveComment} /> ) : ( <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={handleStartCreate} initialFilters={initialFilters} currentUser={currentUser} /> );
       case 'renewals': return <RenewalsPage contracts={contracts} onSelectContract={handleSelectContract} users={users} notificationSettings={userNotificationSettings} onUpdateNotificationSettings={setUserNotificationSettings} />;
       case 'approvals': return <ApprovalsPage contracts={contracts} onTransition={handleContractTransition} currentUser={currentUser} />;
       case 'signing': return <SigningPage contracts={contracts} onSelectContract={handleSelectContract} onUpdateSigningStatus={handleSigningStatusUpdate} onMarkAsExecuted={handleMarkAsExecuted} />;

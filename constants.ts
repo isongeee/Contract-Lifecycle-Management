@@ -18,11 +18,7 @@ export const STATUS_COLORS: Record<ContractStatus, string> = {
 
 export const RENEWAL_STATUS_COLORS: Record<RenewalStatus, string> = {
   [RenewalStatus.QUEUED]: 'bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-100',
-  [RenewalStatus.REVIEWING]: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200',
-  [RenewalStatus.DRAFTING]: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200',
-  [RenewalStatus.APPROVING]: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200',
-  [RenewalStatus.SIGNING]: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200',
-  [RenewalStatus.EXECUTED]: 'bg-primary-200 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200',
+  [RenewalStatus.IN_PROGRESS]: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200',
   [RenewalStatus.ACTIVATED]: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
   [RenewalStatus.CANCELLED]: 'bg-red-200 text-red-800 dark:bg-red-900/40 dark:text-red-200',
 };
