@@ -128,3 +128,34 @@ export const generateRenewalDraft = async (previousContractText: string, userPro
     return "An error occurred while generating the contract draft. Please try again.";
   }
 };
+
+export const suggestCommentReply = async (contractClause: string, commentThread: {author: string, content: string}[]): Promise<string> => {
+    if (!API_KEY) return "API Key not configured.";
+    try {
+        const fullPrompt = `You are a senior legal counsel. Given the following contract clause and a comment thread about it, suggest a professional and constructive reply to the last comment.
+        
+        CONTRACT CLAUSE (for context):
+        ---
+        ${contractClause}
+        ---
+
+        COMMENT THREAD:
+        ---
+        ${commentThread.map(c => `${c.author}: ${c.content}`).join('\n')}
+        ---
+
+        SUGGESTED REPLY (as a helpful assistant, address the last comment):
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: fullPrompt,
+            config: { temperature: 0.5 },
+        });
+
+        return response.text;
+    } catch (error) {
+        console.error("Error suggesting comment reply:", error);
+        return "An error occurred while generating a suggestion.";
+    }
+};

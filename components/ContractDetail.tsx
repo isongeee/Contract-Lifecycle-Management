@@ -1,9 +1,9 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import type { Contract, Clause, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, AuditLog, RenewalStatus, RenewalMode, SigningStatus } from '../types';
+import type { Contract, Clause, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, AuditLog, RenewalStatus, RenewalMode, SigningStatus, Comment } from '../types';
 import { ContractStatus, ApprovalStatus, ContractFrequency, RenewalStatus as RenewalStatusEnum, SigningStatus as SigningStatusEnum } from '../types';
 import StatusTag from './StatusTag';
-import { ArrowLeftIcon, SparklesIcon, LoaderIcon, CopyIcon, FileTextIcon, ChevronDownIcon, ArchiveIcon, CheckCircleIcon, XCircleIcon, HomeIcon, ClockIcon, RefreshCwIcon, PenSquareIcon } from './icons';
+import { ArrowLeftIcon, SparklesIcon, LoaderIcon, CopyIcon, FileTextIcon, ChevronDownIcon, ArchiveIcon, CheckCircleIcon, XCircleIcon, HomeIcon, ClockIcon, RefreshCwIcon, PenSquareIcon, GitCompareIcon, MessageSquareIcon } from './icons';
 import { APPROVAL_STATUS_COLORS, RENEWAL_STATUS_COLORS } from '../constants';
 import { summarizeContractRisk, extractClauses } from '../services/geminiService';
 import CreateVersionModal from './CreateVersionModal';
@@ -12,6 +12,8 @@ import ConfirmStatusChangeModal from './ConfirmStatusChangeModal';
 import { supabase } from '../lib/supabaseClient';
 import RenewalDecisionModal from './RenewalDecisionModal';
 import RenewalWorkspace from './RenewalWorkspace';
+import VersionComparisonView from './VersionComparisonView';
+import CommentsPanel from './CommentsPanel';
 
 type ContractAction = ContractStatus | 'APPROVE_STEP' | 'REJECT_STEP';
 
@@ -31,6 +33,8 @@ interface ContractDetailProps {
   onSelectContract: (contract: Contract) => void;
   onFinalizeDraft: (contract: Contract, draftContent: string) => void;
   onUpdateSigningStatus: (contractId: string, status: SigningStatus) => void;
+  onCreateComment: (versionId: string, content: string) => void;
+  onResolveComment: (commentId: string, isResolved: boolean) => void;
 }
 
 const ContractActions = ({ contract, onRequestTransition, onOpenApprovalModal, onStartCreateNewVersion }: { contract: Contract, onRequestTransition: (action: ContractAction) => void, onOpenApprovalModal: () => void, onStartCreateNewVersion: () => void }) => {
@@ -119,30 +123,27 @@ const ApprovalWidget = ({ steps }: { steps: Contract['approvalSteps']}) => (
 
 const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
-const VersionHistory = ({ versions, selectedVersionId, onSelectVersion }: { versions: Contract['versions']; selectedVersionId: string | null; onSelectVersion: (id: string) => void; }) => (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Version History</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Select a version to view its details and content.</p>
-        <ul className="space-y-1 -mx-2">
+const VersionHistory = ({ versions, selectedVersionId, onSelectVersion, onCompare, compareSelection, onToggleCompareSelection }: { versions: Contract['versions']; selectedVersionId: string | null; onSelectVersion: (id: string) => void; onCompare: () => void; compareSelection: string[]; onToggleCompareSelection: (id: string) => void; }) => (
+    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
+        <div className="flex justify-between items-center mb-2">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Version History</h3>
+            <button onClick={onCompare} disabled={compareSelection.length !== 2} className="flex items-center px-3 py-1.5 text-xs font-semibold text-primary-800 dark:text-primary-200 bg-primary-100 dark:bg-primary-900/40 rounded-md hover:bg-primary-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                <GitCompareIcon className="w-4 h-4 mr-1.5" /> Compare ({compareSelection.length}/2)
+            </button>
+        </div>
+        <ul className="space-y-1 -mx-2 max-h-60 overflow-y-auto">
             {versions.slice().reverse().map(v => (
-                <li key={v.id}>
-                    <button 
-                        onClick={() => onSelectVersion(v.id)}
-                        className={`w-full text-left p-3 rounded-lg transition-colors flex items-start space-x-3 ${v.id === selectedVersionId ? 'bg-primary-100 dark:bg-primary-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}
-                    >
-                        <div className="flex-shrink-0">
+                <li key={v.id} className={`p-2 rounded-lg transition-colors ${v.id === selectedVersionId ? 'bg-primary-100 dark:bg-primary-900/20' : ''}`}>
+                    <div className="flex items-start space-x-3">
+                        <input type="checkbox" onChange={() => onToggleCompareSelection(v.id)} checked={compareSelection.includes(v.id)} className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                        <button onClick={() => onSelectVersion(v.id)} className="w-full text-left flex items-start space-x-2">
                             <img className="h-8 w-8 rounded-full" src={v.author.avatarUrl} alt={`${v.author.firstName} ${v.author.lastName}`} />
-                        </div>
-                        <div>
-                            <p className={`text-sm font-semibold ${v.id === selectedVersionId ? 'text-primary-800 dark:text-primary-100' : 'text-gray-800 dark:text-gray-200'}`}>Version {v.versionNumber}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">by {`${v.author.firstName} ${v.author.lastName}`} on {v.createdAt}</p>
-                            {v.fileName && (
-                                <div className="mt-1 flex items-center text-xs text-blue-600 dark:text-blue-400">
-                                    <FileTextIcon className="w-3 h-3 mr-1" /> {v.fileName}
-                                </div>
-                            )}
-                        </div>
-                    </button>
+                            <div>
+                                <p className={`text-sm font-semibold ${v.id === selectedVersionId ? 'text-primary-800 dark:text-primary-100' : 'text-gray-800 dark:text-gray-200'}`}>Version {v.versionNumber}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">by {`${v.author.firstName}`} on {v.createdAt}</p>
+                            </div>
+                        </button>
+                    </div>
                 </li>
             ))}
         </ul>
@@ -473,7 +474,7 @@ const SigningProgressWidget = ({ contract, onUpdateSigningStatus, onMarkAsExecut
 };
 
 
-export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalStatusUpdate, onActivateRenewal, onCreateRenewalRequest, onSelectContract, onRenewalDecision, onFinalizeDraft, onUpdateSigningStatus }: ContractDetailProps) {
+export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalStatusUpdate, onActivateRenewal, onCreateRenewalRequest, onSelectContract, onRenewalDecision, onFinalizeDraft, onUpdateSigningStatus, onCreateComment, onResolveComment }: ContractDetailProps) {
   const [contract, setContract] = useState(initialContract);
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const [isRequestingApproval, setIsRequestingApproval] = useState(false);
@@ -481,7 +482,9 @@ export default function ContractDetail({ contract: initialContract, contracts, p
   const [isLoadingClauses, setIsLoadingClauses] = useState(false);
   const [isMakingDecision, setIsMakingDecision] = useState(false);
   const [confirmModalState, setConfirmModalState] = useState<{ isOpen: boolean; action: ContractAction | null; payload?: any; }>({ isOpen: false, action: null, payload: undefined });
-  
+  const [compareSelection, setCompareSelection] = useState<string[]>([]);
+  const [comparingVersions, setComparingVersions] = useState<{v1: ContractVersion, v2: ContractVersion} | null>(null);
+
   const [viewedVersionId, setViewedVersionId] = useState<string | null>(
     initialContract.versions.length > 0 ? initialContract.versions[initialContract.versions.length - 1].id : null
   );
@@ -495,10 +498,12 @@ export default function ContractDetail({ contract: initialContract, contracts, p
     setContract(initialContract);
     const newLatestVersion = initialContract.versions.length > 0 ? initialContract.versions[initialContract.versions.length - 1] : null;
     setViewedVersionId(newLatestVersion?.id || null);
+    setComparingVersions(null);
+    setCompareSelection([]);
   }, [initialContract]);
 
   const latestVersion = useMemo(() => 
-    contract.versions.length > 0 ? contract.versions[contract.versions.length - 1] : null
+    contract.versions.length > 0 ? contract.versions.sort((a,b) => b.versionNumber - a.versionNumber)[0] : null
   , [contract.versions]);
     
   const viewedVersion = useMemo(() => 
@@ -583,6 +588,25 @@ export default function ContractDetail({ contract: initialContract, contracts, p
     onTransition(contract.id, ContractStatus.PENDING_APPROVAL, { approvers, draft_version_id: versionId });
     setIsRequestingApproval(false);
   };
+  
+  const handleToggleCompareSelection = (versionId: string) => {
+    setCompareSelection(prev => 
+        prev.includes(versionId)
+            ? prev.filter(id => id !== versionId)
+            : [...prev, versionId].slice(-2)
+    );
+  };
+
+  const handleCompare = () => {
+      if (compareSelection.length === 2) {
+          const v1 = contract.versions.find(v => v.id === compareSelection[0]);
+          const v2 = contract.versions.find(v => v.id === compareSelection[1]);
+          if (v1 && v2) {
+              // Ensure v1 is the older version
+              setComparingVersions(v1.versionNumber < v2.versionNumber ? { v1, v2 } : { v1: v2, v2: v1 });
+          }
+      }
+  };
 
   return (
     <div>
@@ -629,7 +653,8 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                     <div className="mt-2 flex items-center space-x-4">
                         <StatusTag type="contract" status={contract.status} />
                         <StatusTag type="risk" status={contract.riskLevel} />
-                        <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">Viewing Version {viewedVersion.versionNumber}</span>
+                        {!comparingVersions && <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">Viewing Version {viewedVersion.versionNumber}</span>}
+                        {comparingVersions && <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">Comparing v{comparingVersions.v1.versionNumber} and v{comparingVersions.v2.versionNumber}</span>}
                     </div>
                 </div>
                 <div className="flex items-center space-x-3">
@@ -655,24 +680,29 @@ export default function ContractDetail({ contract: initialContract, contracts, p
             </dl>
         </div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-                <RenewalCard contract={contract} onRenewalStatusUpdate={onRenewalStatusUpdate} onActivateRenewal={onActivateRenewal} onOpenDecisionModal={() => setIsMakingDecision(true)} />
-                <SigningProgressWidget contract={contract} onUpdateSigningStatus={onUpdateSigningStatus} onMarkAsExecuted={handleMarkAsExecuted} />
-                <AssociatedPropertiesCard contract={contract} properties={properties} />
-                <FinancialsAndAllocationCard contract={contract} viewedVersion={viewedVersion} properties={properties} />
-                <AiAnalysis onSummary={handleSummarizeRisk} onExtract={handleExtractClauses} riskSummary={contract.riskSummary} extractedClauses={contract.extractedClauses} isLoadingSummary={isLoadingSummary} isLoadingClauses={isLoadingClauses} />
-                 <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Contract Document (Version {viewedVersion.versionNumber})</h3>
-                    <div className="prose prose-sm max-w-none p-4 bg-gray-50 dark:bg-gray-900/50 rounded-md border dark:border-gray-700 h-64 overflow-y-auto">
-                        <pre className="whitespace-pre-wrap text-xs font-sans">{viewedVersion.content}</pre>
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+            <div className="xl:col-span-8 space-y-6">
+                 {comparingVersions ? (
+                    <div>
+                        <button onClick={() => setComparingVersions(null)} className="text-sm font-semibold text-primary-600 mb-2">← Back to Document View</button>
+                        <VersionComparisonView v1={comparingVersions.v1} v2={comparingVersions.v2} />
                     </div>
-                </div>
+                 ) : (
+                    <>
+                        <AiAnalysis onSummary={handleSummarizeRisk} onExtract={handleExtractClauses} riskSummary={contract.riskSummary} extractedClauses={contract.extractedClauses} isLoadingSummary={isLoadingSummary} isLoadingClauses={isLoadingClauses} />
+                        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Contract Document (Version {viewedVersion.versionNumber})</h3>
+                            <div className="prose prose-sm max-w-none p-4 bg-gray-50 dark:bg-gray-900/50 rounded-md border dark:border-gray-700 h-96 overflow-y-auto">
+                                <pre className="whitespace-pre-wrap text-xs font-sans">{viewedVersion.content}</pre>
+                            </div>
+                        </div>
+                    </>
+                 )}
+                 <ApprovalWidget steps={contract.approvalSteps} />
             </div>
-            <div className="space-y-6">
-                <ApprovalWidget steps={contract.approvalSteps} />
-                <VersionHistory versions={contract.versions} selectedVersionId={viewedVersionId} onSelectVersion={handleSelectVersion} />
-                <AuditLogCard auditLogs={contract.auditLogs} />
+            <div className="xl:col-span-4 space-y-6">
+                <VersionHistory versions={contract.versions} selectedVersionId={viewedVersionId} onSelectVersion={handleSelectVersion} onCompare={handleCompare} compareSelection={compareSelection} onToggleCompareSelection={handleToggleCompareSelection}/>
+                <CommentsPanel comments={viewedVersion.comments || []} users={users} currentUser={currentUser} versionId={viewedVersion.id} contractContent={viewedVersion.content} onCreateComment={onCreateComment} onResolveComment={onResolveComment} />
             </div>
         </div>
         {isCreatingVersion && ( <CreateVersionModal contract={contract} properties={properties} onClose={() => setIsCreatingVersion(false)} onSave={handleSaveNewVersion} /> )}

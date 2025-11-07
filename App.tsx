@@ -159,6 +159,21 @@ export default function App() {
         contractIds.length > 0 ? supabase.from('audit_logs').select('*').in('related_entity_id', contractIds).eq('related_entity_type', 'renewal_request') : Promise.resolve({ data: [] })
     ]);
 
+    const versionIds = (versionsRes.data || []).map(v => v.id);
+    const { data: commentsData } = versionIds.length > 0 ? await supabase.from('comments').select('*').in('version_id', versionIds) : { data: [] };
+    const commentsByVersionId = (commentsData || []).reduce((acc, comment) => {
+        const versionComments = acc.get(comment.version_id) || [];
+        versionComments.push({
+            ...comment,
+            resolvedAt: comment.resolved_at,
+            versionId: comment.version_id,
+            author: usersMap.get(comment.author_id)!,
+            createdAt: comment.created_at
+        });
+        acc.set(comment.version_id, versionComments);
+        return acc;
+    }, new Map<string, any[]>());
+
     const contractsById = new Map<string, Contract>();
     for (const c of (contractsData || [])) {
       contractsById.set(c.id, {
@@ -185,7 +200,8 @@ export default function App() {
 
     for (const version of (versionsRes.data || [])) {
         const contract = contractsById.get(version.contract_id);
-        if (contract) contract.versions.push({ ...version, versionNumber: version.version_number, createdAt: version.created_at, fileName: version.file_name, effectiveDate: version.effective_date, endDate: version.end_date, seasonalMonths: version.seasonal_months, author: usersMap.get(version.author_id)!, property: propertiesMap.get(version.property_id) });
+        const comments = commentsByVersionId.get(version.id) || [];
+        if (contract) contract.versions.push({ ...version, versionNumber: version.version_number, createdAt: version.created_at, fileName: version.file_name, effectiveDate: version.effective_date, endDate: version.end_date, seasonalMonths: version.seasonal_months, author: usersMap.get(version.author_id)!, property: propertiesMap.get(version.property_id), comments });
     }
     for (const approval of (approvalsRes.data || [])) {
         const contract = contractsById.get(approval.contract_id);
@@ -645,6 +661,42 @@ export default function App() {
     setRoles(prev => prev.filter(r => r.id !== roleId));
   };
 
+  const handleCreateComment = async (versionId: string, content: string) => {
+    if (!currentUser?.companyId || !currentUser?.appId) return;
+
+    const { error } = await supabase.from('comments').insert({
+        version_id: versionId,
+        content: content,
+        author_id: currentUser.id,
+        company_id: currentUser.companyId,
+        app_id: currentUser.appId
+    });
+
+    if (error) {
+      console.error("Error creating comment:", error);
+    } else {
+      const updatedContracts = await fetchData(currentUser);
+      if (selectedContract) {
+        setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null);
+      }
+    }
+  };
+  
+  const handleResolveComment = async (commentId: string, isResolved: boolean) => {
+    const { error } = await supabase
+      .from('comments')
+      .update({ resolved_at: isResolved ? new Date().toISOString() : null })
+      .eq('id', commentId);
+
+    if (error) {
+      console.error("Error updating comment status:", error);
+    } else {
+      const updatedContracts = await fetchData(currentUser);
+       if (selectedContract) {
+        setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null);
+      }
+    }
+  };
 
   const renderContent = () => {
     if (isLoading || !currentUser) {
@@ -652,7 +704,7 @@ export default function App() {
     }
     switch(activeView) {
       case 'dashboard': return <Dashboard contracts={contracts} onMetricClick={handleMetricNavigation} currentUser={currentUser} />;
-      case 'contracts': return selectedContract ? ( <ContractDetail contract={selectedContract} contracts={contracts} onSelectContract={handleSelectContract} users={users} properties={properties} currentUser={currentUser} onBack={handleBackToList} onTransition={handleContractTransition} onCreateNewVersion={handleCreateNewVersion} onRenewalStatusUpdate={handleRenewalStatusUpdate} onActivateRenewal={handleActivateRenewal} onCreateRenewalRequest={handleCreateRenewalRequest} onRenewalDecision={handleRenewalDecision} onFinalizeDraft={handleFinalizeRenewalDraft} onUpdateSigningStatus={handleSigningStatusUpdate} /> ) : ( <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={handleStartCreate} initialFilters={initialFilters} currentUser={currentUser} /> );
+      case 'contracts': return selectedContract ? ( <ContractDetail contract={selectedContract} contracts={contracts} onSelectContract={handleSelectContract} users={users} properties={properties} currentUser={currentUser} onBack={handleBackToList} onTransition={handleContractTransition} onCreateNewVersion={handleCreateNewVersion} onRenewalStatusUpdate={handleRenewalStatusUpdate} onActivateRenewal={handleActivateRenewal} onCreateRenewalRequest={handleCreateRenewalRequest} onRenewalDecision={handleRenewalDecision} onFinalizeDraft={handleFinalizeRenewalDraft} onUpdateSigningStatus={handleSigningStatusUpdate} onCreateComment={handleCreateComment} onResolveComment={handleResolveComment} /> ) : ( <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={handleStartCreate} initialFilters={initialFilters} currentUser={currentUser} /> );
       case 'renewals': return <RenewalsPage contracts={contracts} onSelectContract={handleSelectContract} users={users} notificationSettings={userNotificationSettings} onUpdateNotificationSettings={setUserNotificationSettings} />;
       case 'approvals': return <ApprovalsPage contracts={contracts} onTransition={handleContractTransition} currentUser={currentUser} />;
       case 'signing': return <SigningPage contracts={contracts} onSelectContract={handleSelectContract} onUpdateSigningStatus={handleSigningStatusUpdate} onMarkAsExecuted={handleMarkAsExecuted} />;

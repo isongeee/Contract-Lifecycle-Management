@@ -142,6 +142,15 @@ export interface ApprovalStep {
   approvedAt?: string;
 }
 
+export interface Comment {
+  id: string;
+  createdAt: string;
+  content: string;
+  author: UserProfile;
+  resolvedAt?: string;
+  versionId: string;
+}
+
 export interface ContractVersion {
   id: string;
   versionNumber: number;
@@ -157,6 +166,7 @@ export interface ContractVersion {
   frequency: ContractFrequency;
   seasonalMonths?: string[];
   property?: Property;
+  comments?: Comment[];
 }
 
 export interface Clause {
