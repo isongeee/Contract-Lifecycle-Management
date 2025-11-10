@@ -135,6 +135,7 @@ export interface ApprovalStep {
   status: ApprovalStatus;
   comment?: string;
   approvedAt?: string;
+  versionId: string;
 }
 
 export interface Comment {
@@ -209,6 +210,8 @@ export interface RenewalRequest {
     upliftPercent?: number;
     notes?: string;
     feedback?: RenewalFeedback[];
+    renewalTermMonths?: number;
+    noticePeriodDays?: number;
 }
 
 export interface Contract {
@@ -267,7 +270,7 @@ export interface Notification {
   id: string;
   created_at: string;
   user_id: string;
-  type: 'APPROVAL_REQUEST' | 'APPROVAL_RESPONSE' | 'COMMENT_MENTION';
+  type: 'APPROVAL_REQUEST' | 'APPROVAL_RESPONSE' | 'COMMENT_MENTION' | 'RENEWAL_REMINDER' | 'STATUS_CHANGE' | 'SIGNING_PROGRESS' | 'NEW_VERSION';
   message: string;
   is_read: boolean;
   related_entity_type?: 'contract';

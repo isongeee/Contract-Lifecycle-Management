@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type { Contract, Clause, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, AuditLog, RenewalStatus, RenewalMode, SigningStatus, Comment } from '../types';
 import { ContractStatus, ApprovalStatus, ContractFrequency, RenewalStatus as RenewalStatusEnum, SigningStatus as SigningStatusEnum, RenewalMode as RenewalModeEnum } from '../types';
 import StatusTag from './StatusTag';
-import { ArrowLeftIcon, SparklesIcon, LoaderIcon, CopyIcon, FileTextIcon, ChevronDownIcon, ArchiveIcon, CheckCircleIcon, XCircleIcon, HomeIcon, ClockIcon, RefreshCwIcon, PenSquareIcon, GitCompareIcon, MessageSquareIcon } from './icons';
+import { ArrowLeftIcon, SparklesIcon, LoaderIcon, CopyIcon, FileTextIcon, ChevronDownIcon, ArchiveIcon, CheckCircleIcon, XCircleIcon, HomeIcon, ClockIcon, RefreshCwIcon, PenSquareIcon, GitCompareIcon, MessageSquareIcon, EditIcon } from './icons';
 import { APPROVAL_STATUS_COLORS, RENEWAL_STATUS_COLORS } from '../constants';
 import { summarizeContractRisk, extractClauses } from '../services/geminiService';
 import CreateVersionModal from './CreateVersionModal';
@@ -12,6 +12,7 @@ import { supabase } from '../lib/supabaseClient';
 import RenewalDecisionModal from './RenewalDecisionModal';
 import VersionComparisonView from './VersionComparisonView';
 import CommentsPanel from './CommentsPanel';
+import UpdateStatusModal from './UpdateStatusModal';
 
 type ContractAction = ContractStatus | 'APPROVE_STEP' | 'REJECT_STEP';
 
@@ -27,12 +28,13 @@ interface ContractDetailProps {
   onRenewalDecision: (renewalRequestId: string, mode: RenewalMode, notes?: string) => void;
   onCreateRenewalRequest: (contract: Contract) => void;
   onSelectContract: (contract: Contract) => void;
-  onRenewAsIs: (contract: Contract) => void;
+  onRenewAsIs: (contract: Contract, notes?: string) => void;
   onStartRenegotiation: (originalContract: Contract, notes?: string) => void;
   onUpdateSigningStatus: (contractId: string, status: SigningStatus) => void;
   onCreateComment: (versionId: string, content: string) => void;
   onResolveComment: (commentId: string, isResolved: boolean) => void;
   onCreateRenewalFeedback: (renewalRequestId: string, feedbackText: string) => void;
+  onUpdateRenewalTerms: (renewalRequestId: string, updatedTerms: { renewalTermMonths: number; noticePeriodDays: number; upliftPercent: number; }) => void;
 }
 
 const ContractActions = ({ contract, onRequestTransition, onOpenApprovalModal, onStartCreateNewVersion }: { contract: Contract, onRequestTransition: (action: ContractAction) => void, onOpenApprovalModal: () => void, onStartCreateNewVersion: () => void }) => {
@@ -371,13 +373,47 @@ const AuditLogCard = ({ auditLogs }: { auditLogs?: AuditLog[] }) => {
     );
 };
 
-const RenewalCard = ({ contract, onOpenDecisionModal, onRenewAsIs }: { contract: Contract, onOpenDecisionModal: () => void; onRenewAsIs: () => void; }) => {
+const RenewalCard = ({ contract, onOpenDecisionModal, onUpdateRenewalTerms }: { contract: Contract, onOpenDecisionModal: () => void; onUpdateRenewalTerms: (renewalRequestId: string, updatedTerms: { renewalTermMonths: number; noticePeriodDays: number; upliftPercent: number; }) => void; }) => {
     if (!contract.renewalRequest) return null;
     const { renewalRequest } = contract;
+    
+    const [isEditing, setIsEditing] = useState(false);
+    const [terms, setTerms] = useState({
+        renewalTermMonths: renewalRequest.renewalTermMonths ?? contract.renewalTermMonths ?? 12,
+        noticePeriodDays: renewalRequest.noticePeriodDays ?? contract.noticePeriodDays ?? 30,
+        upliftPercent: renewalRequest.upliftPercent ?? contract.upliftPercent ?? 0,
+    });
+    
+    const handleSave = () => {
+        onUpdateRenewalTerms(renewalRequest.id, terms);
+        setIsEditing(false);
+    };
 
+    const handleCancel = () => {
+        setTerms({
+            renewalTermMonths: renewalRequest.renewalTermMonths ?? contract.renewalTermMonths ?? 12,
+            noticePeriodDays: renewalRequest.noticePeriodDays ?? contract.noticePeriodDays ?? 30,
+            upliftPercent: renewalRequest.upliftPercent ?? contract.upliftPercent ?? 0,
+        });
+        setIsEditing(false);
+    };
+
+    const handleInputChange = (field: keyof typeof terms, value: string) => {
+        setTerms(prev => ({ ...prev, [field]: Number(value) }));
+    };
+    
     return (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Renewal Management</h3>
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Renewal Management</h3>
+                 {renewalRequest.status === RenewalStatusEnum.IN_PROGRESS && !isEditing && (
+                    <button onClick={() => setIsEditing(true)} className="flex items-center px-3 py-1.5 text-xs font-semibold text-primary-800 dark:text-primary-200 bg-primary-100 dark:bg-primary-900/40 rounded-md hover:bg-primary-200">
+                        <EditIcon className="w-4 h-4 mr-1.5" />
+                        Edit Terms
+                    </button>
+                 )}
+            </div>
+
             {renewalRequest.status === RenewalStatusEnum.QUEUED && (
                 <div className="flex justify-between items-center bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg">
                     <div>
@@ -389,35 +425,59 @@ const RenewalCard = ({ contract, onOpenDecisionModal, onRenewAsIs }: { contract:
                     </button>
                 </div>
             )}
-            {renewalRequest.status === RenewalStatusEnum.IN_PROGRESS && (
-                <div>
-                    <div className="flex justify-between items-center">
+            
+            {(renewalRequest.status === RenewalStatusEnum.IN_PROGRESS) && (
+                 <div>
+                    <div className="flex justify-between items-center mb-6">
                         <div>
                             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Current Renewal Status</p>
                             <StatusTag type="renewal" status={renewalRequest.status} />
                         </div>
-                        {renewalRequest.mode === RenewalModeEnum.RENEW_AS_IS && (
-                            <button onClick={onRenewAsIs} className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700">
-                                Finalize As-Is Renewal
-                            </button>
-                        )}
                     </div>
-                    <dl className="mt-6 grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 md:grid-cols-3">
+                    
+                    <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 md:grid-cols-3">
+                        {isEditing ? (
+                            <>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Renewal Term (Months)</label>
+                                    <input type="number" value={terms.renewalTermMonths} onChange={e => handleInputChange('renewalTermMonths', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700 text-sm"/>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Notice Period (Days)</label>
+                                    <input type="number" value={terms.noticePeriodDays} onChange={e => handleInputChange('noticePeriodDays', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700 text-sm"/>
+                                </div>
+                                 <div>
+                                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Uplift %</label>
+                                    <input type="number" value={terms.upliftPercent} onChange={e => handleInputChange('upliftPercent', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700 text-sm"/>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <DetailItem label="Renewal Term" value={`${terms.renewalTermMonths} months`} />
+                                <DetailItem label="Notice Period" value={`${terms.noticePeriodDays} days`} />
+                                <DetailItem label="Uplift %" value={`${terms.upliftPercent}%`} />
+                            </>
+                        )}
                         <DetailItem label="Renewal Mode" value={<span className="font-semibold capitalize">{renewalRequest.mode.replace('_', ' ')}</span>} />
-                        <DetailItem label="Notice Period" value={`${contract.noticePeriodDays} days`} />
-                        <DetailItem label="Renewal Term" value={`${contract.renewalTermMonths} months`} />
-                        <DetailItem label="Uplift %" value={`${renewalRequest.upliftPercent || contract.upliftPercent || 0}%`} />
                         <DetailItem label="Renewal Owner" value={renewalRequest.renewalOwner ? `${renewalRequest.renewalOwner.firstName} ${renewalRequest.renewalOwner.lastName}` : 'Unassigned'} />
+                         {renewalRequest.notes && <DetailItem label="Notes" value={renewalRequest.notes} />}
                     </dl>
+                    {isEditing && (
+                        <div className="mt-6 flex justify-end space-x-3">
+                            <button onClick={handleCancel} className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                            <button onClick={handleSave} className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700">Save Changes</button>
+                        </div>
+                    )}
                 </div>
             )}
-             {(renewalRequest.status === RenewalStatusEnum.ACTIVATED || renewalRequest.status === RenewalStatusEnum.CANCELLED) && (
+            
+            {(renewalRequest.status === RenewalStatusEnum.ACTIVATED || renewalRequest.status === RenewalStatusEnum.CANCELLED) && (
                  <div>
                     <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Renewal Status</p>
                     <StatusTag type="renewal" status={renewalRequest.status} />
                     <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">This renewal process is complete.</p>
                  </div>
-             )}
+            )}
         </div>
     );
 };
@@ -483,13 +543,14 @@ const daysUntil = (dateStr: string) => {
 };
 
 
-export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalDecision, onCreateRenewalRequest, onSelectContract, onRenewAsIs, onStartRenegotiation, onUpdateSigningStatus, onCreateComment, onResolveComment, onCreateRenewalFeedback }: ContractDetailProps) {
+export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalDecision, onCreateRenewalRequest, onSelectContract, onRenewAsIs, onStartRenegotiation, onUpdateSigningStatus, onCreateComment, onResolveComment, onCreateRenewalFeedback, onUpdateRenewalTerms }: ContractDetailProps) {
   const [contract, setContract] = useState(initialContract);
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const [isRequestingApproval, setIsRequestingApproval] = useState(false);
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [isLoadingClauses, setIsLoadingClauses] = useState(false);
   const [isMakingDecision, setIsMakingDecision] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [confirmModalState, setConfirmModalState] = useState<{ isOpen: boolean; action: ContractAction | null; payload?: any; }>({ isOpen: false, action: null, payload: undefined });
   const [compareSelection, setCompareSelection] = useState<string[]>([]);
   const [comparingVersions, setComparingVersions] = useState<{v1: ContractVersion, v2: ContractVersion} | null>(null);
@@ -656,7 +717,18 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                         </p>
                     )}
                     <div className="mt-2 flex items-center space-x-4">
-                        <StatusTag type="contract" status={contract.status} />
+                        <div className="flex items-center gap-x-2">
+                            <StatusTag type="contract" status={contract.status} />
+                            {(currentUser.role === 'Admin' || currentUser.id === contract.owner.id) && (
+                                <button
+                                    onClick={() => setIsUpdatingStatus(true)}
+                                    className="p-1 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                    title="Change Status"
+                                >
+                                    <EditIcon className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
                         <StatusTag type="risk" status={contract.riskLevel} />
                         {!comparingVersions && <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">Viewing Version {viewedVersion.versionNumber}</span>}
                         {comparingVersions && <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">Comparing v{comparingVersions.v1.versionNumber} and v{comparingVersions.v2.versionNumber}</span>}
@@ -687,7 +759,7 @@ export default function ContractDetail({ contract: initialContract, contracts, p
         
         {contract.renewalRequest && (
             <div className="mb-6">
-                 <RenewalCard contract={contract} onOpenDecisionModal={() => setIsMakingDecision(true)} onRenewAsIs={() => onRenewAsIs(contract)} />
+                 <RenewalCard contract={contract} onOpenDecisionModal={() => setIsMakingDecision(true)} onUpdateRenewalTerms={onUpdateRenewalTerms} />
             </div>
         )}
 
@@ -732,8 +804,22 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                     onStartRenegotiation(contract, notes);
                     setIsMakingDecision(false);
                 }}
+                onFinalizeRenewAsIs={(notes) => {
+                    onRenewAsIs(contract, notes);
+                    setIsMakingDecision(false);
+                }}
                 currentUser={currentUser}
                 onCreateRenewalFeedback={onCreateRenewalFeedback}
+            />
+        )}
+        {isUpdatingStatus && (
+            <UpdateStatusModal
+                contract={contract}
+                onClose={() => setIsUpdatingStatus(false)}
+                onUpdate={(newStatus) => {
+                    onTransition(contract.id, newStatus);
+                    setIsUpdatingStatus(false);
+                }}
             />
         )}
     </div>

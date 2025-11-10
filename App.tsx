@@ -173,7 +173,7 @@ export default function App() {
         contractIds.length > 0 ? supabase.from('contract_versions').select('*').in('contract_id', contractIds) : Promise.resolve({ data: [] }),
         contractIds.length > 0 ? supabase.from('approval_steps').select('*').in('contract_id', contractIds) : Promise.resolve({ data: [] }),
         contractIds.length > 0 ? supabase.from('contract_property_allocations').select('*').in('contract_id', contractIds) : Promise.resolve({ data: [] }),
-        contractIds.length > 0 ? supabase.from('renewal_requests').select('*').in('contract_id', contractIds) : Promise.resolve({ data: [] }),
+        contractIds.length > 0 ? supabase.from('renewal_requests').select('*').in('contract_id', contractIds).not('status', 'in', `("${RenewalStatusEnum.ACTIVATED}","${RenewalStatusEnum.CANCELLED}")`) : Promise.resolve({ data: [] }),
         contractIds.length > 0 ? supabase.from('audit_logs').select('*').in('related_entity_id', contractIds).eq('related_entity_type', 'renewal_request') : Promise.resolve({ data: [] })
     ]);
 
@@ -253,6 +253,8 @@ export default function App() {
                 companyId: renewal.company_id, 
                 renewalOwner: usersMap.get(renewal.renewal_owner_id),
                 feedback: feedbackByRenewalId.get(renewal.id) || [],
+                renewalTermMonths: renewal.renewal_term_months,
+                noticePeriodDays: renewal.notice_period_days,
             };
         }
     }
@@ -561,6 +563,30 @@ export default function App() {
                     related_entity_id: contract.id
                 }]);
             }
+
+            const statusChangeActions: ContractStatusType[] = [
+                ContractStatus.FULLY_EXECUTED,
+                ContractStatus.ACTIVE,
+                ContractStatus.EXPIRED,
+                ContractStatus.TERMINATED,
+            ];
+
+            if (statusChangeActions.includes(action as ContractStatusType)) {
+                let message = `The contract "${contract.title}" is now ${action}.`;
+                 if (action === ContractStatus.TERMINATED) {
+                    message = `Your contract "${contract.title}" has been Terminated.`;
+                }
+
+                await supabase.from('notifications').insert([{
+                    user_id: contract.owner.id,
+                    company_id: currentUser.companyId,
+                    app_id: currentUser.appId,
+                    type: 'STATUS_CHANGE',
+                    message: message,
+                    related_entity_type: 'contract',
+                    related_entity_id: contract.id,
+                }]);
+            }
         }
         
         if (action === ContractStatus.ACTIVE) {
@@ -593,6 +619,34 @@ export default function App() {
         alert(`Failed to update signing status: ${error.message}`);
     } else {
         const updatedContracts = await fetchData(currentUser);
+        const updatedContract = updatedContracts.find(c => c.id === contractId);
+        
+        if (updatedContract) {
+            let message = '';
+            switch(newStatus) {
+                case SigningStatusEnum.SENT_TO_COUNTERPARTY:
+                    message = `The contract "${updatedContract.title}" has been sent to ${updatedContract.counterparty.name} for signature.`;
+                    break;
+                case SigningStatusEnum.VIEWED_BY_COUNTERPARTY:
+                    message = `${updatedContract.counterparty.name} has viewed the contract "${updatedContract.title}".`;
+                    break;
+                case SigningStatusEnum.SIGNED_BY_COUNTERPARTY:
+                    message = `${updatedContract.counterparty.name} has signed the contract "${updatedContract.title}".`;
+                    break;
+            }
+            if (message) {
+                await supabase.from('notifications').insert([{
+                    user_id: updatedContract.owner.id,
+                    company_id: currentUser.companyId,
+                    app_id: currentUser.appId,
+                    type: 'SIGNING_PROGRESS',
+                    message: message,
+                    related_entity_type: 'contract',
+                    related_entity_id: updatedContract.id
+                }]);
+            }
+        }
+
         if (selectedContract?.id === contractId) {
             setSelectedContract(updatedContracts.find(c => c.id === contractId) || null);
         }
@@ -606,8 +660,8 @@ export default function App() {
   const handleRenewalDecision = async (renewalRequestId: string, mode: RenewalMode, notes?: string) => {
       if (!currentUser) return;
 
-      if (mode === RenewalMode.NEW_CONTRACT) {
-          console.error("handleRenewalDecision was called with 'new_contract' mode. This should be handled by `handleStartRenegotiation`.");
+      if (mode === RenewalMode.NEW_CONTRACT || mode === RenewalMode.RENEW_AS_IS) {
+          console.error("handleRenewalDecision should not be called for 'new_contract' or 'renew_as_is'.");
           return;
       }
       
@@ -645,10 +699,13 @@ export default function App() {
     newStartDate.setDate(newStartDate.getDate() + 1);
     
     const newEndDate = new Date(newStartDate);
-    newEndDate.setMonth(newEndDate.getMonth() + (originalContract.renewalTermMonths || 12));
+    const renewalTerm = originalContract.renewalRequest?.renewalTermMonths ?? originalContract.renewalTermMonths ?? 12;
+    newEndDate.setMonth(newEndDate.getMonth() + renewalTerm);
     
     const upliftPercent = originalContract.renewalRequest?.upliftPercent ?? originalContract.upliftPercent ?? 0;
     const newValue = originalContract.value * (1 + (upliftPercent / 100));
+
+    const noticePeriod = originalContract.renewalRequest?.noticePeriodDays ?? originalContract.noticePeriodDays ?? 30;
 
     const newContractRecord = {
       type: originalContract.type,
@@ -669,9 +726,9 @@ export default function App() {
       company_id: currentUser.companyId,
       app_id: currentUser.appId,
       auto_renew: originalContract.autoRenew,
-      notice_period_days: originalContract.noticePeriodDays,
-      renewal_term_months: originalContract.renewalTermMonths,
-      uplift_percent: originalContract.upliftPercent,
+      notice_period_days: noticePeriod,
+      renewal_term_months: renewalTerm,
+      uplift_percent: upliftPercent,
     };
 
     const { data: insertedContract, error: contractError } = await supabase.from('contracts').insert([newContractRecord]).select().single();
@@ -744,6 +801,16 @@ export default function App() {
   const handleCreateRenewalRequest = async (contract: Contract) => {
     if (!currentUser || !contract) return;
     
+    const endDate = new Date(contract.endDate);
+    const noticePeriod = contract.noticePeriodDays || 30;
+    
+    const noticeDeadline = new Date(endDate);
+    noticeDeadline.setDate(endDate.getDate() - noticePeriod);
+
+    // Set internal deadline 30 days before notice deadline
+    const internalDecisionDeadline = new Date(noticeDeadline);
+    internalDecisionDeadline.setDate(noticeDeadline.getDate() - 30);
+
     const { error } = await supabase.from('renewal_requests').insert([{
         contract_id: contract.id,
         company_id: currentUser.companyId,
@@ -752,6 +819,10 @@ export default function App() {
         mode: null,
         status: RenewalStatusEnum.QUEUED,
         uplift_percent: contract.upliftPercent || 0,
+        renewal_term_months: contract.renewalTermMonths,
+        notice_period_days: contract.noticePeriodDays,
+        notice_deadline: noticeDeadline.toISOString().split('T')[0],
+        internal_decision_deadline: internalDecisionDeadline.toISOString().split('T')[0],
     }]);
 
     if (error) {
@@ -765,19 +836,46 @@ export default function App() {
     }
   };
 
-  const handleRenewAsIs = async (contract: Contract) => {
+  const handleUpdateRenewalTerms = async (renewalRequestId: string, updatedTerms: { renewalTermMonths: number; noticePeriodDays: number; upliftPercent: number; }) => {
+    if (!currentUser) return;
+    
+    const { error } = await supabase.from('renewal_requests').update({
+        renewal_term_months: updatedTerms.renewalTermMonths,
+        notice_period_days: updatedTerms.noticePeriodDays,
+        uplift_percent: updatedTerms.upliftPercent
+    }).eq('id', renewalRequestId);
+
+    if (error) {
+        console.error("Error updating renewal terms:", error);
+        alert(`Failed to update renewal terms: ${error.message}`);
+    } else {
+        const updatedContracts = await fetchData(currentUser);
+        if (selectedContract?.renewalRequest?.id === renewalRequestId) {
+            setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null);
+        }
+    }
+  };
+
+  const handleRenewAsIs = async (contract: Contract, notes?: string) => {
     if (!currentUser || !contract.renewalRequest) return;
     
+    const termMonths = contract.renewalRequest.renewalTermMonths ?? contract.renewalTermMonths ?? 12;
+    const uplift = contract.renewalRequest.upliftPercent ?? contract.upliftPercent ?? 0;
+    
     const newEndDate = new Date(contract.endDate);
-    newEndDate.setMonth(newEndDate.getMonth() + (contract.renewalTermMonths || 12));
-    const newValue = contract.value * (1 + ((contract.upliftPercent || 0) / 100));
+    newEndDate.setMonth(newEndDate.getMonth() + termMonths);
+    const newValue = contract.value * (1 + (uplift / 100));
 
     const [contractUpdate, renewalUpdate] = await Promise.all([
         supabase.from('contracts').update({
             end_date: newEndDate.toISOString().split('T')[0],
             value: newValue,
         }).eq('id', contract.id),
-        supabase.from('renewal_requests').update({ status: RenewalStatusEnum.ACTIVATED }).eq('id', contract.renewalRequest.id)
+        supabase.from('renewal_requests').update({ 
+            status: RenewalStatusEnum.ACTIVATED,
+            mode: RenewalMode.RENEW_AS_IS,
+            notes: notes
+        }).eq('id', contract.renewalRequest.id)
     ]);
     
     if (contractUpdate.error || renewalUpdate.error) {
@@ -819,6 +917,19 @@ export default function App() {
 
       const { error: approvalError } = await supabase.from('approval_steps').delete().eq('contract_id', contractId);
       if (approvalError) { console.error("Error clearing old approvals:", approvalError); }
+
+       if (contractToUpdate && currentUser.id !== contractToUpdate.owner.id) {
+            const newVersionNumber = latestVersionNumber + 1;
+            await supabase.from('notifications').insert([{
+                user_id: contractToUpdate.owner.id,
+                company_id: currentUser.companyId,
+                app_id: currentUser.appId,
+                type: 'NEW_VERSION',
+                message: `A new version (v${newVersionNumber}) of "${contractToUpdate.title}" has been uploaded by ${currentUser.firstName} ${currentUser.lastName}.`,
+                related_entity_type: 'contract',
+                related_entity_id: contractId
+            }]);
+        }
 
       const updatedContracts = await fetchData(currentUser);
       if (selectedContract?.id === contractId) { setSelectedContract(updatedContracts.find(c => c.id === contractId) || null); }
@@ -970,7 +1081,7 @@ export default function App() {
     }
     switch(activeView) {
       case 'dashboard': return <Dashboard contracts={contracts} onMetricClick={handleMetricNavigation} currentUser={currentUser!} onSelectContract={handleSelectContract} />;
-      case 'contracts': return selectedContract ? ( <ContractDetail contract={selectedContract} contracts={contracts} onSelectContract={handleSelectContract} users={users} properties={properties} currentUser={currentUser!} onBack={handleBackToList} onTransition={handleContractTransition} onCreateNewVersion={handleCreateNewVersion} onRenewalDecision={handleRenewalDecision} onCreateRenewalRequest={handleCreateRenewalRequest} onRenewAsIs={handleRenewAsIs} onStartRenegotiation={handleStartRenegotiation} onUpdateSigningStatus={handleSigningStatusUpdate} onCreateComment={handleCreateComment} onResolveComment={handleResolveComment} onCreateRenewalFeedback={handleCreateRenewalFeedback} /> ) : ( <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={handleStartCreate} initialFilters={initialFilters} currentUser={currentUser!} /> );
+      case 'contracts': return selectedContract ? ( <ContractDetail contract={selectedContract} contracts={contracts} onSelectContract={handleSelectContract} users={users} properties={properties} currentUser={currentUser!} onBack={handleBackToList} onTransition={handleContractTransition} onCreateNewVersion={handleCreateNewVersion} onRenewalDecision={handleRenewalDecision} onCreateRenewalRequest={handleCreateRenewalRequest} onRenewAsIs={(contract, notes) => handleRenewAsIs(contract, notes)} onStartRenegotiation={handleStartRenegotiation} onUpdateSigningStatus={handleSigningStatusUpdate} onCreateComment={handleCreateComment} onResolveComment={handleResolveComment} onCreateRenewalFeedback={handleCreateRenewalFeedback} onUpdateRenewalTerms={handleUpdateRenewalTerms} /> ) : ( <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={handleStartCreate} initialFilters={initialFilters} currentUser={currentUser!} /> );
       case 'renewals': return <RenewalsPage contracts={contracts} onSelectContract={handleSelectContract} users={users} notificationSettings={userNotificationSettings} onUpdateNotificationSettings={setUserNotificationSettings} />;
       case 'approvals': return <ApprovalsPage contracts={contracts} onTransition={handleContractTransition} currentUser={currentUser!} />;
       case 'signing': return <SigningPage contracts={contracts} onSelectContract={handleSelectContract} onUpdateSigningStatus={handleSigningStatusUpdate} onMarkAsExecuted={handleMarkAsExecuted} />;

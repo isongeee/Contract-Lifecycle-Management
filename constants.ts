@@ -1,4 +1,5 @@
 
+
 import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet, UserNotificationSettings, CounterpartyType, AllocationType, RenewalStatus, AutoRenewType, ReviewChecklistItem, SigningStatus } from './types';
 import type { UserProfile, Counterparty, Property } from './types';
 
@@ -105,8 +106,9 @@ export const MOCK_CONTRACTS: Omit<Contract, 'renewalRequest'>[] = [
       },
     ],
     approvalSteps: [
-      { id: 'app-1-1', approver: USERS['bob'], status: ApprovalStatus.APPROVED, approvedAt: '2023-01-12' },
-      { id: 'app-1-2', approver: USERS['charlie'], status: ApprovalStatus.APPROVED, approvedAt: '2023-01-13' },
+      // FIX: Added versionId to satisfy the ApprovalStep type.
+      { id: 'app-1-1', approver: USERS['bob'], status: ApprovalStatus.APPROVED, approvedAt: '2023-01-12', versionId: 'v1-2' },
+      { id: 'app-1-2', approver: USERS['charlie'], status: ApprovalStatus.APPROVED, approvedAt: '2023-01-13', versionId: 'v1-2' },
     ],
   },
   {
@@ -130,8 +132,9 @@ export const MOCK_CONTRACTS: Omit<Contract, 'renewalRequest'>[] = [
         }
     ],
     approvalSteps: [
-      { id: 'app-2-1', approver: USERS['alice'], status: ApprovalStatus.PENDING },
-      { id: 'app-2-2', approver: USERS['charlie'], status: ApprovalStatus.PENDING },
+      // FIX: Added versionId to satisfy the ApprovalStep type.
+      { id: 'app-2-1', approver: USERS['alice'], status: ApprovalStatus.PENDING, versionId: 'v2-1' },
+      { id: 'app-2-2', approver: USERS['charlie'], status: ApprovalStatus.PENDING, versionId: 'v2-1' },
     ],
   },
    {
@@ -155,8 +158,9 @@ export const MOCK_CONTRACTS: Omit<Contract, 'renewalRequest'>[] = [
         }
     ],
     approvalSteps: [
-      { id: 'app-5-1', approver: USERS['alice'], status: ApprovalStatus.APPROVED },
-      { id: 'app-5-2', approver: USERS['charlie'], status: ApprovalStatus.APPROVED },
+      // FIX: Added versionId to satisfy the ApprovalStep type.
+      { id: 'app-5-1', approver: USERS['alice'], status: ApprovalStatus.APPROVED, versionId: 'v5-1' },
+      { id: 'app-5-2', approver: USERS['charlie'], status: ApprovalStatus.APPROVED, versionId: 'v5-1' },
     ],
   },
   {
@@ -200,7 +204,8 @@ export const MOCK_CONTRACTS: Omit<Contract, 'renewalRequest'>[] = [
       },
     ],
     approvalSteps: [
-       { id: 'app-4-1', approver: USERS['charlie'], status: ApprovalStatus.APPROVED, approvedAt: '2024-05-25' },
+      // FIX: Added versionId to satisfy the ApprovalStep type.
+       { id: 'app-4-1', approver: USERS['charlie'], status: ApprovalStatus.APPROVED, approvedAt: '2024-05-25', versionId: 'v4-1' },
     ]
   },
   {
@@ -224,7 +229,8 @@ export const MOCK_CONTRACTS: Omit<Contract, 'renewalRequest'>[] = [
         }
     ],
     approvalSteps: [
-      { id: 'app-6-1', approver: USERS['bob'], status: ApprovalStatus.APPROVED },
+      // FIX: Added versionId to satisfy the ApprovalStep type.
+      { id: 'app-6-1', approver: USERS['bob'], status: ApprovalStatus.APPROVED, versionId: 'v6-1' },
     ],
   },
 ].map(c => ({

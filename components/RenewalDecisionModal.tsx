@@ -10,6 +10,7 @@ interface RenewalDecisionModalProps {
     onClose: () => void;
     onConfirm: (mode: RenewalMode, notes?: string) => void;
     onStartRenegotiation: (notes?: string) => void;
+    onFinalizeRenewAsIs: (notes?: string) => void;
     onCreateRenewalFeedback: (renewalRequestId: string, feedbackText: string) => void;
 }
 
@@ -54,7 +55,7 @@ const InfoItem = ({ label, value, className = '' }: { label: string; value: Reac
 );
 
 
-export default function RenewalDecisionModal({ contract, contracts, currentUser, onClose, onConfirm, onStartRenegotiation, onCreateRenewalFeedback }: RenewalDecisionModalProps) {
+export default function RenewalDecisionModal({ contract, contracts, currentUser, onClose, onConfirm, onStartRenegotiation, onFinalizeRenewAsIs, onCreateRenewalFeedback }: RenewalDecisionModalProps) {
     const [selectedMode, setSelectedMode] = useState<RenewalMode | null>(null);
     const [justification, setJustification] = useState('');
     const [performanceSummary, setPerformanceSummary] = useState('');
@@ -101,7 +102,10 @@ export default function RenewalDecisionModal({ contract, contracts, currentUser,
 
         if (selectedMode === 'new_contract') {
             onStartRenegotiation(justification);
-        } else {
+        } else if (selectedMode === 'renew_as_is') {
+            onFinalizeRenewAsIs(justification);
+        }
+        else {
             onConfirm(selectedMode, justification);
         }
     };
