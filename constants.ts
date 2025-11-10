@@ -255,79 +255,6 @@ export const MOCK_CONTRACTS: Omit<Contract, 'renewalRequest'>[] = [
     parentContractId: undefined,
 }));
 
-const DUMMY_NDA_CONTENT = `
-This Mutual Non-Disclosure Agreement ("Agreement") is entered into between [Party A] and [Party B] for the purpose of preventing the unauthorized disclosure of Confidential Information as defined below.
-
-1. Definition of Confidential Information. "Confidential Information" means any data or information that is proprietary to the Disclosing Party and not generally known to the public, whether in tangible or intangible form.
-
-2. Obligations of Receiving Party. The Receiving Party shall hold and maintain the Confidential Information in strictest confidence for the sole and exclusive benefit of the Disclosing Party.
-
-3. Term. The non-disclosure provisions of this Agreement shall survive the termination of this Agreement and the Receiving Party's duty to hold Confidential Information in confidence shall remain in effect until the Confidential Information no longer qualifies as a trade secret.
-`;
-
-const DUMMY_SOW_CONTENT = `
-This Statement of Work ("SOW") is entered into under the terms of the Master Services Agreement ("MSA") between [Client Name] ("Client") and [Service Provider Name] ("Provider").
-
-1. Project Scope. Provider will perform the following services: [Detailed description of services, deliverables, and milestones].
-
-2. Timeline. The project will commence on [Start Date] and is expected to be completed by [End Date].
-
-3. Fees. Client will pay Provider a fixed fee of [Amount] for the services rendered under this SOW. Payment will be made according to the following schedule: [Payment schedule].
-`;
-
-
-export const MOCK_TEMPLATES: ContractTemplate[] = [
-  {
-    id: 'template-001',
-    name: 'Mutual Non-Disclosure Agreement (NDA)',
-    description: 'A standard, legally-vetted template for establishing a confidential relationship between two parties.',
-    type: ContractType.NDA,
-    content: DUMMY_NDA_CONTENT,
-  },
-  {
-    id: 'template-002',
-    name: 'Master Services Agreement (MSA)',
-    description: 'A comprehensive agreement that sets out the terms and conditions for one party to provide services to another.',
-    type: ContractType.MSA,
-    content: DUMMY_CONTRACT_CONTENT_V1,
-  },
-  {
-    id: 'template-003',
-    name: 'Statement of Work (SOW)',
-    description: 'A document that outlines the specific work to be performed, including deliverables, timelines, and costs.',
-    type: ContractType.SOW,
-    content: DUMMY_SOW_CONTENT,
-  },
-  {
-    id: 'template-004',
-    name: 'Standard Vendor Agreement',
-    description: 'A general-purpose template for onboarding new vendors, covering payment terms, deliverables, and liabilities.',
-    type: ContractType.VENDOR,
-    content: DUMMY_CONTRACT_CONTENT_V1.replace('Master Services Agreement', 'Vendor Agreement'),
-  }
-];
-
-const adminPermissions: PermissionSet = {
-    contracts: { view: true, edit: true, approve: true, delete: true },
-    counterparties: { view: true, edit: true },
-    properties: { view: true, edit: true },
-    notifications: { view: true, configure: true },
-    settings: { access: true, edit: true },
-};
-
-const legalPermissions: PermissionSet = {
-    ...adminPermissions,
-    settings: { access: true, edit: false },
-};
-
-const financePermissions: PermissionSet = {
-    contracts: { view: true, edit: false, approve: true, delete: false },
-    counterparties: { view: true, edit: false },
-    properties: { view: true, edit: false },
-    notifications: { view: true, configure: false },
-    settings: { access: false, edit: false },
-};
-
 export const requestorPermissions: PermissionSet = {
     contracts: { view: true, edit: false, approve: false, delete: false },
     counterparties: { view: false, edit: false },
@@ -335,15 +262,6 @@ export const requestorPermissions: PermissionSet = {
     notifications: { view: false, configure: false },
     settings: { access: false, edit: false },
 };
-
-
-export const MOCK_ROLES: Role[] = [
-    { id: 'role-1', name: 'Admin', description: 'Has full access to all system features.', userCount: 1, permissions: adminPermissions },
-    { id: 'role-2', name: 'Legal Counsel', description: 'Can manage contracts and approvals.', userCount: 1, permissions: legalPermissions },
-    { id: 'role-3', name: 'Finance Manager', description: 'Can view contracts and approve financial aspects.', userCount: 4, permissions: financePermissions },
-    { id: 'role-4', name: 'Sales Director', description: 'Can initiate and view sales-related contracts.', userCount: 8, permissions: requestorPermissions },
-    { id: 'role-5', name: 'Requestor', description: 'Can view contracts they own or are involved in.', userCount: 12, permissions: requestorPermissions },
-];
 
 export const MOCK_FULL_USER_LIST: FullUserProfile[] = [
     ...Object.values(USERS),

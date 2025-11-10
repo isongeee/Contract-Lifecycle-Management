@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType, PermissionSet, AuditLog, RenewalRequest, RenewalStatus, SigningStatus, Notification } from './types';
 import { ContractStatus, RiskLevel, ApprovalStatus, RenewalStatus as RenewalStatusEnum, RenewalMode, SigningStatus as SigningStatusEnum } from './types';
-import { MOCK_TEMPLATES, MOCK_ROLES, MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS, requestorPermissions } from './constants';
+import { MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS, requestorPermissions } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import ContractsList from './components/ContractsList';
@@ -35,7 +35,7 @@ type ContractAction = ContractStatus | 'APPROVE_STEP' | 'REJECT_STEP';
 
 export default function App() {
   const [contracts, setContracts] = useState<Contract[]>([]);
-  const [templates] = useState<ContractTemplate[]>(MOCK_TEMPLATES);
+  const [templates, setTemplates] = useState<ContractTemplate[]>([]);
   const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -87,6 +87,7 @@ export default function App() {
             setUsers([]);
             setRoles([]);
             setNotifications([]);
+            setTemplates([]);
         }
     });
 
@@ -119,6 +120,7 @@ export default function App() {
         setUsers([]);
         setRoles([]);
         setNotifications([]);
+        setTemplates([]);
         setIsLoading(false);
         return [];
     }
@@ -167,6 +169,9 @@ export default function App() {
     
     const { data: notificationsData } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(50);
     setNotifications(notificationsData as Notification[] || []);
+
+    const { data: templatesData } = await supabase.from('contract_templates').select('*').eq('company_id', companyId);
+    setTemplates(templatesData as ContractTemplate[] || []);
 
     const { data: contractsData } = await supabase.from('contracts').select('*').eq('company_id', companyId);
     const contractIds = (contractsData || []).map(c => c.id);
@@ -270,53 +275,7 @@ export default function App() {
         contract.versions.sort((a: ContractVersion, b: ContractVersion) => a.versionNumber - b.versionNumber);
     }
     
-    let allContracts = Array.from(contractsById.values());
-
-    // Automatically transition expired active contracts
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const contractsToExpire = allContracts.filter(c => {
-        if (c.status !== ContractStatus.ACTIVE) return false;
-        try {
-            const endDate = new Date(c.endDate);
-            endDate.setHours(0, 0, 0, 0);
-            return endDate < today;
-        } catch (e) {
-            return false;
-        }
-    });
-
-    if (contractsToExpire.length > 0) {
-        console.log(`Found ${contractsToExpire.length} active contracts that have expired. Updating status...`);
-        const updatePromises = contractsToExpire.map(c => 
-            supabase.rpc('contract_transition', { 
-                p_contract_id: c.id, 
-                p_action: ContractStatus.EXPIRED, 
-                p_payload: {} 
-            })
-        );
-        
-        const results = await Promise.allSettled(updatePromises);
-        const successfullyUpdatedIds = new Set<string>();
-
-        results.forEach((result, index) => {
-            if (result.status === 'fulfilled') {
-                successfullyUpdatedIds.add(contractsToExpire[index].id);
-            } else {
-                console.error(`Failed to expire contract ${contractsToExpire[index].id}:`, result.reason);
-            }
-        });
-
-        if (successfullyUpdatedIds.size > 0) {
-            // Update local state to reflect the change immediately without a full refetch
-            allContracts = allContracts.map(c => 
-                successfullyUpdatedIds.has(c.id) 
-                ? { ...c, status: ContractStatus.EXPIRED, expiredAt: new Date().toISOString() } 
-                : c
-            );
-        }
-    }
+    const allContracts = Array.from(contractsById.values());
 
     setContracts(allContracts);
     setIsLoading(false);
