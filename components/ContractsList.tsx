@@ -285,7 +285,6 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
               <SortableHeader columnKey="status" label="Status" />
               <SortableHeader columnKey="value" label="Value" />
               <SortableHeader columnKey="endDate" label="End Date" />
-              <th scope="col" className="relative px-6 py-3"><span className="sr-only">View</span></th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -303,9 +302,6 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
                   {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(contract.value)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{contract.endDate}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <a href="#" className="text-primary-600 hover:text-primary-900">View</a>
-                </td>
               </tr>
             ))}
           </tbody>

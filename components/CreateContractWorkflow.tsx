@@ -470,6 +470,7 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
         }
     }
     const remainingValue = (data.value || 0) - totalAllocated;
+    const isAllocationValid = Math.abs(remainingValue) < 0.01;
 
     return (
         <div>
@@ -591,7 +592,13 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
             </div>
             <div className="mt-8 flex justify-between">
                 <button onClick={onBack} type="button" className="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Back</button>
-                <button onClick={handleProceed} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Next</button>
+                <button 
+                    onClick={handleProceed} 
+                    type="button" 
+                    className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!isAllocationValid}
+                    title={!isAllocationValid ? 'Total allocated value must equal total contract value.' : ''}
+                >Next</button>
             </div>
         </div>
     );
