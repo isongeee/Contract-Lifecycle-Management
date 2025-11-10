@@ -466,8 +466,12 @@ export default function App() {
       frequency: versionData.frequency, seasonal_months: versionData.seasonalMonths,
       property_id: versionData.property?.id, company_id: currentUser.companyId, app_id: currentUser.appId,
     };
-    const { error: versionError } = await supabase.from('contract_versions').insert([versionRecord]);
-     if (versionError) { console.error("Error creating version:", versionError); return; }
+    const { data: insertedVersion, error: versionError } = await supabase.from('contract_versions').insert([versionRecord]).select().single();
+    if (versionError || !insertedVersion) { console.error("Error creating version:", versionError); return; }
+
+    // Link the new version as the draft version on the contract
+    const { error: updateError } = await supabase.from('contracts').update({ draft_version_id: insertedVersion.id }).eq('id', insertedContract.id);
+    if (updateError) { console.error("Error linking draft version:", updateError); return; }
     
     if (newContractData.propertyAllocations && newContractData.propertyAllocations.length > 0) {
       const allocationRecords = newContractData.propertyAllocations.map(alloc => ({
