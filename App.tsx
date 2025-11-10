@@ -27,7 +27,8 @@ import SigningPage from './components/SigningPage';
 import { supabase } from './lib/supabaseClient';
 import { LoaderIcon, AlertTriangleIcon } from './components/icons';
 import { Session } from '@supabase/supabase-js';
-import { getUserProfile, signOut } from './lib/auth';
+import { getUserProfile, signOut, adminCreateUser } from './lib/auth';
+import AddUserModal from './components/AddUserModal';
 
 
 type ContractAction = ContractStatus | 'APPROVE_STEP' | 'REJECT_STEP';
@@ -50,8 +51,10 @@ export default function App() {
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [activeView, setActiveView] = useState('dashboard');
   const [isCreatingContract, setIsCreatingContract] = useState(false);
+  const [initialCreateData, setInitialCreateData] = useState<Partial<Contract> & { content?: string } | null>(null);
   const [isCreatingCounterparty, setIsCreatingCounterparty] = useState(false);
   const [isCreatingProperty, setIsCreatingProperty] = useState(false);
+  const [isAddingUser, setIsAddingUser] = useState(false);
   const [initialFilters, setInitialFilters] = useState<{ status?: ContractStatus; riskLevels?: RiskLevel[]; ownerId?: string }>({});
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
   
@@ -439,8 +442,22 @@ export default function App() {
     setSelectedProperty(null);
   };
 
-  const handleStartCreate = () => setIsCreatingContract(true);
-  const handleCancelCreate = () => setIsCreatingContract(false);
+  const handleStartCreate = (initialData: Partial<Contract> & { content?: string } | null = null) => {
+    setInitialCreateData(initialData);
+    setIsCreatingContract(true);
+  };
+  const handleCancelCreate = () => {
+    setIsCreatingContract(false);
+    setInitialCreateData(null);
+  };
+
+  const handleUseTemplate = (template: ContractTemplate) => {
+    handleStartCreate({
+        type: template.type,
+        content: template.content,
+        title: `New - ${template.name}`,
+    });
+  };
 
   const handleFinalizeCreate = async (newContractData: Partial<Contract> & { propertyAllocations?: any[] }) => {
     if (!currentUser?.companyId || !currentUser?.appId) return;
@@ -1064,6 +1081,25 @@ export default function App() {
     }
   };
 
+  const handleCreateUser = async (userData: any) => {
+    if (!currentUser || !company) {
+        alert("Cannot create user: missing current user or company context.");
+        return;
+    }
+    const { error } = await adminCreateUser({
+        ...userData,
+        companyId: company.id,
+        appId: currentUser.appId,
+    });
+    if (error) {
+        alert(`Failed to create user: ${error.message}`);
+    } else {
+        alert("User created successfully! They will receive an email to verify their account.");
+        setIsAddingUser(false);
+        await fetchData(currentUser); // Refresh user list
+    }
+  };
+
   const renderContent = () => {
     if (isLoading) {
         return ( <div className="flex items-center justify-center h-full"> <LoaderIcon className="w-12 h-12 text-primary" /> <span className="ml-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Loading Data...</span> </div> )
@@ -1085,15 +1121,15 @@ export default function App() {
     }
     switch(activeView) {
       case 'dashboard': return <Dashboard contracts={contracts} onMetricClick={handleMetricNavigation} currentUser={currentUser!} onSelectContract={handleSelectContract} />;
-      case 'contracts': return selectedContract ? ( <ContractDetail contract={selectedContract} contracts={contracts} onSelectContract={handleSelectContract} users={users} properties={properties} currentUser={currentUser!} onBack={handleBackToList} onTransition={handleContractTransition} onCreateNewVersion={handleCreateNewVersion} onRenewalDecision={handleRenewalDecision} onCreateRenewalRequest={handleCreateRenewalRequest} onRenewAsIs={(contract, notes) => handleRenewAsIs(contract, notes)} onStartRenegotiation={handleStartRenegotiation} onUpdateSigningStatus={handleSigningStatusUpdate} onCreateComment={handleCreateComment} onResolveComment={handleResolveComment} onCreateRenewalFeedback={handleCreateRenewalFeedback} onUpdateRenewalTerms={handleUpdateRenewalTerms} /> ) : ( <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={handleStartCreate} initialFilters={initialFilters} currentUser={currentUser!} /> );
+      case 'contracts': return selectedContract ? ( <ContractDetail contract={selectedContract} contracts={contracts} onSelectContract={handleSelectContract} users={users} properties={properties} currentUser={currentUser!} onBack={handleBackToList} onTransition={handleContractTransition} onCreateNewVersion={handleCreateNewVersion} onRenewalDecision={handleRenewalDecision} onCreateRenewalRequest={handleCreateRenewalRequest} onRenewAsIs={(contract, notes) => handleRenewAsIs(contract, notes)} onStartRenegotiation={handleStartRenegotiation} onUpdateSigningStatus={handleSigningStatusUpdate} onCreateComment={handleCreateComment} onResolveComment={handleResolveComment} onCreateRenewalFeedback={handleCreateRenewalFeedback} onUpdateRenewalTerms={handleUpdateRenewalTerms} /> ) : ( <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={() => handleStartCreate()} initialFilters={initialFilters} currentUser={currentUser!} /> );
       case 'renewals': return <RenewalsPage contracts={contracts} onSelectContract={handleSelectContract} users={users} notificationSettings={userNotificationSettings} onUpdateNotificationSettings={setUserNotificationSettings} />;
       case 'approvals': return <ApprovalsPage contracts={contracts} onTransition={handleContractTransition} currentUser={currentUser!} />;
       case 'signing': return <SigningPage contracts={contracts} onSelectContract={handleSelectContract} onUpdateSigningStatus={handleSigningStatusUpdate} onMarkAsExecuted={handleMarkAsExecuted} />;
-      case 'templates': return selectedTemplate ? ( <TemplateDetail template={selectedTemplate} onBack={handleBackToTemplatesList} /> ) : ( <TemplatesList templates={templates} onSelectTemplate={handleSelectTemplate} /> );
+      case 'templates': return selectedTemplate ? ( <TemplateDetail template={selectedTemplate} onBack={handleBackToTemplatesList} onUseTemplate={handleUseTemplate} /> ) : ( <TemplatesList templates={templates} onSelectTemplate={handleSelectTemplate} /> );
       case 'counterparties': return selectedCounterparty ? ( <CounterpartyDetail counterparty={selectedCounterparty} contracts={contracts.filter(c => c.counterparty.id === selectedCounterparty.id)} onBack={handleBackToCounterpartiesList} onSelectContract={handleSelectContract} /> ) : ( <CounterpartiesList counterparties={counterparties} contracts={contracts} onSelectCounterparty={handleSelectCounterparty} onStartCreate={handleStartCreateCounterparty} currentUser={currentUser!} /> );
       case 'properties': return selectedProperty ? ( <PropertyDetail property={selectedProperty} contracts={contracts.filter(c => c.property?.id === selectedProperty.id)} onBack={handleBackToPropertiesList} onSelectContract={handleSelectContract} /> ) : ( <PropertiesList properties={properties} contracts={contracts} onSelectProperty={handleSelectProperty} onStartCreate={handleStartCreateProperty} currentUser={currentUser!} /> );
       case 'profile': return <ProfilePage currentUser={currentUser!} theme={theme} onThemeChange={handleThemeChange} notificationSettings={userNotificationSettings} setNotificationSettings={setUserNotificationSettings} />;
-      case 'company-settings': return <CompanySettingsPage users={users} roles={roles} notificationSettings={notificationSettings} company={company} currentUser={currentUser!} setUsers={setUsers} onUpdateRolePermissions={handleUpdateRolePermissions} onCreateRole={handleCreateRole} onDeleteRole={handleDeleteRole} setNotificationSettings={setNotificationSettings} />;
+      case 'company-settings': return <CompanySettingsPage users={users} roles={roles} notificationSettings={notificationSettings} company={company} currentUser={currentUser!} setUsers={setUsers} onUpdateRolePermissions={handleUpdateRolePermissions} onCreateRole={handleCreateRole} onDeleteRole={handleDeleteRole} setNotificationSettings={setNotificationSettings} onAddUser={() => setIsAddingUser(true)} />;
       default: return <div className="p-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm"><h2 className="text-xl font-bold">{activeView.charAt(0).toUpperCase() + activeView.slice(1)}</h2><p className="mt-2 text-gray-500 dark:text-gray-400">This section is not yet implemented.</p></div>;
     }
   };
@@ -1127,9 +1163,10 @@ export default function App() {
           {renderContent()}
         </main>
       </div>
-      {isCreatingContract && currentUser && ( <CreateContractWorkflow properties={properties} counterparties={counterparties} users={users} onCancel={handleCancelCreate} onFinish={handleFinalizeCreate} currentUser={currentUser} /> )}
+      {isCreatingContract && currentUser && ( <CreateContractWorkflow properties={properties} counterparties={counterparties} users={users} onCancel={handleCancelCreate} onFinish={handleFinalizeCreate} currentUser={currentUser} initialData={initialCreateData} /> )}
       {isCreatingCounterparty && ( <CreateCounterpartyWorkflow onCancel={handleCancelCreateCounterparty} onFinish={handleFinalizeCreateCounterparty} /> )}
       {isCreatingProperty && ( <CreatePropertyWorkflow onCancel={handleCancelCreateProperty} onFinish={handleFinalizeCreateProperty} /> )}
+      {isAddingUser && currentUser && company && ( <AddUserModal roles={roles} company={company} appId={currentUser.appId!} onSave={handleCreateUser} onClose={() => setIsAddingUser(false)} />)}
     </div>
   );
 }

@@ -10,6 +10,7 @@ interface CreateContractWorkflowProps {
   onCancel: () => void;
   onFinish: (newContractData: Partial<Contract> & { propertyAllocations?: any[] }) => void;
   currentUser: UserProfile;
+  initialData?: Partial<Contract> & { content?: string } | null;
 }
 
 const STEPS = [
@@ -86,8 +87,8 @@ const Stage1_Upload = ({ onNext, onFileSelect, fileName }: { onNext: () => void;
 };
 
 interface Stage2Props {
-    data: Partial<Contract>;
-    setData: (field: keyof Contract | Partial<Contract>, value?: any) => void;
+    data: Partial<Contract> & { content?: string };
+    setData: (field: keyof (Contract & { content?: string }) | Partial<Contract & { content?: string }>, value?: any) => void;
     onBack: () => void;
     onNext: () => void;
     onToggleMonth: (monthYearKey: string) => void;
@@ -645,11 +646,12 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
 }
 
 
-export default function CreateContractWorkflow({ onCancel, onFinish, properties, counterparties, users, currentUser }: CreateContractWorkflowProps) {
+export default function CreateContractWorkflow({ onCancel, onFinish, properties, counterparties, users, currentUser, initialData }: CreateContractWorkflowProps) {
   const [currentStep, setCurrentStep] = useState(1);
-  const [newContractData, setNewContractData] = useState<Partial<Contract> & { propertyAllocations?: any[], fileName?: string }>({
-      title: '',
-      type: ContractType.MSA,
+  const [newContractData, setNewContractData] = useState<Partial<Contract> & { propertyAllocations?: any[], fileName?: string, content?: string }>({
+      title: initialData?.title || '',
+      type: initialData?.type || ContractType.MSA,
+      content: initialData?.content || '',
       status: ContractStatus.DRAFT,
       riskLevel: RiskLevel.LOW,
       value: 0,
@@ -758,7 +760,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
   };
   
   const handleFinalize = () => {
-    let finalContent = `This contract for ${newContractData.title || 'a new matter'} was created via the wizard.`;
+    let finalContent = newContractData.content || `This contract for ${newContractData.title || 'a new matter'} was created via the wizard.`;
     const isSeasonal = newContractData.frequency === ContractFrequency.SEASONAL && newContractData.seasonalMonths && newContractData.seasonalMonths.length > 0;
     
     if (newContractData.propertyAllocations && newContractData.propertyAllocations.length > 0) {

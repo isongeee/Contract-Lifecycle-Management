@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import type { UserProfile, Role } from '../types';
 import { SearchIcon, PlusIcon, EditIcon } from './icons';
@@ -11,11 +10,12 @@ interface UserManagementTabProps {
     roles: Role[];
     setUsers: React.Dispatch<React.SetStateAction<UserProfile[]>>;
     currentUser: UserProfile;
+    onAddUser: () => void;
 }
 
 const ITEMS_PER_PAGE = 5;
 
-export default function UserManagementTab({ users, roles, setUsers, currentUser }: UserManagementTabProps) {
+export default function UserManagementTab({ users, roles, setUsers, currentUser, onAddUser }: UserManagementTabProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [roleFilter, setRoleFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
@@ -70,7 +70,7 @@ export default function UserManagementTab({ users, roles, setUsers, currentUser 
                         <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Users</h3>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage team members and their account access.</p>
                     </div>
-                    <button className="flex items-center px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600">
+                    <button onClick={onAddUser} className="flex items-center px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600">
                         <PlusIcon className="w-5 h-5 mr-2" />
                         Add User
                     </button>

@@ -171,3 +171,72 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
         appId: userProfile.app_id,
     };
 }
+
+export async function resetPassword(email: string) {
+    return supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin, // Redirect user back to the app's root URL after reset
+    });
+}
+
+export async function adminCreateUser(userData: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    password: string;
+    roleId: string;
+    companyId: string;
+    appId: string;
+}) {
+    // 1. Store the current admin session to avoid being logged out
+    const { data: { session: adminSession } } = await supabase.auth.getSession();
+    if (!adminSession) {
+        return { data: null, error: new Error("Admin not authenticated or session expired.") };
+    }
+
+    // 2. Sign up the new user. This temporarily switches the session in the client.
+    const { data: newUserAuth, error: signUpError } = await supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password,
+    });
+
+    if (signUpError) {
+        // IMPORTANT: Restore the admin session if the signup fails
+        await supabase.auth.setSession(adminSession);
+        return { data: null, error: signUpError };
+    }
+
+    if (!newUserAuth.user) {
+        await supabase.auth.setSession(adminSession);
+        return { data: null, error: new Error("User creation failed in authentication step.") };
+    }
+
+    // 3. Create the user's profile in the public.users table
+    const { error: profileError } = await supabase.from('users').insert({
+        id: newUserAuth.user.id,
+        first_name: userData.firstName,
+        last_name: userData.lastName,
+        email: userData.email,
+        app_id: userData.appId,
+        company_id: userData.companyId,
+        role_id: userData.roleId,
+        avatar_url: `https://i.pravatar.cc/150?u=${newUserAuth.user.id}`,
+    });
+
+    if (profileError) {
+        // If profile creation fails, we should ideally delete the auth user to prevent orphans.
+        // This requires an admin client, so for now, we'll log the error and restore the session.
+        console.error("Auth user created but profile insertion failed:", profileError);
+        await supabase.auth.setSession(adminSession);
+        return { data: null, error: profileError };
+    }
+
+    // 4. Restore the admin's session
+    const { error: sessionError } = await supabase.auth.setSession(adminSession);
+    if(sessionError) {
+        console.error("Failed to restore admin session:", sessionError);
+        // At this point, the admin might be logged out, which is a recoverable problem.
+        // The user was still created successfully.
+    }
+
+    return { data: newUserAuth.user, error: null };
+}

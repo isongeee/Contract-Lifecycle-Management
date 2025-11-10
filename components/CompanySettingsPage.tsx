@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import type { UserProfile, Role, NotificationSetting, PermissionSet } from '../types';
 import { UsersIcon, ShieldCheckIcon, BellIcon, BuildingOfficeIcon, HomeIcon, CopyIcon, CheckCircleIcon } from './icons';
@@ -17,6 +16,7 @@ interface CompanySettingsPageProps {
   onCreateRole: (name: string, description: string) => void;
   onDeleteRole: (roleId: string) => void;
   setNotificationSettings: React.Dispatch<React.SetStateAction<NotificationSetting[]>>;
+  onAddUser: () => void;
 }
 
 type ActiveTab = 'users' | 'roles' | 'notifications' | 'counterparties' | 'properties';
@@ -69,7 +69,7 @@ export default function CompanySettingsPage(props: CompanySettingsPageProps) {
     const renderContent = () => {
         switch (activeTab) {
             case 'users':
-                return <UserManagementTab users={props.users} roles={props.roles} setUsers={props.setUsers} currentUser={props.currentUser} />;
+                return <UserManagementTab users={props.users} roles={props.roles} setUsers={props.setUsers} currentUser={props.currentUser} onAddUser={props.onAddUser} />;
             case 'roles':
                 return <RolesPermissionsTab 
                             roles={props.roles} 

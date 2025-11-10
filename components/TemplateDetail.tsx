@@ -5,15 +5,13 @@ import { ArrowLeftIcon, PlusCircleIcon, BookTextIcon } from './icons';
 interface TemplateDetailProps {
   template: ContractTemplate;
   onBack: () => void;
+  onUseTemplate: (template: ContractTemplate) => void;
 }
 
-export default function TemplateDetail({ template, onBack }: TemplateDetailProps) {
+export default function TemplateDetail({ template, onBack, onUseTemplate }: TemplateDetailProps) {
   
   const handleUseTemplate = () => {
-    // In a real app, this would trigger a flow to create a new contract
-    // using this template's content.
-    console.log(`Creating a new contract from template: ${template.name}`);
-    alert(`Starting a new draft for a ${template.type} using the "${template.name}" template.`);
+    onUseTemplate(template);
   };
 
   return (
