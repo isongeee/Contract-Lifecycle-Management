@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType, PermissionSet, AuditLog, RenewalRequest, RenewalStatus, SigningStatus, Notification } from './types';
+import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType, PermissionSet, AuditLog, RenewalRequest, RenewalStatus, SigningStatus, Notification, Comment, RenewalFeedback } from './types';
 import { ContractStatus, RiskLevel, ApprovalStatus, RenewalStatus as RenewalStatusEnum, RenewalMode, SigningStatus as SigningStatusEnum } from './types';
 import { MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS, requestorPermissions } from './constants';
 import Sidebar from './components/Sidebar';
@@ -112,7 +112,7 @@ export default function App() {
   }, []);
 
 
-  const fetchData = useCallback(async (user: UserProfile): Promise<Contract[]> => {
+  const fetchData = useCallback(async (user: UserProfile) => {
     if (!user || !user.companyId) {
         setContracts([]);
         setCounterparties([]);
@@ -122,7 +122,7 @@ export default function App() {
         setNotifications([]);
         setTemplates([]);
         setIsLoading(false);
-        return [];
+        return;
     }
     setIsLoading(true);
     const companyId = user.companyId;
@@ -279,7 +279,6 @@ export default function App() {
 
     setContracts(allContracts);
     setIsLoading(false);
-    return allContracts;
   }, []);
 
   useEffect(() => {
@@ -287,6 +286,136 @@ export default function App() {
         fetchData(currentUser);
     }
   }, [currentUser, fetchData]);
+
+  const usersMap = useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
+  const counterpartiesMap = useMemo(() => new Map(counterparties.map(c => [c.id, c])), [counterparties]);
+  const propertiesMap = useMemo(() => new Map(properties.map(p => [p.id, p])), [properties]);
+
+  const fetchAndMergeContract = useCallback(async (contractId: string): Promise<Contract | null> => {
+    if (!currentUser || !usersMap.size || !counterpartiesMap.size || !propertiesMap.size) return null;
+
+    const { data: contractData } = await supabase.from('contracts').select('*').eq('id', contractId).single();
+
+    if (!contractData) {
+        setContracts(prev => prev.filter(c => c.id !== contractId));
+        return null;
+    }
+
+    const [versionsRes, approvalsRes, allocationsRes, renewalsRes, auditsRes] = await Promise.all([
+        supabase.from('contract_versions').select('*').eq('contract_id', contractId),
+        supabase.from('approval_steps').select('*').eq('contract_id', contractId),
+        supabase.from('contract_property_allocations').select('*').eq('contract_id', contractId),
+        supabase.from('renewal_requests').select('*').eq('contract_id', contractId).not('status', 'in', `("${RenewalStatusEnum.ACTIVATED}","${RenewalStatusEnum.CANCELLED}")`),
+        supabase.from('audit_logs').select('*').eq('related_entity_id', contractId).eq('related_entity_type', 'renewal_request')
+    ]);
+
+    const versionIds = (versionsRes.data || []).map(v => v.id);
+    const { data: commentsData } = versionIds.length > 0 ? await supabase.from('comments').select('*').in('version_id', versionIds) : { data: [] };
+    const commentsByVersionId = (commentsData || []).reduce((acc, comment) => {
+        const items = acc.get(comment.version_id) || [];
+        items.push({ ...comment, author: usersMap.get(comment.author_id)!, resolvedAt: comment.resolved_at, versionId: comment.version_id, createdAt: comment.created_at });
+        acc.set(comment.version_id, items);
+        return acc;
+    }, new Map<string, Comment[]>());
+
+    const renewalRequestIds = (renewalsRes.data || []).map(r => r.id);
+    const { data: feedbackData } = renewalRequestIds.length > 0 ? await supabase.from('renewal_feedback').select('*').in('renewal_request_id', renewalRequestIds) : { data: [] };
+    const feedbackByRenewalId = (feedbackData || []).reduce((acc, feedback) => {
+        const items = acc.get(feedback.renewal_request_id) || [];
+        items.push({ ...feedback, user: usersMap.get(feedback.user_id)! });
+        acc.set(feedback.renewal_request_id, items);
+        return acc;
+    }, new Map<string, RenewalFeedback[]>());
+    
+    const newContract: Contract = {
+        id: contractData.id, title: contractData.title, type: contractData.type, status: contractData.status,
+        riskLevel: contractData.risk_level, effectiveDate: contractData.effective_date,
+        endDate: contractData.end_date, value: contractData.value, frequency: contractData.frequency, allocation: contractData.allocation,
+        seasonalMonths: contractData.seasonal_months, owner: usersMap.get(contractData.owner_id)!,
+        counterparty: counterpartiesMap.get(contractData.counterparty_id)!,
+        property: propertiesMap.get(contractData.property_id),
+        versions: (versionsRes.data || []).map(v => ({...v, versionNumber: v.version_number, createdAt: v.created_at, fileName: v.file_name, effectiveDate: v.effective_date, endDate: v.end_date, seasonalMonths: v.seasonal_months, author: usersMap.get(v.author_id)!, property: propertiesMap.get(v.property_id), comments: commentsByVersionId.get(v.id) || []})).sort((a,b) => a.versionNumber - b.versionNumber),
+        approvalSteps: (approvalsRes.data || []).map(a => ({...a, approvedAt: a.approved_at, approver: usersMap.get(a.approver_id)!})),
+        propertyAllocations: (allocationsRes.data || []).map(a => ({...a, propertyId: a.property_id, allocatedValue: a.allocated_value, monthlyValues: a.monthly_values, manualEdits: a.manual_edits})),
+        renewalRequest: (renewalsRes.data && renewalsRes.data[0]) ? { ...renewalsRes.data[0], renewalOwner: usersMap.get(renewalsRes.data[0].renewal_owner_id), contractId: renewalsRes.data[0].contract_id, companyId: renewalsRes.data[0].company_id, feedback: feedbackByRenewalId.get(renewalsRes.data[0].id) || [] } : undefined,
+        auditLogs: (auditsRes.data || []).map(a => ({...a, relatedEntityType: 'renewal_request', changeType: a.change_type, oldValue: a.old_value, newValue: a.new_value, user: usersMap.get(a.user_id)})),
+        submittedAt: contractData.submitted_at, reviewStartedAt: contractData.review_started_at, approvalStartedAt: contractData.approval_started_at, approvalCompletedAt: contractData.approval_completed_at,
+        sentForSignatureAt: contractData.sent_for_signature_at, executedAt: contractData.executed_at, activeAt: contractData.active_at, expiredAt: contractData.expired_at, archivedAt: contractData.archived_at,
+        updatedAt: contractData.updated_at, draftVersionId: contractData.draft_version_id, executedVersionId: contractData.executed_version_id, startDate: contractData.start_date, autoRenew: contractData.auto_renew, noticePeriodDays: contractData.notice_period_days,
+        renewalTermMonths: contractData.renewal_term_months, upliftPercent: contractData.uplift_percent, parentContractId: contractData.parent_contract_id, signingStatus: contractData.signing_status, signingStatusUpdatedAt: contractData.signing_status_updated_at,
+    };
+    
+    setContracts(prev => {
+        const index = prev.findIndex(c => c.id === contractId);
+        if (index > -1) {
+            const newContracts = [...prev];
+            newContracts[index] = newContract;
+            return newContracts;
+        }
+        return [...prev, newContract];
+    });
+
+    return newContract;
+}, [currentUser, usersMap, counterpartiesMap, propertiesMap]);
+
+  // Real-time subscriptions for contracts and related data
+  useEffect(() => {
+      if (!currentUser?.companyId) return;
+
+      const handleDbChange = async (payload: any) => {
+          let contractId = payload.new?.contract_id || payload.old?.contract_id || payload.new?.id || payload.old?.id;
+
+          if (payload.table === 'comments') {
+              const versionId = payload.new?.version_id || payload.old?.version_id;
+              if (versionId) {
+                  const { data: version } = await supabase.from('contract_versions').select('contract_id').eq('id', versionId).single();
+                  if (version) contractId = version.contract_id;
+              }
+          } else if (payload.table === 'renewal_feedback') {
+              const renewalRequestId = payload.new?.renewal_request_id || payload.old?.renewal_request_id;
+              if (renewalRequestId) {
+                  const { data: request } = await supabase.from('renewal_requests').select('contract_id').eq('id', renewalRequestId).single();
+                  if (request) contractId = request.contract_id;
+              }
+          }
+          
+          if (contractId) {
+              if (payload.table === 'contracts' && payload.eventType === 'DELETE') {
+                  setContracts(prev => prev.filter(c => c.id !== contractId));
+              } else {
+                  await fetchAndMergeContract(contractId);
+              }
+          }
+      };
+
+      const companyFilter = `company_id=eq.${currentUser.companyId}`;
+      const subscriptions = [
+          supabase.channel('contracts').on('postgres_changes', { event: '*', schema: 'public', table: 'contracts', filter: companyFilter }, handleDbChange).subscribe(),
+          supabase.channel('contract_versions').on('postgres_changes', { event: '*', schema: 'public', table: 'contract_versions', filter: companyFilter }, handleDbChange).subscribe(),
+          supabase.channel('approval_steps').on('postgres_changes', { event: '*', schema: 'public', table: 'approval_steps', filter: companyFilter }, handleDbChange).subscribe(),
+          supabase.channel('renewal_requests').on('postgres_changes', { event: '*', schema: 'public', table: 'renewal_requests', filter: companyFilter }, handleDbChange).subscribe(),
+          supabase.channel('comments').on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: companyFilter }, handleDbChange).subscribe(),
+          supabase.channel('renewal_feedback').on('postgres_changes', { event: '*', schema: 'public', table: 'renewal_feedback', filter: companyFilter }, handleDbChange).subscribe(),
+      ];
+
+      return () => {
+          subscriptions.forEach(sub => sub.unsubscribe());
+      };
+  }, [currentUser, fetchAndMergeContract]);
+
+  // Keep selected contract in sync with the main list
+  useEffect(() => {
+    if (selectedContract) {
+      const updatedContractInList = contracts.find(c => c.id === selectedContract.id);
+      if (updatedContractInList) {
+        if (JSON.stringify(selectedContract) !== JSON.stringify(updatedContractInList)) {
+          setSelectedContract(updatedContractInList);
+        }
+      } else {
+        setSelectedContract(null);
+      }
+    }
+  }, [contracts, selectedContract]);
   
   // Real-time notifications
   useEffect(() => {
@@ -432,7 +561,7 @@ export default function App() {
     };
     
     const { data: insertedContract, error: contractError } = await supabase.from('contracts').insert([contractRecord]).select().single();
-    if (contractError) { console.error("Error creating contract:", contractError); return; }
+    if (contractError || !insertedContract) { console.error("Error creating contract:", contractError); return; }
 
     const versionData = newContractData.versions![0];
     const versionRecord = {
@@ -459,7 +588,7 @@ export default function App() {
       if (allocationError) { console.error("Error creating allocations:", allocationError); return; }
     }
     
-    await fetchData(currentUser);
+    await fetchAndMergeContract(insertedContract.id);
     setIsCreatingContract(false);
   };
 
@@ -518,72 +647,10 @@ export default function App() {
       console.error("Error transitioning contract state:", error); 
       alert(`Failed to update contract: ${error.message}`); 
     } else { 
-        const contract = contracts.find(c => c.id === contractId);
-        if (contract) {
-             if (action === ContractStatus.PENDING_APPROVAL && rpcPayload.approvers) {
-                const notificationsToInsert = rpcPayload.approvers.map((approverId: string) => ({
-                    user_id: approverId,
-                    company_id: currentUser.companyId,
-                    app_id: currentUser.appId,
-                    type: 'APPROVAL_REQUEST',
-                    message: `${currentUser.firstName} ${currentUser.lastName} has requested your approval on "${contract.title}".`,
-                    related_entity_type: 'contract',
-                    related_entity_id: contract.id
-                }));
-                await supabase.from('notifications').insert(notificationsToInsert);
-            } else if (action === 'APPROVE_STEP' || action === 'REJECT_STEP') {
-                const actionText = action === 'APPROVE_STEP' ? 'approved' : 'rejected';
-                await supabase.from('notifications').insert([{
-                    user_id: contract.owner.id,
-                    company_id: currentUser.companyId,
-                    app_id: currentUser.appId,
-                    type: 'APPROVAL_RESPONSE',
-                    message: `${currentUser.firstName} ${currentUser.lastName} ${actionText} the contract "${contract.title}".`,
-                    related_entity_type: 'contract',
-                    related_entity_id: contract.id
-                }]);
-            }
-
-            const statusChangeActions: ContractStatusType[] = [
-                ContractStatus.FULLY_EXECUTED,
-                ContractStatus.ACTIVE,
-                ContractStatus.EXPIRED,
-                ContractStatus.TERMINATED,
-            ];
-
-            if (statusChangeActions.includes(action as ContractStatusType)) {
-                let message = `The contract "${contract.title}" is now ${action}.`;
-                 if (action === ContractStatus.TERMINATED) {
-                    message = `Your contract "${contract.title}" has been Terminated.`;
-                }
-
-                await supabase.from('notifications').insert([{
-                    user_id: contract.owner.id,
-                    company_id: currentUser.companyId,
-                    app_id: currentUser.appId,
-                    type: 'STATUS_CHANGE',
-                    message: message,
-                    related_entity_type: 'contract',
-                    related_entity_id: contract.id,
-                }]);
-            }
-        }
-        
-        if (action === ContractStatus.ACTIVE) {
-            if (contract?.parentContractId) {
-                const parent = contracts.find(c => c.id === contract.parentContractId);
-                if (parent) {
-                    await supabase.from('contracts').update({ status: ContractStatus.SUPERSEDED }).eq('id', parent.id);
-                    if (parent.renewalRequest) {
-                        await supabase.from('renewal_requests').update({ status: RenewalStatusEnum.ACTIVATED }).eq('id', parent.renewalRequest.id);
-                    }
-                }
-            }
-        }
-        const updatedContracts = await fetchData(currentUser); 
-        if (selectedContract?.id === contractId) { 
-          setSelectedContract(updatedContracts.find(c => c.id === contractId) || null); 
-        } 
+        // The UI will update automatically via the real-time subscription,
+        // but we'll also trigger an immediate fetch for the active user
+        // to ensure UI consistency and prevent race conditions.
+        await fetchAndMergeContract(contractId);
     }
   };
 
@@ -598,38 +665,7 @@ export default function App() {
         console.error("Error updating signing status:", error);
         alert(`Failed to update signing status: ${error.message}`);
     } else {
-        const updatedContracts = await fetchData(currentUser);
-        const updatedContract = updatedContracts.find(c => c.id === contractId);
-        
-        if (updatedContract) {
-            let message = '';
-            switch(newStatus) {
-                case SigningStatusEnum.SENT_TO_COUNTERPARTY:
-                    message = `The contract "${updatedContract.title}" has been sent to ${updatedContract.counterparty.name} for signature.`;
-                    break;
-                case SigningStatusEnum.VIEWED_BY_COUNTERPARTY:
-                    message = `${updatedContract.counterparty.name} has viewed the contract "${updatedContract.title}".`;
-                    break;
-                case SigningStatusEnum.SIGNED_BY_COUNTERPARTY:
-                    message = `${updatedContract.counterparty.name} has signed the contract "${updatedContract.title}".`;
-                    break;
-            }
-            if (message) {
-                await supabase.from('notifications').insert([{
-                    user_id: updatedContract.owner.id,
-                    company_id: currentUser.companyId,
-                    app_id: currentUser.appId,
-                    type: 'SIGNING_PROGRESS',
-                    message: message,
-                    related_entity_type: 'contract',
-                    related_entity_id: updatedContract.id
-                }]);
-            }
-        }
-
-        if (selectedContract?.id === contractId) {
-            setSelectedContract(updatedContracts.find(c => c.id === contractId) || null);
-        }
+        await fetchAndMergeContract(contractId);
     }
   };
 
@@ -664,11 +700,8 @@ export default function App() {
           await handleContractTransition(contractToUpdate.id, ContractStatus.IN_REVIEW);
       } else if (mode === RenewalMode.TERMINATE) {
           await handleContractTransition(contractToUpdate.id, ContractStatus.TERMINATED);
-      }
-
-      const updatedContracts = await fetchData(currentUser);
-      if (selectedContract?.id === contractToUpdate.id) {
-          setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null);
+      } else {
+          await fetchAndMergeContract(contractToUpdate.id);
       }
   };
   
@@ -770,9 +803,8 @@ export default function App() {
         }
     }
 
+    const newContract = await fetchAndMergeContract(insertedContract.id);
     alert('New renewal contract draft created successfully. You will now be taken to the new draft.');
-    const updatedContracts = await fetchData(currentUser);
-    const newContract = updatedContracts.find(c => c.id === insertedContract.id);
     if (newContract) {
         handleSelectContract(newContract);
     }
@@ -809,15 +841,15 @@ export default function App() {
         console.error("Error creating renewal request:", error);
         alert(`Failed to create renewal request: ${error.message}`);
     } else {
-        const updatedContracts = await fetchData(currentUser);
-        if (selectedContract?.id === contract.id) {
-            setSelectedContract(updatedContracts.find(c => c.id === contract.id) || null);
-        }
+        await fetchAndMergeContract(contract.id);
     }
   };
 
   const handleUpdateRenewalTerms = async (renewalRequestId: string, updatedTerms: { renewalTermMonths: number; noticePeriodDays: number; upliftPercent: number; }) => {
     if (!currentUser) return;
+
+    const renewalRequest = contracts.find(c => c.renewalRequest?.id === renewalRequestId)?.renewalRequest;
+    if (!renewalRequest) return;
     
     const { error } = await supabase.from('renewal_requests').update({
         renewal_term_months: updatedTerms.renewalTermMonths,
@@ -829,10 +861,7 @@ export default function App() {
         console.error("Error updating renewal terms:", error);
         alert(`Failed to update renewal terms: ${error.message}`);
     } else {
-        const updatedContracts = await fetchData(currentUser);
-        if (selectedContract?.renewalRequest?.id === renewalRequestId) {
-            setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null);
-        }
+        await fetchAndMergeContract(renewalRequest.contractId);
     }
   };
 
@@ -863,10 +892,7 @@ export default function App() {
         alert("Failed to finalize renewal.");
     } else {
         alert("Contract renewed as-is successfully!");
-        const updatedContracts = await fetchData(currentUser);
-        if (selectedContract?.id === contract.id) {
-            setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null);
-        }
+        await fetchAndMergeContract(contract.id);
     }
   };
 
@@ -898,21 +924,7 @@ export default function App() {
       const { error: approvalError } = await supabase.from('approval_steps').delete().eq('contract_id', contractId);
       if (approvalError) { console.error("Error clearing old approvals:", approvalError); }
 
-       if (contractToUpdate && currentUser.id !== contractToUpdate.owner.id) {
-            const newVersionNumber = latestVersionNumber + 1;
-            await supabase.from('notifications').insert([{
-                user_id: contractToUpdate.owner.id,
-                company_id: currentUser.companyId,
-                app_id: currentUser.appId,
-                type: 'NEW_VERSION',
-                message: `A new version (v${newVersionNumber}) of "${contractToUpdate.title}" has been uploaded by ${currentUser.firstName} ${currentUser.lastName}.`,
-                related_entity_type: 'contract',
-                related_entity_id: contractId
-            }]);
-        }
-
-      const updatedContracts = await fetchData(currentUser);
-      if (selectedContract?.id === contractId) { setSelectedContract(updatedContracts.find(c => c.id === contractId) || null); }
+      await fetchAndMergeContract(contractId);
   };
 
   const handleUpdateRolePermissions = async (roleId: string, newPermissions: PermissionSet) => {
@@ -945,39 +957,24 @@ export default function App() {
     const { error } = await supabase.from('comments').insert([
         { version_id: versionId, content: content, author_id: currentUser.id, company_id: currentUser.companyId, app_id: currentUser.appId }
     ]);
-    if (error) { console.error("Error creating comment:", error); alert(`Failed to post comment: ${error.message}`); return; }
-
-    const contract = contracts.find(c => c.versions.some(v => v.id === versionId));
-    if (contract) {
-        const mentionRegex = /@([\w\s]+)\b/g;
-        let match;
-        const mentionedNames = new Set<string>();
-        while ((match = mentionRegex.exec(content)) !== null) {
-            mentionedNames.add(match[1].trim());
-        }
-
-        if (mentionedNames.size > 0) {
-            const mentionedUsers = users.filter(u => u.id !== currentUser.id && mentionedNames.has(`${u.firstName} ${u.lastName}`));
-            const notificationsToInsert = mentionedUsers.map(user => ({
-                user_id: user.id,
-                company_id: currentUser.companyId,
-                app_id: currentUser.appId,
-                type: 'COMMENT_MENTION',
-                message: `${currentUser.firstName} ${currentUser.lastName} mentioned you in a comment on "${contract.title}".`,
-                related_entity_type: 'contract',
-                related_entity_id: contract.id
-            }));
-            if (notificationsToInsert.length > 0) {
-                await supabase.from('notifications').insert(notificationsToInsert);
-            }
-        }
+    if (error) { 
+        console.error("Error creating comment:", error); 
+        alert(`Failed to post comment: ${error.message}`); 
+        return; 
     }
-
-    const updatedContracts = await fetchData(currentUser);
-    if (selectedContract) { setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null); }
+    const { data: version } = await supabase.from('contract_versions').select('contract_id').eq('id', versionId).single();
+    if (version?.contract_id) {
+        await fetchAndMergeContract(version.contract_id);
+    }
   };
   
   const handleResolveComment = async (commentId: string, isResolved: boolean) => {
+    const { data: comment, error: commentFetchError } = await supabase.from('comments').select('version_id').eq('id', commentId).single();
+    if (commentFetchError || !comment) {
+        console.error("Error fetching comment details:", commentFetchError);
+        return;
+    }
+
     const { error } = await supabase
       .from('comments')
       .update({ resolved_at: isResolved ? new Date().toISOString() : null })
@@ -986,10 +983,10 @@ export default function App() {
     if (error) {
       console.error("Error updating comment status:", error);
     } else {
-      const updatedContracts = await fetchData(currentUser);
-       if (selectedContract) {
-        setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null);
-      }
+        const { data: version } = await supabase.from('contract_versions').select('contract_id').eq('id', comment.version_id).single();
+        if (version?.contract_id) {
+            await fetchAndMergeContract(version.contract_id);
+        }
     }
   };
 
@@ -1006,9 +1003,9 @@ export default function App() {
         console.error("Error submitting feedback:", error);
         alert("Failed to submit feedback.");
     } else {
-        const updatedContracts = await fetchData(currentUser);
-        if (selectedContract) {
-            setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null);
+        const { data: request } = await supabase.from('renewal_requests').select('contract_id').eq('id', renewalRequestId).single();
+        if (request?.contract_id) {
+            await fetchAndMergeContract(request.contract_id);
         }
     }
   };
@@ -1055,7 +1052,11 @@ export default function App() {
     } else {
         alert("User created successfully! They will receive an email to verify their account.");
         setIsAddingUser(false);
-        await fetchData(currentUser); // Refresh user list
+        // Refresh just the user list
+        const { data: usersData } = await supabase.from('users').select('*').eq('company_id', currentUser.companyId);
+        const rolesMap = new Map((roles).map(r => [r.id, r.name]));
+        const mappedUsers: UserProfile[] = (usersData || []).map(u => ({ id: u.id, firstName: u.first_name, lastName: u.last_name, email: u.email, phone: u.phone, jobTitle: u.job_title, department: u.department, avatarUrl: u.avatar_url, role: rolesMap.get(u.role_id) || 'Unknown', roleId: u.role_id, status: u.status as any, lastLogin: u.last_login, companyId: u.company_id, appId: u.app_id }));
+        setUsers(mappedUsers);
     }
   };
 
