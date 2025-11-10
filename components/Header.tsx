@@ -1,21 +1,31 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDownIcon, UserIcon, SettingsIcon, LogOutIcon, HelpCircleIcon, BuildingOfficeIcon } from './icons';
-import type { UserProfile } from '../types';
+import { ChevronDownIcon, UserIcon, SettingsIcon, LogOutIcon, HelpCircleIcon, BuildingOfficeIcon, BellIcon } from './icons';
+import type { UserProfile, Notification } from '../types';
+import NotificationPanel from './NotificationPanel';
 
 interface HeaderProps {
     onLogout: () => void;
     onNavigate: (view: string) => void;
     currentUser: UserProfile | null;
+    unreadCount: number;
+    notifications: Notification[];
+    onNotificationClick: (notification: Notification) => void;
+    onMarkAllAsRead: () => void;
 }
 
-export default function Header({ onLogout, onNavigate, currentUser }: HeaderProps) {
+export default function Header({ onLogout, onNavigate, currentUser, unreadCount, notifications, onNotificationClick, onMarkAllAsRead }: HeaderProps) {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const notificationPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         setIsProfileMenuOpen(false);
+      }
+      if (notificationPanelRef.current && !notificationPanelRef.current.contains(event.target as Node)) {
+        setIsNotificationPanelOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -44,8 +54,29 @@ export default function Header({ onLogout, onNavigate, currentUser }: HeaderProp
 
   return (
     <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 flex items-center justify-end px-6">
-      <div className="flex items-center">
-        <div className="relative" ref={menuRef}>
+      <div className="flex items-center space-x-4">
+        <div className="relative" ref={notificationPanelRef}>
+            <button onClick={() => setIsNotificationPanelOpen(prev => !prev)} className="relative p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200">
+                <BellIcon className="h-6 w-6" />
+                {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 flex h-4 w-4">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-white text-xs items-center justify-center">{unreadCount > 9 ? '9+' : unreadCount}</span>
+                    </span>
+                )}
+            </button>
+            {isNotificationPanelOpen && (
+                <NotificationPanel 
+                    notifications={notifications}
+                    onNotificationClick={(n) => {
+                      onNotificationClick(n);
+                      setIsNotificationPanelOpen(false);
+                    }}
+                    onMarkAllAsRead={onMarkAllAsRead}
+                />
+            )}
+        </div>
+        <div className="relative" ref={profileMenuRef}>
           <button onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} className="flex items-center space-x-3 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
             <img
               className="h-9 w-9 rounded-full object-cover"

@@ -112,7 +112,8 @@ export default function CommentsPanel({ comments, users, currentUser, versionId,
     };
 
     const handleMentionSelect = (user: UserProfile) => {
-        const cursorPosition = textareaRef.current!.selectionStart;
+        if (!textareaRef.current) return;
+        const cursorPosition = textareaRef.current.selectionStart;
         const textBeforeCursor = newComment.substring(0, cursorPosition);
         
         // Find the start of the current @mention query
@@ -134,7 +135,7 @@ export default function CommentsPanel({ comments, users, currentUser, versionId,
 
         // Use a timeout to ensure the state update has rendered before we manipulate the DOM
         setTimeout(() => {
-            const newCursorPosition = (prefix + fullName).length + 1; // +1 for the space after
+            const newCursorPosition = prefix.length + fullName.length + 1; // +1 for the space
             textareaRef.current?.focus();
             textareaRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
         }, 0);

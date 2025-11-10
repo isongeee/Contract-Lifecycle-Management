@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type { Contract, Clause, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, AuditLog, RenewalStatus, RenewalMode, SigningStatus, Comment } from '../types';
 import { ContractStatus, ApprovalStatus, ContractFrequency, RenewalStatus as RenewalStatusEnum, SigningStatus as SigningStatusEnum, RenewalMode as RenewalModeEnum } from '../types';
@@ -29,6 +28,7 @@ interface ContractDetailProps {
   onCreateRenewalRequest: (contract: Contract) => void;
   onSelectContract: (contract: Contract) => void;
   onRenewAsIs: (contract: Contract) => void;
+  onStartRenegotiation: (originalContract: Contract, notes?: string) => void;
   onUpdateSigningStatus: (contractId: string, status: SigningStatus) => void;
   onCreateComment: (versionId: string, content: string) => void;
   onResolveComment: (commentId: string, isResolved: boolean) => void;
@@ -47,7 +47,7 @@ const ContractActions = ({ contract, onRequestTransition, onOpenApprovalModal, o
             case ContractStatus.APPROVED:
                 return <button onClick={() => onRequestTransition(ContractStatus.SENT_FOR_SIGNATURE)} className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700">Send for Signature</button>;
             case ContractStatus.SENT_FOR_SIGNATURE:
-                 return <button onClick={() => onRequestTransition(ContractStatus.FULLY_EXECUTED)} className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700" disabled={contract.signingStatus !== SigningStatusEnum.SIGNED_BY_COUNTERPARTY}>Mark as Executed</button>;
+                 return <button onClick={() => onRequestTransition(ContractStatus.FULLY_EXECUTED)} className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700">Mark as Executed</button>;
             case ContractStatus.FULLY_EXECUTED:
                 const effectiveDate = new Date(contract.effectiveDate);
                 if (effectiveDate <= new Date()) {
@@ -483,7 +483,7 @@ const daysUntil = (dateStr: string) => {
 };
 
 
-export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalDecision, onCreateRenewalRequest, onSelectContract, onRenewAsIs, onUpdateSigningStatus, onCreateComment, onResolveComment, onCreateRenewalFeedback }: ContractDetailProps) {
+export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalDecision, onCreateRenewalRequest, onSelectContract, onRenewAsIs, onStartRenegotiation, onUpdateSigningStatus, onCreateComment, onResolveComment, onCreateRenewalFeedback }: ContractDetailProps) {
   const [contract, setContract] = useState(initialContract);
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const [isRequestingApproval, setIsRequestingApproval] = useState(false);
@@ -726,6 +726,10 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                 onClose={() => setIsMakingDecision(false)}
                 onConfirm={(mode, notes) => {
                     onRenewalDecision(contract.renewalRequest!.id, mode, notes);
+                    setIsMakingDecision(false);
+                }}
+                onStartRenegotiation={(notes) => {
+                    onStartRenegotiation(contract, notes);
                     setIsMakingDecision(false);
                 }}
                 currentUser={currentUser}

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import type { Contract, RenewalMode, UserProfile } from '../types';
 import { XIcon, RefreshCwIcon, FileTextIcon, EditIcon, XCircleIcon, SparklesIcon, LoaderIcon, UserIcon } from './icons';
@@ -10,6 +9,7 @@ interface RenewalDecisionModalProps {
     currentUser: UserProfile;
     onClose: () => void;
     onConfirm: (mode: RenewalMode, notes?: string) => void;
+    onStartRenegotiation: (notes?: string) => void;
     onCreateRenewalFeedback: (renewalRequestId: string, feedbackText: string) => void;
 }
 
@@ -54,7 +54,7 @@ const InfoItem = ({ label, value, className = '' }: { label: string; value: Reac
 );
 
 
-export default function RenewalDecisionModal({ contract, contracts, currentUser, onClose, onConfirm, onCreateRenewalFeedback }: RenewalDecisionModalProps) {
+export default function RenewalDecisionModal({ contract, contracts, currentUser, onClose, onConfirm, onStartRenegotiation, onCreateRenewalFeedback }: RenewalDecisionModalProps) {
     const [selectedMode, setSelectedMode] = useState<RenewalMode | null>(null);
     const [justification, setJustification] = useState('');
     const [performanceSummary, setPerformanceSummary] = useState('');
@@ -97,7 +97,11 @@ export default function RenewalDecisionModal({ contract, contracts, currentUser,
     const isConfirmDisabled = selectedMode === 'terminate' && justification.trim() === '';
 
     const handleConfirm = () => {
-        if (selectedMode && !isConfirmDisabled) {
+        if (!selectedMode || isConfirmDisabled) return;
+
+        if (selectedMode === 'new_contract') {
+            onStartRenegotiation(justification);
+        } else {
             onConfirm(selectedMode, justification);
         }
     };

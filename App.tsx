@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType, PermissionSet, AuditLog, RenewalRequest, RenewalStatus, SigningStatus } from './types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType, PermissionSet, AuditLog, RenewalRequest, RenewalStatus, SigningStatus, Notification } from './types';
 import { ContractStatus, RiskLevel, ApprovalStatus, RenewalStatus as RenewalStatusEnum, RenewalMode, SigningStatus as SigningStatusEnum } from './types';
 import { MOCK_TEMPLATES, MOCK_ROLES, MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS, requestorPermissions } from './constants';
 import Sidebar from './components/Sidebar';
@@ -25,7 +25,7 @@ import CompanySettingsPage from './components/CompanySettingsPage';
 import RenewalsPage from './components/RenewalsPage';
 import SigningPage from './components/SigningPage';
 import { supabase } from './lib/supabaseClient';
-import { LoaderIcon } from './components/icons';
+import { LoaderIcon, AlertTriangleIcon } from './components/icons';
 import { Session } from '@supabase/supabase-js';
 import { getUserProfile, signOut } from './lib/auth';
 
@@ -41,6 +41,7 @@ export default function App() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [notificationSettings, setNotificationSettings] = useState<NotificationSetting[]>(MOCK_NOTIFICATION_SETTINGS);
   const [userNotificationSettings, setUserNotificationSettings] = useState<UserNotificationSettings>(MOCK_USER_NOTIFICATION_SETTINGS);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
@@ -61,13 +62,19 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authView, setAuthView] = useState<'login' | 'org-signup' | 'user-signup'>('login');
 
+  const unreadCount = useMemo(() => notifications.filter(n => !n.is_read).length, [notifications]);
+
   useEffect(() => {
+    // This handles real-time changes, like login/logout in another tab.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
         setSession(session);
         setIsAuthenticated(!!session);
         if (session?.user) {
             const profile = await getUserProfile(session.user.id);
             setCurrentUser(profile);
+            if (!profile) {
+              await signOut(); // If profile is gone, force a logout.
+            }
         } else {
             setCurrentUser(null);
             setCompany(null);
@@ -76,14 +83,22 @@ export default function App() {
             setProperties([]);
             setUsers([]);
             setRoles([]);
+            setNotifications([]);
         }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // This handles the initial page load check.
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
         setSession(session);
         setIsAuthenticated(!!session);
         if (session?.user) {
-            getUserProfile(session.user.id).then(setCurrentUser);
+            const profile = await getUserProfile(session.user.id);
+            setCurrentUser(profile);
+            // This is the critical fix: if the profile load fails, we must
+            // stop the main loading indicator, otherwise it hangs forever.
+            if (!profile) {
+                setIsLoading(false);
+            }
         } else {
             setIsLoading(false);
         }
@@ -100,6 +115,7 @@ export default function App() {
         setProperties([]);
         setUsers([]);
         setRoles([]);
+        setNotifications([]);
         setIsLoading(false);
         return [];
     }
@@ -145,6 +161,9 @@ export default function App() {
     }));
     const propertiesMap = new Map(mappedProperties.map(p => [p.id, p]));
     setProperties(mappedProperties);
+    
+    const { data: notificationsData } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(50);
+    setNotifications(notificationsData as Notification[] || []);
 
     const { data: contractsData } = await supabase.from('contracts').select('*').eq('company_id', companyId);
     const contractIds = (contractsData || []).map(c => c.id);
@@ -266,7 +285,7 @@ export default function App() {
     if (contractsToExpire.length > 0) {
         console.log(`Found ${contractsToExpire.length} active contracts that have expired. Updating status...`);
         const updatePromises = contractsToExpire.map(c => 
-            supabase.rpc('handle_contract_transition', { 
+            supabase.rpc('contract_transition', { 
                 p_contract_id: c.id, 
                 p_action: ContractStatus.EXPIRED, 
                 p_payload: {} 
@@ -304,6 +323,33 @@ export default function App() {
         fetchData(currentUser);
     }
   }, [currentUser, fetchData]);
+  
+  // Real-time notifications
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const channel = supabase
+      .channel(`notifications:${currentUser.id}`)
+      .on<Notification>(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${currentUser.id}`,
+        },
+        (payload) => {
+          setNotifications((currentNotifications) =>
+            [payload.new, ...currentNotifications].sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser]);
 
 
   useEffect(() => {
@@ -469,16 +515,55 @@ export default function App() {
 
   const handleContractTransition = async (contractId: string, action: ContractAction, payload?: any) => {
     if (!currentUser) return;
-    let rpcPayload = payload;
-    if (action === ContractStatus.PENDING_APPROVAL && payload.approvers) { rpcPayload = { ...payload, approvers: payload.approvers.map((a: UserProfile) => a.id) }; }
-    if (action === ContractStatus.SENT_FOR_SIGNATURE) { rpcPayload = { ...rpcPayload, signing_status: SigningStatusEnum.AWAITING_INTERNAL }; }
+
+    const rpcPayload: any = payload ? { ...payload } : {};
+
+    if (action === ContractStatus.PENDING_APPROVAL && rpcPayload.approvers) {
+      rpcPayload.approvers = rpcPayload.approvers.map((a: UserProfile) => a.id);
+    }
+
+    if (action === ContractStatus.SENT_FOR_SIGNATURE) {
+      rpcPayload.signing_status = SigningStatusEnum.AWAITING_INTERNAL;
+    }
     
-    const { error } = await supabase.rpc('handle_contract_transition', { p_contract_id: contractId, p_action: action, p_payload: rpcPayload, });
-    if (error) { console.error("Error transitioning contract state:", error); alert(`Failed to update contract: ${error.message}`); } 
-    else { 
-        // If activating a child contract, supersede the parent.
+    const { error } = await supabase.rpc('contract_transition', { 
+      p_contract_id: contractId, 
+      p_action: action, 
+      p_payload: rpcPayload, 
+    });
+
+    if (error) { 
+      console.error("Error transitioning contract state:", error); 
+      alert(`Failed to update contract: ${error.message}`); 
+    } else { 
+        const contract = contracts.find(c => c.id === contractId);
+        if (contract) {
+             if (action === ContractStatus.PENDING_APPROVAL && rpcPayload.approvers) {
+                const notificationsToInsert = rpcPayload.approvers.map((approverId: string) => ({
+                    user_id: approverId,
+                    company_id: currentUser.companyId,
+                    app_id: currentUser.appId,
+                    type: 'APPROVAL_REQUEST',
+                    message: `${currentUser.firstName} ${currentUser.lastName} has requested your approval on "${contract.title}".`,
+                    related_entity_type: 'contract',
+                    related_entity_id: contract.id
+                }));
+                await supabase.from('notifications').insert(notificationsToInsert);
+            } else if (action === 'APPROVE_STEP' || action === 'REJECT_STEP') {
+                const actionText = action === 'APPROVE_STEP' ? 'approved' : 'rejected';
+                await supabase.from('notifications').insert([{
+                    user_id: contract.owner.id,
+                    company_id: currentUser.companyId,
+                    app_id: currentUser.appId,
+                    type: 'APPROVAL_RESPONSE',
+                    message: `${currentUser.firstName} ${currentUser.lastName} ${actionText} the contract "${contract.title}".`,
+                    related_entity_type: 'contract',
+                    related_entity_id: contract.id
+                }]);
+            }
+        }
+        
         if (action === ContractStatus.ACTIVE) {
-            const contract = contracts.find(c => c.id === contractId);
             if (contract?.parentContractId) {
                 const parent = contracts.find(c => c.id === contract.parentContractId);
                 if (parent) {
@@ -490,7 +575,9 @@ export default function App() {
             }
         }
         const updatedContracts = await fetchData(currentUser); 
-        if (selectedContract?.id === contractId) { setSelectedContract(updatedContracts.find(c => c.id === contractId) || null); } 
+        if (selectedContract?.id === contractId) { 
+          setSelectedContract(updatedContracts.find(c => c.id === contractId) || null); 
+        } 
     }
   };
 
@@ -519,6 +606,11 @@ export default function App() {
   const handleRenewalDecision = async (renewalRequestId: string, mode: RenewalMode, notes?: string) => {
       if (!currentUser) return;
 
+      if (mode === RenewalMode.NEW_CONTRACT) {
+          console.error("handleRenewalDecision was called with 'new_contract' mode. This should be handled by `handleStartRenegotiation`.");
+          return;
+      }
+      
       const contractToUpdate = contracts.find(c => c.renewalRequest?.id === renewalRequestId);
       if (!contractToUpdate) return;
       
@@ -534,8 +626,7 @@ export default function App() {
           return;
       }
       
-      // Trigger main contract status changes
-      if (mode === RenewalMode.NEW_CONTRACT || mode === RenewalMode.AMENDMENT) {
+      if (mode === RenewalMode.AMENDMENT) {
           await handleContractTransition(contractToUpdate.id, ContractStatus.IN_REVIEW);
       } else if (mode === RenewalMode.TERMINATE) {
           await handleContractTransition(contractToUpdate.id, ContractStatus.TERMINATED);
@@ -547,6 +638,109 @@ export default function App() {
       }
   };
   
+  const handleStartRenegotiation = async (originalContract: Contract, notes?: string) => {
+    if (!currentUser?.companyId || !currentUser?.appId) return;
+
+    const newStartDate = new Date(originalContract.endDate);
+    newStartDate.setDate(newStartDate.getDate() + 1);
+    
+    const newEndDate = new Date(newStartDate);
+    newEndDate.setMonth(newEndDate.getMonth() + (originalContract.renewalTermMonths || 12));
+    
+    const upliftPercent = originalContract.renewalRequest?.upliftPercent ?? originalContract.upliftPercent ?? 0;
+    const newValue = originalContract.value * (1 + (upliftPercent / 100));
+
+    const newContractRecord = {
+      type: originalContract.type,
+      risk_level: originalContract.riskLevel,
+      counterparty_id: originalContract.counterparty.id,
+      property_id: originalContract.property?.id,
+      owner_id: originalContract.owner.id,
+      frequency: originalContract.frequency,
+      seasonal_months: originalContract.seasonalMonths,
+      allocation: originalContract.allocation,
+      title: `[RENEWAL] ${originalContract.title}`,
+      status: ContractStatus.DRAFT,
+      value: newValue,
+      effective_date: newStartDate.toISOString().split('T')[0],
+      end_date: newEndDate.toISOString().split('T')[0],
+      start_date: newStartDate.toISOString().split('T')[0],
+      parent_contract_id: originalContract.id,
+      company_id: currentUser.companyId,
+      app_id: currentUser.appId,
+      auto_renew: originalContract.autoRenew,
+      notice_period_days: originalContract.noticePeriodDays,
+      renewal_term_months: originalContract.renewalTermMonths,
+      uplift_percent: originalContract.upliftPercent,
+    };
+
+    const { data: insertedContract, error: contractError } = await supabase.from('contracts').insert([newContractRecord]).select().single();
+    if (contractError) {
+      console.error("Error creating renewal contract:", contractError);
+      alert(`Failed to create renewal contract: ${contractError.message}`);
+      return;
+    }
+
+    const latestOldVersion = originalContract.versions.sort((a, b) => b.versionNumber - a.versionNumber)[0];
+    if (latestOldVersion) {
+        const newVersionRecord = {
+          contract_id: insertedContract.id,
+          version_number: 1,
+          author_id: currentUser.id,
+          content: latestOldVersion.content,
+          value: newValue,
+          effective_date: newContractRecord.effective_date,
+          end_date: newContractRecord.end_date,
+          frequency: newContractRecord.frequency,
+          seasonal_months: newContractRecord.seasonal_months,
+          property_id: newContractRecord.property_id,
+          company_id: currentUser.companyId,
+          app_id: currentUser.appId,
+        };
+        const { error: versionError } = await supabase.from('contract_versions').insert([newVersionRecord]);
+        if (versionError) {
+          console.error("Error creating initial version for renewal contract:", versionError);
+        }
+    }
+
+    if (originalContract.propertyAllocations && originalContract.propertyAllocations.length > 0) {
+        const newAllocationRecords = originalContract.propertyAllocations.map(alloc => ({
+            contract_id: insertedContract.id,
+            property_id: alloc.propertyId,
+            allocated_value: alloc.allocatedValue,
+            monthly_values: alloc.monthlyValues,
+            manual_edits: alloc.manualEdits,
+            company_id: currentUser.companyId,
+            app_id: currentUser.appId,
+        }));
+        const { error: allocationError } = await supabase.from('contract_property_allocations').insert(newAllocationRecords);
+        if (allocationError) {
+          console.error("Error copying property allocations:", allocationError);
+        }
+    }
+
+    if (originalContract.renewalRequest) {
+        const { error: renewalUpdateError } = await supabase
+            .from('renewal_requests')
+            .update({
+                status: RenewalStatusEnum.IN_PROGRESS,
+                mode: RenewalMode.NEW_CONTRACT,
+                notes: notes,
+            })
+            .eq('id', originalContract.renewalRequest.id);
+        if (renewalUpdateError) {
+            console.error("Error updating original renewal request:", renewalUpdateError);
+        }
+    }
+
+    alert('New renewal contract draft created successfully. You will now be taken to the new draft.');
+    const updatedContracts = await fetchData(currentUser);
+    const newContract = updatedContracts.find(c => c.id === insertedContract.id);
+    if (newContract) {
+        handleSelectContract(newContract);
+    }
+  };
+
   const handleCreateRenewalRequest = async (contract: Contract) => {
     if (!currentUser || !contract) return;
     
@@ -555,7 +749,7 @@ export default function App() {
         company_id: currentUser.companyId,
         app_id: currentUser.appId,
         renewal_owner_id: contract.owner.id,
-        mode: null, // Mode will be decided by the user
+        mode: null,
         status: RenewalStatusEnum.QUEUED,
         uplift_percent: contract.upliftPercent || 0,
     }]);
@@ -658,24 +852,38 @@ export default function App() {
     if (!currentUser?.companyId || !currentUser?.appId) return;
 
     const { error } = await supabase.from('comments').insert([
-        {
-            version_id: versionId,
-            content: content,
-            author_id: currentUser.id,
-            company_id: currentUser.companyId,
-            app_id: currentUser.appId
-        }
+        { version_id: versionId, content: content, author_id: currentUser.id, company_id: currentUser.companyId, app_id: currentUser.appId }
     ]);
+    if (error) { console.error("Error creating comment:", error); alert(`Failed to post comment: ${error.message}`); return; }
 
-    if (error) {
-      console.error("Error creating comment:", error);
-      alert(`Failed to post comment: ${error.message}`);
-    } else {
-      const updatedContracts = await fetchData(currentUser);
-      if (selectedContract) {
-        setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null);
-      }
+    const contract = contracts.find(c => c.versions.some(v => v.id === versionId));
+    if (contract) {
+        const mentionRegex = /@([\w\s]+)\b/g;
+        let match;
+        const mentionedNames = new Set<string>();
+        while ((match = mentionRegex.exec(content)) !== null) {
+            mentionedNames.add(match[1].trim());
+        }
+
+        if (mentionedNames.size > 0) {
+            const mentionedUsers = users.filter(u => u.id !== currentUser.id && mentionedNames.has(`${u.firstName} ${u.lastName}`));
+            const notificationsToInsert = mentionedUsers.map(user => ({
+                user_id: user.id,
+                company_id: currentUser.companyId,
+                app_id: currentUser.appId,
+                type: 'COMMENT_MENTION',
+                message: `${currentUser.firstName} ${currentUser.lastName} mentioned you in a comment on "${contract.title}".`,
+                related_entity_type: 'contract',
+                related_entity_id: contract.id
+            }));
+            if (notificationsToInsert.length > 0) {
+                await supabase.from('notifications').insert(notificationsToInsert);
+            }
+        }
     }
+
+    const updatedContracts = await fetchData(currentUser);
+    if (selectedContract) { setSelectedContract(updatedContracts.find(c => c.id === selectedContract.id) || null); }
   };
   
   const handleResolveComment = async (commentId: string, isResolved: boolean) => {
@@ -714,26 +922,68 @@ export default function App() {
     }
   };
 
+  const handleMarkAllAsRead = async () => {
+    if (!currentUser) return;
+    const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
+    if (unreadIds.length === 0) return;
+    const { error } = await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds);
+    if (error) { console.error("Error marking all as read:", error); } 
+    else { setNotifications(prev => prev.map(n => ({...n, is_read: true}))); }
+  };
+
+  const handleMarkOneAsRead = async (notificationId: string) => {
+    const notification = notifications.find(n => n.id === notificationId);
+    if (!notification || notification.is_read) return;
+    const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', notificationId);
+    if (error) { console.error("Error marking as read:", error); }
+    else { setNotifications(prev => prev.map(n => n.id === notificationId ? {...n, is_read: true} : n)); }
+  };
+
+  const handleNotificationClick = (notification: Notification) => {
+    handleMarkOneAsRead(notification.id);
+    if (notification.related_entity_type === 'contract' && notification.related_entity_id) {
+        const contract = contracts.find(c => c.id === notification.related_entity_id);
+        if (contract) {
+            handleSelectContract(contract);
+        }
+    }
+  };
+
   const renderContent = () => {
-    if (isLoading || !currentUser) {
+    if (isLoading) {
         return ( <div className="flex items-center justify-center h-full"> <LoaderIcon className="w-12 h-12 text-primary" /> <span className="ml-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Loading Data...</span> </div> )
     }
+    // After loading, if we're authenticated but the profile failed to load, show an error.
+    if (isAuthenticated && !currentUser) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+                <AlertTriangleIcon className="w-12 h-12 text-red-500" />
+                <h2 className="mt-4 text-xl font-bold text-gray-800 dark:text-gray-100">Error Loading Profile</h2>
+                <p className="mt-2 text-md text-gray-600 dark:text-gray-400">We couldn't load your user data. Please try logging out and signing in again.</p>
+                 <button 
+                    onClick={handleLogout}
+                    className="mt-6 px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700">
+                    Logout
+                </button>
+            </div>
+        )
+    }
     switch(activeView) {
-      case 'dashboard': return <Dashboard contracts={contracts} onMetricClick={handleMetricNavigation} currentUser={currentUser} onSelectContract={handleSelectContract} />;
-      case 'contracts': return selectedContract ? ( <ContractDetail contract={selectedContract} contracts={contracts} onSelectContract={handleSelectContract} users={users} properties={properties} currentUser={currentUser} onBack={handleBackToList} onTransition={handleContractTransition} onCreateNewVersion={handleCreateNewVersion} onRenewalDecision={handleRenewalDecision} onCreateRenewalRequest={handleCreateRenewalRequest} onRenewAsIs={handleRenewAsIs} onUpdateSigningStatus={handleSigningStatusUpdate} onCreateComment={handleCreateComment} onResolveComment={handleResolveComment} onCreateRenewalFeedback={handleCreateRenewalFeedback} /> ) : ( <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={handleStartCreate} initialFilters={initialFilters} currentUser={currentUser} /> );
+      case 'dashboard': return <Dashboard contracts={contracts} onMetricClick={handleMetricNavigation} currentUser={currentUser!} onSelectContract={handleSelectContract} />;
+      case 'contracts': return selectedContract ? ( <ContractDetail contract={selectedContract} contracts={contracts} onSelectContract={handleSelectContract} users={users} properties={properties} currentUser={currentUser!} onBack={handleBackToList} onTransition={handleContractTransition} onCreateNewVersion={handleCreateNewVersion} onRenewalDecision={handleRenewalDecision} onCreateRenewalRequest={handleCreateRenewalRequest} onRenewAsIs={handleRenewAsIs} onStartRenegotiation={handleStartRenegotiation} onUpdateSigningStatus={handleSigningStatusUpdate} onCreateComment={handleCreateComment} onResolveComment={handleResolveComment} onCreateRenewalFeedback={handleCreateRenewalFeedback} /> ) : ( <ContractsList contracts={contracts} onSelectContract={handleSelectContract} onStartCreate={handleStartCreate} initialFilters={initialFilters} currentUser={currentUser!} /> );
       case 'renewals': return <RenewalsPage contracts={contracts} onSelectContract={handleSelectContract} users={users} notificationSettings={userNotificationSettings} onUpdateNotificationSettings={setUserNotificationSettings} />;
-      case 'approvals': return <ApprovalsPage contracts={contracts} onTransition={handleContractTransition} currentUser={currentUser} />;
+      case 'approvals': return <ApprovalsPage contracts={contracts} onTransition={handleContractTransition} currentUser={currentUser!} />;
       case 'signing': return <SigningPage contracts={contracts} onSelectContract={handleSelectContract} onUpdateSigningStatus={handleSigningStatusUpdate} onMarkAsExecuted={handleMarkAsExecuted} />;
       case 'templates': return selectedTemplate ? ( <TemplateDetail template={selectedTemplate} onBack={handleBackToTemplatesList} /> ) : ( <TemplatesList templates={templates} onSelectTemplate={handleSelectTemplate} /> );
-      case 'counterparties': return selectedCounterparty ? ( <CounterpartyDetail counterparty={selectedCounterparty} contracts={contracts.filter(c => c.counterparty.id === selectedCounterparty.id)} onBack={handleBackToCounterpartiesList} onSelectContract={handleSelectContract} /> ) : ( <CounterpartiesList counterparties={counterparties} contracts={contracts} onSelectCounterparty={handleSelectCounterparty} onStartCreate={handleStartCreateCounterparty} currentUser={currentUser} /> );
-      case 'properties': return selectedProperty ? ( <PropertyDetail property={selectedProperty} contracts={contracts.filter(c => c.property?.id === selectedProperty.id)} onBack={handleBackToPropertiesList} onSelectContract={handleSelectContract} /> ) : ( <PropertiesList properties={properties} contracts={contracts} onSelectProperty={handleSelectProperty} onStartCreate={handleStartCreateProperty} currentUser={currentUser} /> );
-      case 'profile': return <ProfilePage currentUser={currentUser} theme={theme} onThemeChange={handleThemeChange} notificationSettings={userNotificationSettings} setNotificationSettings={setUserNotificationSettings} />;
-      case 'company-settings': return <CompanySettingsPage users={users} roles={roles} notificationSettings={notificationSettings} company={company} currentUser={currentUser} setUsers={setUsers} onUpdateRolePermissions={handleUpdateRolePermissions} onCreateRole={handleCreateRole} onDeleteRole={handleDeleteRole} setNotificationSettings={setNotificationSettings} />;
+      case 'counterparties': return selectedCounterparty ? ( <CounterpartyDetail counterparty={selectedCounterparty} contracts={contracts.filter(c => c.counterparty.id === selectedCounterparty.id)} onBack={handleBackToCounterpartiesList} onSelectContract={handleSelectContract} /> ) : ( <CounterpartiesList counterparties={counterparties} contracts={contracts} onSelectCounterparty={handleSelectCounterparty} onStartCreate={handleStartCreateCounterparty} currentUser={currentUser!} /> );
+      case 'properties': return selectedProperty ? ( <PropertyDetail property={selectedProperty} contracts={contracts.filter(c => c.property?.id === selectedProperty.id)} onBack={handleBackToPropertiesList} onSelectContract={handleSelectContract} /> ) : ( <PropertiesList properties={properties} contracts={contracts} onSelectProperty={handleSelectProperty} onStartCreate={handleStartCreateProperty} currentUser={currentUser!} /> );
+      case 'profile': return <ProfilePage currentUser={currentUser!} theme={theme} onThemeChange={handleThemeChange} notificationSettings={userNotificationSettings} setNotificationSettings={setUserNotificationSettings} />;
+      case 'company-settings': return <CompanySettingsPage users={users} roles={roles} notificationSettings={notificationSettings} company={company} currentUser={currentUser!} setUsers={setUsers} onUpdateRolePermissions={handleUpdateRolePermissions} onCreateRole={handleCreateRole} onDeleteRole={handleDeleteRole} setNotificationSettings={setNotificationSettings} />;
       default: return <div className="p-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm"><h2 className="text-xl font-bold">{activeView.charAt(0).toUpperCase() + activeView.slice(1)}</h2><p className="mt-2 text-gray-500 dark:text-gray-400">This section is not yet implemented.</p></div>;
     }
   };
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !isLoading) { // Only show login pages after initial auth check is complete
     const renderAuthContent = () => {
         switch (authView) {
             case 'login': return <LoginPage onLogin={handleLogin} onNavigate={setAuthView} />;
@@ -749,7 +999,15 @@ export default function App() {
     <div className="bg-gray-50 dark:bg-gray-900 min-h-screen font-sans text-gray-900 dark:text-gray-100 flex">
       <Sidebar activeView={activeView} onNavigate={handleNavigate} currentUser={currentUser} />
       <div className="flex-1 flex flex-col">
-        <Header onLogout={handleLogout} onNavigate={handleNavigate} currentUser={currentUser} />
+        <Header 
+          onLogout={handleLogout} 
+          onNavigate={handleNavigate} 
+          currentUser={currentUser}
+          unreadCount={unreadCount}
+          notifications={notifications}
+          onNotificationClick={handleNotificationClick}
+          onMarkAllAsRead={handleMarkAllAsRead}
+        />
         <main className="flex-1 p-6 lg:p-8 overflow-y-auto">
           {renderContent()}
         </main>

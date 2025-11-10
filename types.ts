@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import React from 'react';
 
@@ -262,6 +261,17 @@ export interface Contract {
   // Associated data
   renewalRequest?: RenewalRequest;
   auditLogs?: AuditLog[];
+}
+
+export interface Notification {
+  id: string;
+  created_at: string;
+  user_id: string;
+  type: 'APPROVAL_REQUEST' | 'APPROVAL_RESPONSE' | 'COMMENT_MENTION';
+  message: string;
+  is_read: boolean;
+  related_entity_type?: 'contract';
+  related_entity_id?: string;
 }
 
 export interface ContractTemplate {
