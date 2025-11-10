@@ -1,7 +1,6 @@
-
 import React from 'react';
-import type { Contract, Property } from '../types';
-import { ArrowLeftIcon, HomeIcon, FileTextIcon } from './icons';
+import type { Contract, Property, UserProfile } from '../types';
+import { ArrowLeftIcon, HomeIcon, FileTextIcon, EditIcon } from './icons';
 import StatusTag from './StatusTag';
 
 interface PropertyDetailProps {
@@ -9,6 +8,8 @@ interface PropertyDetailProps {
   contracts: Contract[];
   onBack: () => void;
   onSelectContract: (contract: Contract) => void;
+  onStartEdit: (property: Property) => void;
+  currentUser: UserProfile;
 }
 
 const formatFullAddress = (property: Property) => {
@@ -20,7 +21,7 @@ const formatFullAddress = (property: Property) => {
     ].filter(Boolean).join(', ');
 }
 
-export default function PropertyDetail({ property, contracts, onBack, onSelectContract }: PropertyDetailProps) {
+export default function PropertyDetail({ property, contracts, onBack, onSelectContract, onStartEdit, currentUser }: PropertyDetailProps) {
   return (
     <div>
       <button onClick={onBack} className="flex items-center text-sm font-semibold text-gray-600 hover:text-gray-900 mb-4">
@@ -29,14 +30,22 @@ export default function PropertyDetail({ property, contracts, onBack, onSelectCo
       </button>
 
       <div className="bg-white p-6 rounded-xl shadow-sm mb-6">
-        <div className="flex items-start space-x-4">
-            <div className="flex-shrink-0 w-16 h-16 flex items-center justify-center bg-gray-100 rounded-lg">
-                <HomeIcon className="w-8 h-8 text-gray-500" />
+        <div className="flex justify-between items-start">
+            <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-16 h-16 flex items-center justify-center bg-gray-100 rounded-lg">
+                    <HomeIcon className="w-8 h-8 text-gray-500" />
+                </div>
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">{property.name}</h1>
+                    <p className="mt-1 text-md text-gray-600">{formatFullAddress(property)}</p>
+                </div>
             </div>
-            <div>
-                <h1 className="text-2xl font-bold text-gray-900">{property.name}</h1>
-                <p className="mt-1 text-md text-gray-600">{formatFullAddress(property)}</p>
-            </div>
+            {currentUser.role === 'Admin' && (
+                 <button onClick={() => onStartEdit(property)} className="flex items-center px-4 py-2 text-sm font-semibold text-primary-700 bg-primary-100 rounded-lg hover:bg-primary-200">
+                    <EditIcon className="w-4 h-4 mr-2" />
+                    Edit
+                </button>
+            )}
         </div>
       </div>
 

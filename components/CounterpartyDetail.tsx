@@ -1,6 +1,6 @@
 import React from 'react';
-import type { Contract, Counterparty } from '../types';
-import { ArrowLeftIcon, BuildingOfficeIcon } from './icons';
+import type { Contract, Counterparty, UserProfile } from '../types';
+import { ArrowLeftIcon, BuildingOfficeIcon, EditIcon } from './icons';
 import StatusTag from './StatusTag';
 
 interface CounterpartyDetailProps {
@@ -8,6 +8,8 @@ interface CounterpartyDetailProps {
   contracts: Contract[];
   onBack: () => void;
   onSelectContract: (contract: Contract) => void;
+  onStartEdit: (counterparty: Counterparty) => void;
+  currentUser: UserProfile;
 }
 
 const DetailItem = ({ label, value }: { label: string; value: React.ReactNode }) => (
@@ -21,7 +23,7 @@ const formatFullAddress = (cp: Counterparty) => {
     return [cp.addressLine1, cp.addressLine2, `${cp.city}, ${cp.state} ${cp.zipCode}`, cp.country].filter(Boolean).join(', ');
 }
 
-export default function CounterpartyDetail({ counterparty, contracts, onBack, onSelectContract }: CounterpartyDetailProps) {
+export default function CounterpartyDetail({ counterparty, contracts, onBack, onSelectContract, onStartEdit, currentUser }: CounterpartyDetailProps) {
   return (
     <div>
       <button onClick={onBack} className="flex items-center text-sm font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 mb-4">
@@ -30,17 +32,25 @@ export default function CounterpartyDetail({ counterparty, contracts, onBack, on
       </button>
 
       <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm mb-6">
-        <div className="flex items-start space-x-4">
-            <div className="flex-shrink-0 w-16 h-16 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-lg">
-                <BuildingOfficeIcon className="w-8 h-8 text-gray-500 dark:text-gray-400" />
-            </div>
-            <div>
-                <div className="flex items-center gap-x-3">
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{counterparty.name}</h1>
-                    <span className="text-sm font-semibold bg-primary-100 dark:bg-primary-900/20 text-primary-800 dark:text-primary-200 px-2.5 py-1 rounded-full">{counterparty.type}</span>
+        <div className="flex justify-between items-start">
+            <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0 w-16 h-16 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    <BuildingOfficeIcon className="w-8 h-8 text-gray-500 dark:text-gray-400" />
                 </div>
-                <p className="mt-1 text-md text-gray-600 dark:text-gray-400">{formatFullAddress(counterparty)}</p>
+                <div>
+                    <div className="flex items-center gap-x-3">
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{counterparty.name}</h1>
+                        <span className="text-sm font-semibold bg-primary-100 dark:bg-primary-900/20 text-primary-800 dark:text-primary-200 px-2.5 py-1 rounded-full">{counterparty.type}</span>
+                    </div>
+                    <p className="mt-1 text-md text-gray-600 dark:text-gray-400">{formatFullAddress(counterparty)}</p>
+                </div>
             </div>
+            {currentUser.role === 'Admin' && (
+                <button onClick={() => onStartEdit(counterparty)} className="flex items-center px-4 py-2 text-sm font-semibold text-primary-700 bg-primary-100 rounded-lg hover:bg-primary-200">
+                    <EditIcon className="w-4 h-4 mr-2" />
+                    Edit
+                </button>
+            )}
         </div>
         <dl className="mt-6 grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-3">
             <DetailItem label="Primary Contact" value={counterparty.contactName} />

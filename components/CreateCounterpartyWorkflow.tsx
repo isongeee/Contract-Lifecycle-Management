@@ -1,11 +1,11 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { XIcon } from './icons';
 import { Counterparty, CounterpartyType } from '../types';
 
 interface CreateCounterpartyWorkflowProps {
   onCancel: () => void;
-  onFinish: (newCounterpartyData: Omit<Counterparty, 'id'>) => void;
+  onFinish: (data: Partial<Counterparty>) => void;
+  initialData?: Counterparty;
 }
 
 // FIX: Made children prop optional to satisfy type checker.
@@ -19,7 +19,7 @@ const TextInput = (props: React.ComponentProps<'input'>) => <input {...props} cl
 const SelectInput = (props: React.ComponentProps<'select'>) => <select {...props} className="block w-full rounded-md border-0 py-1.5 px-2 bg-white text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" />
 
 
-export default function CreateCounterpartyWorkflow({ onCancel, onFinish }: CreateCounterpartyWorkflowProps) {
+export default function CreateCounterpartyWorkflow({ onCancel, onFinish, initialData }: CreateCounterpartyWorkflowProps) {
     const [formData, setFormData] = useState<Omit<Counterparty, 'id'>>({
         name: '',
         type: CounterpartyType.VENDOR,
@@ -33,6 +33,24 @@ export default function CreateCounterpartyWorkflow({ onCancel, onFinish }: Creat
         contactEmail: '',
         contactPhone: '',
     });
+    
+    useEffect(() => {
+        if(initialData) {
+            setFormData({
+                name: initialData.name,
+                type: initialData.type,
+                addressLine1: initialData.addressLine1,
+                addressLine2: initialData.addressLine2 || '',
+                city: initialData.city,
+                state: initialData.state,
+                country: initialData.country,
+                zipCode: initialData.zipCode,
+                contactName: initialData.contactName || '',
+                contactEmail: initialData.contactEmail || '',
+                contactPhone: initialData.contactPhone || '',
+            });
+        }
+    }, [initialData]);
 
     const handleChange = (field: keyof typeof formData, value: string) => {
         setFormData(prev => ({...prev, [field]: value}));
@@ -44,8 +62,10 @@ export default function CreateCounterpartyWorkflow({ onCancel, onFinish }: Creat
             alert('Please fill in all required fields.');
             return;
         }
-        onFinish(formData);
+        onFinish({ ...formData, id: initialData?.id });
     };
+
+    const isEditMode = !!initialData;
 
     return (
         <div className="relative z-10" aria-labelledby="modal-title" role="dialog" aria-modal="true">
@@ -62,7 +82,7 @@ export default function CreateCounterpartyWorkflow({ onCancel, onFinish }: Creat
                         <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
                             <div className="w-full">
                                 <h3 className="text-lg font-semibold leading-6 text-gray-900" id="modal-title">
-                                    Add New Counterparty
+                                    {isEditMode ? 'Edit Counterparty' : 'Add New Counterparty'}
                                 </h3>
                                 <div className="mt-6 space-y-6">
                                     
@@ -128,7 +148,7 @@ export default function CreateCounterpartyWorkflow({ onCancel, onFinish }: Creat
                         </div>
                         <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
                             <button type="button" onClick={handleSubmit} className="inline-flex w-full justify-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:ml-3 sm:w-auto">
-                                Create Counterparty
+                                {isEditMode ? 'Save Changes' : 'Create Counterparty'}
                             </button>
                             <button type="button" onClick={onCancel} className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">
                                 Cancel

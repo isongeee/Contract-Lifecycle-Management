@@ -24,6 +24,7 @@ import UserSignUpPage from './components/UserSignUpPage';
 import CompanySettingsPage from './components/CompanySettingsPage';
 import RenewalsPage from './components/RenewalsPage';
 import SigningPage from './components/SigningPage';
+import SettingsPage from './components/SettingsPage';
 import { supabase } from './lib/supabaseClient';
 import { LoaderIcon, AlertTriangleIcon } from './components/icons';
 import { Session } from '@supabase/supabase-js';
@@ -54,6 +55,8 @@ export default function App() {
   const [initialCreateData, setInitialCreateData] = useState<Partial<Contract> & { content?: string } | null>(null);
   const [isCreatingCounterparty, setIsCreatingCounterparty] = useState(false);
   const [isCreatingProperty, setIsCreatingProperty] = useState(false);
+  const [editingCounterparty, setEditingCounterparty] = useState<Counterparty | null>(null);
+  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [initialFilters, setInitialFilters] = useState<{ status?: ContractStatus; riskLevels?: RiskLevel[]; ownerId?: string }>({});
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
@@ -624,6 +627,50 @@ export default function App() {
     setIsCreatingProperty(false);
   };
 
+  const handleStartEditCounterparty = (counterparty: Counterparty) => setEditingCounterparty(counterparty);
+  const handleCancelEditCounterparty = () => setEditingCounterparty(null);
+  const handleFinalizeEditCounterparty = async (data: Partial<Counterparty>) => {
+    if (!data.id) return;
+    const { data: updated, error } = await supabase.from('counterparties').update({
+        name: data.name, type: data.type, address_line1: data.addressLine1, address_line2: data.addressLine2,
+        city: data.city, state: data.state, zip_code: data.zipCode, country: data.country,
+        contact_name: data.contactName, contact_email: data.contactEmail, contact_phone: data.contactPhone,
+    }).eq('id', data.id).select().single();
+    
+    if (error) { console.error("Error updating counterparty:", error); }
+    else if (updated) {
+        const updatedMapped: Counterparty = { id: updated.id, name: updated.name, type: updated.type, addressLine1: updated.address_line1, addressLine2: updated.address_line2, city: updated.city, state: updated.state, zipCode: updated.zip_code, country: updated.country, contactName: updated.contact_name, contactEmail: updated.contact_email, contactPhone: updated.contact_phone };
+        setCounterparties(prev => prev.map(c => c.id === updatedMapped.id ? updatedMapped : c));
+        setContracts(prev => prev.map(c => c.counterparty.id === updatedMapped.id ? { ...c, counterparty: updatedMapped } : c));
+        if (selectedCounterparty?.id === updatedMapped.id) {
+            setSelectedCounterparty(updatedMapped);
+        }
+    }
+    setEditingCounterparty(null);
+  };
+
+  const handleStartEditProperty = (property: Property) => setEditingProperty(property);
+  const handleCancelEditProperty = () => setEditingProperty(null);
+  const handleFinalizeEditProperty = async (data: Partial<Property>) => {
+    if (!data.id) return;
+    const { data: updated, error } = await supabase.from('properties').update({
+        name: data.name, address_line1: data.addressLine1, address_line2: data.addressLine2,
+        city: data.city, state: data.state, zip_code: data.zipCode, country: data.country
+    }).eq('id', data.id).select().single();
+
+    if (error) { console.error("Error updating property:", error); }
+    else if (updated) {
+        const updatedMapped: Property = { id: updated.id, name: updated.name, addressLine1: updated.address_line1, addressLine2: updated.address_line2, city: updated.city, state: updated.state, zipCode: updated.zip_code, country: updated.country };
+        setProperties(prev => prev.map(p => p.id === updatedMapped.id ? updatedMapped : p));
+        setContracts(prev => prev.map(c => c.property?.id === updatedMapped.id ? { ...c, property: updatedMapped } : c));
+        if (selectedProperty?.id === updatedMapped.id) {
+            setSelectedProperty(updatedMapped);
+        }
+    }
+    setEditingProperty(null);
+  };
+
+
   const handleContractTransition = async (contractId: string, action: ContractAction, payload?: any) => {
     if (!currentUser) return;
 
@@ -1086,9 +1133,10 @@ export default function App() {
       case 'approvals': return <ApprovalsPage contracts={contracts} onTransition={handleContractTransition} currentUser={currentUser!} />;
       case 'signing': return <SigningPage contracts={contracts} onSelectContract={handleSelectContract} onUpdateSigningStatus={handleSigningStatusUpdate} onMarkAsExecuted={handleMarkAsExecuted} />;
       case 'templates': return selectedTemplate ? ( <TemplateDetail template={selectedTemplate} onBack={handleBackToTemplatesList} onUseTemplate={handleUseTemplate} /> ) : ( <TemplatesList templates={templates} onSelectTemplate={handleSelectTemplate} /> );
-      case 'counterparties': return selectedCounterparty ? ( <CounterpartyDetail counterparty={selectedCounterparty} contracts={contracts.filter(c => c.counterparty.id === selectedCounterparty.id)} onBack={handleBackToCounterpartiesList} onSelectContract={handleSelectContract} /> ) : ( <CounterpartiesList counterparties={counterparties} contracts={contracts} onSelectCounterparty={handleSelectCounterparty} onStartCreate={handleStartCreateCounterparty} currentUser={currentUser!} /> );
-      case 'properties': return selectedProperty ? ( <PropertyDetail property={selectedProperty} contracts={contracts.filter(c => c.property?.id === selectedProperty.id)} onBack={handleBackToPropertiesList} onSelectContract={handleSelectContract} /> ) : ( <PropertiesList properties={properties} contracts={contracts} onSelectProperty={handleSelectProperty} onStartCreate={handleStartCreateProperty} currentUser={currentUser!} /> );
+      case 'counterparties': return selectedCounterparty ? ( <CounterpartyDetail counterparty={selectedCounterparty} contracts={contracts.filter(c => c.counterparty.id === selectedCounterparty.id)} onBack={handleBackToCounterpartiesList} onSelectContract={handleSelectContract} currentUser={currentUser!} onStartEdit={handleStartEditCounterparty} /> ) : ( <CounterpartiesList counterparties={counterparties} contracts={contracts} onSelectCounterparty={handleSelectCounterparty} onStartCreate={handleStartCreateCounterparty} currentUser={currentUser!} /> );
+      case 'properties': return selectedProperty ? ( <PropertyDetail property={selectedProperty} contracts={contracts.filter(c => c.property?.id === selectedProperty.id)} onBack={handleBackToPropertiesList} onSelectContract={handleSelectContract} currentUser={currentUser!} onStartEdit={handleStartEditProperty} /> ) : ( <PropertiesList properties={properties} contracts={contracts} onSelectProperty={handleSelectProperty} onStartCreate={handleStartCreateProperty} currentUser={currentUser!} /> );
       case 'profile': return <ProfilePage currentUser={currentUser!} theme={theme} onThemeChange={handleThemeChange} notificationSettings={userNotificationSettings} setNotificationSettings={setUserNotificationSettings} />;
+      case 'settings': return <SettingsPage onNavigate={handleNavigate} currentUser={currentUser!} />;
       case 'company-settings': return <CompanySettingsPage users={users} roles={roles} notificationSettings={notificationSettings} company={company} currentUser={currentUser!} setUsers={setUsers} onUpdateRolePermissions={handleUpdateRolePermissions} onCreateRole={handleCreateRole} onDeleteRole={handleDeleteRole} setNotificationSettings={setNotificationSettings} onAddUser={() => setIsAddingUser(true)} />;
       default: return <div className="p-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm"><h2 className="text-xl font-bold">{activeView.charAt(0).toUpperCase() + activeView.slice(1)}</h2><p className="mt-2 text-gray-500 dark:text-gray-400">This section is not yet implemented.</p></div>;
     }
@@ -1125,7 +1173,9 @@ export default function App() {
       </div>
       {isCreatingContract && currentUser && ( <CreateContractWorkflow properties={properties} counterparties={counterparties} users={users} onCancel={handleCancelCreate} onFinish={handleFinalizeCreate} currentUser={currentUser} initialData={initialCreateData} /> )}
       {isCreatingCounterparty && ( <CreateCounterpartyWorkflow onCancel={handleCancelCreateCounterparty} onFinish={handleFinalizeCreateCounterparty} /> )}
+      {editingCounterparty && ( <CreateCounterpartyWorkflow onCancel={handleCancelEditCounterparty} onFinish={handleFinalizeEditCounterparty} initialData={editingCounterparty} />)}
       {isCreatingProperty && ( <CreatePropertyWorkflow onCancel={handleCancelCreateProperty} onFinish={handleFinalizeCreateProperty} /> )}
+      {editingProperty && ( <CreatePropertyWorkflow onCancel={handleCancelEditProperty} onFinish={handleFinalizeEditProperty} initialData={editingProperty} />)}
       {isAddingUser && currentUser && company && ( <AddUserModal roles={roles} company={company} appId={currentUser.appId!} onSave={handleCreateUser} onClose={() => setIsAddingUser(false)} />)}
     </div>
   );

@@ -49,7 +49,14 @@ const ContractActions = ({ contract, onRequestTransition, onOpenApprovalModal, o
             case ContractStatus.APPROVED:
                 return <button onClick={() => onRequestTransition(ContractStatus.SENT_FOR_SIGNATURE)} className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700">Send for Signature</button>;
             case ContractStatus.SENT_FOR_SIGNATURE:
-                 return <button onClick={() => onRequestTransition(ContractStatus.FULLY_EXECUTED)} className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700">Mark as Executed</button>;
+                const isSigningComplete = contract.signingStatus === SigningStatusEnum.SIGNED_BY_COUNTERPARTY;
+                 return <button
+                            onClick={() => onRequestTransition(ContractStatus.FULLY_EXECUTED)}
+                            disabled={!isSigningComplete}
+                            title={!isSigningComplete ? "Signing process is not yet complete." : "Mark contract as fully executed"}
+                            className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                            Mark as Executed
+                        </button>;
             case ContractStatus.FULLY_EXECUTED:
                 const effectiveDate = new Date(contract.effectiveDate);
                 if (effectiveDate <= new Date()) {
