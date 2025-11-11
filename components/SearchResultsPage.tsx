@@ -24,7 +24,8 @@ const HighlightedSnippet = ({ text, highlight }: { text: string; highlight: stri
     );
 };
 
-const ResultItem = ({ result, onSelect }: { result: SearchResult, onSelect: (contractId: string) => void }) => {
+// FIX: Changed component to React.FC to correctly handle props including the 'key' prop used in lists.
+const ResultItem: React.FC<{ result: SearchResult, onSelect: (contractId: string) => void }> = ({ result, onSelect }) => {
     return (
         <button onClick={() => onSelect(result.contractId)} className="w-full text-left p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md hover:border-primary-300 dark:hover:border-primary-700 transition-all">
             <div className="flex justify-between items-start">

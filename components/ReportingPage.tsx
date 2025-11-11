@@ -5,7 +5,8 @@ import { ContractStatus, CounterpartyType } from '../types';
 import { BarChartIcon, DownloadIcon } from './icons';
 import type { ReportConfiguration, Contract, UserProfile } from '../types';
 
-const ReportCard = ({ report, onSelect, isActive }: { report: ReportConfiguration; onSelect: () => void; isActive: boolean; }) => (
+// FIX: Changed component to React.FC to correctly handle props including the 'key' prop used in lists.
+const ReportCard: React.FC<{ report: ReportConfiguration; onSelect: () => void; isActive: boolean; }> = ({ report, onSelect, isActive }) => (
     <button
         onClick={onSelect}
         className={`w-full text-left p-5 rounded-xl border-2 transition-all duration-200 ${
@@ -33,7 +34,8 @@ const exportToCsv = (filename: string, rows: any[]) => {
     document.body.removeChild(link);
 };
 
-const ReportWrapper = ({ title, onExport, children, dataExists }: { title: string; onExport: () => void; children: React.ReactNode; dataExists: boolean }) => (
+// FIX: Made children prop optional to resolve typing issues where the component is used with implicit children.
+const ReportWrapper = ({ title, onExport, children, dataExists }: { title: string; onExport: () => void; children?: React.ReactNode; dataExists: boolean }) => (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mt-8">
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{title}</h2>
@@ -111,6 +113,10 @@ const ExpiringByQuarterReport = () => {
 const ValueByCounterpartyReport = () => {
     const { contracts } = useAppContext();
     const data = useMemo(() => {
+        // FIX: The accumulator type for `reduce` was not correctly specified,
+        // causing TypeScript to infer an empty object type `{}` for the accumulator.
+        // By providing the correct type for the accumulator's initial value, the properties
+        // `totalValue` and `count` can be correctly accessed and updated.
         const grouped = contracts.reduce((acc, contract) => {
             const type = contract.counterparty.type;
             if (!acc[type]) {

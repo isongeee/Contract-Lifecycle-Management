@@ -117,7 +117,8 @@ export interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
-export const AppProvider = ({ children }: { children: React.ReactNode }) => {
+// FIX: Made children optional to resolve typing issue where the component is used with implicit children.
+export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [templates, setTemplates] = useState<ContractTemplate[]>([]);
   const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
@@ -515,7 +516,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         },
         (payload) => {
           setNotifications((currentNotifications) =>
-            [payload.new, ...currentNotifications].sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            [payload.new as Notification, ...currentNotifications].sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
           );
         }
       )
@@ -750,12 +751,51 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
 
   const handleContractTransition = async (contractId: string, action: ContractAction, payload?: any) => {
-    if (!currentUser) return;
+    if (!currentUser || !currentUser.companyId || !currentUser.appId) return;
+
+    const contract = contracts.find(c => c.id === contractId);
+    if (!contract) return;
+    const oldStatus = contract.status;
 
     const rpcPayload: any = payload ? { ...payload } : {};
 
+    // Handle notifications that should be sent *before* the state change
     if (action === ContractStatus.PENDING_APPROVAL && rpcPayload.approvers) {
-      rpcPayload.approvers = rpcPayload.approvers.map((a: UserProfile) => a.id);
+      const approverProfiles: UserProfile[] = rpcPayload.approvers;
+      const approverIds = approverProfiles.map((a: UserProfile) => a.id);
+      
+      const notificationRecords = approverIds.map((userId: string) => ({
+          user_id: userId,
+          type: 'APPROVAL_REQUEST' as const,
+          message: `${currentUser.firstName} ${currentUser.lastName} has requested your approval on "${contract.title}".`,
+          related_entity_type: 'contract' as const,
+          related_entity_id: contractId,
+          company_id: currentUser.companyId,
+          app_id: currentUser.appId,
+      }));
+      
+      if (notificationRecords.length > 0) {
+        const { error: notificationError } = await supabase.from('notifications').insert(notificationRecords);
+        if (notificationError) console.error("Error creating approval request notifications:", notificationError);
+      }
+      
+      rpcPayload.approvers = approverIds; // Send IDs to RPC
+    }
+
+    if ((action === 'APPROVE_STEP' || action === 'REJECT_STEP') && contract.owner.id !== currentUser.id) {
+        const approverName = `${currentUser.firstName} ${currentUser.lastName}`;
+        const actionText = action === 'APPROVE_STEP' ? 'approved' : 'rejected changes on';
+        const notificationRecord = {
+            user_id: contract.owner.id,
+            type: 'APPROVAL_RESPONSE' as const,
+            message: `${approverName} has ${actionText} the contract "${contract.title}".`,
+            related_entity_type: 'contract' as const,
+            related_entity_id: contractId,
+            company_id: currentUser.companyId,
+            app_id: currentUser.appId,
+        };
+        const { error: notificationError } = await supabase.from('notifications').insert([notificationRecord]);
+        if (notificationError) console.error("Error creating approval response notification:", notificationError);
     }
 
     if (action === ContractStatus.SENT_FOR_SIGNATURE) {
@@ -772,12 +812,31 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       console.error("Error transitioning contract state:", error); 
       alert(`Failed to update contract: ${error.message}`); 
     } else { 
-        await fetchAndMergeContract(contractId);
+        const updatedContract = await fetchAndMergeContract(contractId);
+        // Handle notifications that should be sent *after* the state change
+        if (updatedContract && updatedContract.status !== oldStatus) {
+          const isSelfAction = updatedContract.owner.id === currentUser.id;
+          const message = isSelfAction
+            ? `You updated the status of "${contract.title}" to ${updatedContract.status}.`
+            : `The status of "${contract.title}" was updated to ${updatedContract.status} by ${currentUser.firstName}.`;
+
+          const notificationRecord = {
+            user_id: contract.owner.id,
+            type: 'STATUS_CHANGE' as const,
+            message: message,
+            related_entity_type: 'contract' as const,
+            related_entity_id: contractId,
+            company_id: currentUser.companyId,
+            app_id: currentUser.appId,
+          };
+          const { error: notificationError } = await supabase.from('notifications').insert([notificationRecord]);
+          if (notificationError) console.error("Error creating status change notification:", notificationError);
+        }
     }
   };
 
   const handleSigningStatusUpdate = async (contractId: string, newStatus: SigningStatus) => {
-    if (!currentUser) return;
+    if (!currentUser || !currentUser.companyId || !currentUser.appId) return;
     const { error } = await supabase
         .from('contracts')
         .update({ signing_status: newStatus, signing_status_updated_at: new Date().toISOString() })
@@ -787,6 +846,22 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         console.error("Error updating signing status:", error);
         alert(`Failed to update signing status: ${error.message}`);
     } else {
+        const contract = contracts.find(c => c.id === contractId);
+        if (contract && contract.owner.id !== currentUser.id) {
+            const notificationRecord = {
+                user_id: contract.owner.id,
+                type: 'SIGNING_PROGRESS' as const,
+                message: `The signing status for "${contract.title}" is now: ${newStatus}.`,
+                related_entity_type: 'contract' as const,
+                related_entity_id: contractId,
+                company_id: currentUser.companyId,
+                app_id: currentUser.appId,
+            };
+            const { error: notificationError } = await supabase.from('notifications').insert([notificationRecord]);
+            if (notificationError) {
+                console.error("Error creating signing progress notification:", notificationError);
+            }
+        }
         await fetchAndMergeContract(contractId);
     }
   };
@@ -1045,6 +1120,22 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       const { error: approvalError } = await supabase.from('approval_steps').delete().eq('contract_id', contractId);
       if (approvalError) { console.error("Error clearing old approvals:", approvalError); }
 
+      if (contractToUpdate.owner.id !== currentUser.id) {
+        const notificationRecord = {
+            user_id: contractToUpdate.owner.id,
+            type: 'NEW_VERSION' as const,
+            message: `${currentUser.firstName} ${currentUser.lastName} created a new version for "${contractToUpdate.title}".`,
+            related_entity_type: 'contract' as const,
+            related_entity_id: contractId,
+            company_id: currentUser.companyId,
+            app_id: currentUser.appId,
+        };
+        const { error: notificationError } = await supabase.from('notifications').insert([notificationRecord]);
+        if (notificationError) {
+            console.error("Error creating new version notification:", notificationError);
+        }
+    }
+
       await fetchAndMergeContract(contractId);
   };
 
@@ -1083,6 +1174,34 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         alert(`Failed to post comment: ${error.message}`); 
         return; 
     }
+
+    const contract = contracts.find(c => c.versions.some(v => v.id === versionId));
+    const mentionRegex = /@([\w\s]+)/g;
+    const mentionedNames = new Set(Array.from(content.matchAll(mentionRegex), m => m[1].trim()));
+
+    if (mentionedNames.size > 0 && contract) {
+      const mentionedUsers = users.filter(u =>
+        mentionedNames.has(`${u.firstName} ${u.lastName}`) && u.id !== currentUser.id
+      );
+
+      if (mentionedUsers.length > 0) {
+        const notificationRecords = mentionedUsers.map(user => ({
+          user_id: user.id,
+          type: 'COMMENT_MENTION' as const,
+          message: `${currentUser.firstName} ${currentUser.lastName} mentioned you in a comment on "${contract.title}".`,
+          related_entity_type: 'contract' as const,
+          related_entity_id: contract.id,
+          company_id: currentUser.companyId,
+          app_id: currentUser.appId,
+        }));
+
+        const { error: notificationError } = await supabase.from('notifications').insert(notificationRecords);
+        if (notificationError) {
+          console.error("Error creating mention notifications:", notificationError);
+        }
+      }
+    }
+
     const { data: version } = await supabase.from('contract_versions').select('contract_id').eq('id', versionId).single();
     if (version?.contract_id) {
         await fetchAndMergeContract(version.contract_id);
