@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -78,6 +79,9 @@ export default function App() {
     handleBackToTemplatesList,
     handleBackToCounterpartiesList,
     handleStartEditCounterparty,
+    // FIX: `handleUpdateSigningStatus` was not destructured, causing an error when passed to ContractDetail.
+    handleUpdateSigningStatus,
+    handleNavigate,
   } = useAppContext();
 
   const renderContent = () => {
@@ -163,11 +167,12 @@ export default function App() {
       onSelectContract={handleSelectContract}
       onRenewAsIs={handleRenewAsIs}
       onStartRenegotiation={handleStartRenegotiation}
-      onUpdateSigningStatus={handleSigningStatusUpdate}
+      onUpdateSigningStatus={handleUpdateSigningStatus}
       onCreateComment={handleCreateComment}
       onResolveComment={handleResolveComment}
       onCreateRenewalFeedback={handleCreateRenewalFeedback}
       onUpdateRenewalTerms={handleUpdateRenewalTerms}
+      onNavigate={handleNavigate}
     />;
     if (activeView === 'templates' && selectedTemplate) return <TemplateDetail />;
     if (activeView === 'counterparties' && selectedCounterparty) return <CounterpartyDetail />;

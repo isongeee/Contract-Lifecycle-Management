@@ -35,6 +35,7 @@ interface ContractDetailProps {
   onResolveComment: (commentId: string, isResolved: boolean) => void;
   onCreateRenewalFeedback: (renewalRequestId: string, feedbackText: string) => void;
   onUpdateRenewalTerms: (renewalRequestId: string, updatedTerms: { renewalTermMonths: number; noticePeriodDays: number; upliftPercent: number; }) => void;
+  onNavigate: (view: string) => void;
 }
 
 const ContractActions = ({ contract, onRequestTransition, onOpenApprovalModal, onStartCreateNewVersion }: { contract: Contract, onRequestTransition: (action: ContractAction) => void, onOpenApprovalModal: () => void, onStartCreateNewVersion: () => void }) => {
@@ -550,7 +551,7 @@ const daysUntil = (dateStr: string) => {
 };
 
 
-export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalDecision, onCreateRenewalRequest, onSelectContract, onRenewAsIs, onStartRenegotiation, onUpdateSigningStatus, onCreateComment, onResolveComment, onCreateRenewalFeedback, onUpdateRenewalTerms }: ContractDetailProps) {
+export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalDecision, onCreateRenewalRequest, onSelectContract, onRenewAsIs, onStartRenegotiation, onUpdateSigningStatus, onCreateComment, onResolveComment, onCreateRenewalFeedback, onUpdateRenewalTerms, onNavigate }: ContractDetailProps) {
   const [contract, setContract] = useState(initialContract);
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const [isRequestingApproval, setIsRequestingApproval] = useState(false);
@@ -704,6 +705,22 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                         Approve
                     </button>
                 </div>
+            </div>
+        )}
+
+        {contract.status === ContractStatus.SENT_FOR_SIGNATURE && (
+            <div className="bg-indigo-50 dark:bg-indigo-900/20 border-l-4 border-indigo-400 p-4 rounded-r-lg mb-6 flex justify-between items-center shadow-sm">
+                <div>
+                    <h3 className="font-bold text-indigo-800 dark:text-indigo-200">Out for Signature</h3>
+                    <p className="text-sm text-indigo-700 dark:text-indigo-300">This contract is in the signing process. Track its progress on the Signing page.</p>
+                </div>
+                <button
+                    onClick={() => onNavigate('signing')}
+                    className="flex items-center px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 whitespace-nowrap"
+                >
+                    <PenSquareIcon className="w-4 h-4 mr-2" />
+                    Go to Signing Page
+                </button>
             </div>
         )}
 

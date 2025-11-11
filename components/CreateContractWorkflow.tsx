@@ -322,7 +322,9 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
         if (allocationType === 'single') {
             updates.property = properties.find((p: Property) => p.id === singlePropertyId);
             if (isSeasonal) {
-                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => ({
+                // FIX: Add a unique 'id' to each allocation object to satisfy the ContractPropertyAllocation type.
+                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }, index) => ({
+                    id: `alloc-${Date.now()}-${index}`,
                     ...rest,
                     propertyId: singlePropertyId,
                     allocatedValue: (Object.values(rest.monthlyValues) as number[]).reduce((sum, v) => sum + (v || 0), 0)
@@ -333,19 +335,25 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
         } else if (allocationType === 'multi') {
             updates.property = properties.find((p: Property) => p.id === (isSeasonal ? seasonalAllocations[0]?.propertyId : multiAllocations[0]?.propertyId));
             if (isSeasonal) {
-                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => ({
+                // FIX: Add a unique 'id' to each allocation object to satisfy the ContractPropertyAllocation type.
+                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }, index) => ({
+                    id: `alloc-${Date.now()}-${index}`,
                     ...rest,
                     allocatedValue: (Object.values(rest.monthlyValues) as number[]).reduce((sum, v) => sum + (v || 0), 0)
                 }));
             } else {
-                 updates.propertyAllocations = multiAllocations.map(({ id, ...rest }: MultiPropertyAllocation) => ({
+                 // FIX: Add a unique 'id' to each allocation object to satisfy the ContractPropertyAllocation type.
+                 updates.propertyAllocations = multiAllocations.map(({ id, ...rest }: MultiPropertyAllocation, index) => ({
+                    id: `alloc-${Date.now()}-${index}`,
                     ...rest,
                  }));
             }
         } else { // portfolio
             updates.property = undefined;
             if (isSeasonal) {
-                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }) => ({
+                // FIX: Add a unique 'id' to each allocation object to satisfy the ContractPropertyAllocation type.
+                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }, index) => ({
+                    id: `alloc-${Date.now()}-${index}`,
                     ...rest,
                     allocatedValue: (Object.values(rest.monthlyValues) as number[]).reduce((sum, v) => sum + (v || 0), 0)
                 }));
