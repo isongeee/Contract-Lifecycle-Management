@@ -1,13 +1,10 @@
 import React, { useState } from 'react';
 import { FileTextIcon, LoaderIcon } from './icons';
 import { orgSignUp } from '../lib/auth';
+import { useAppContext } from '../contexts/AppContext';
 
-interface OrgSignUpPageProps {
-  onSignUp: () => void;
-  onNavigate: (view: 'login') => void;
-}
-
-export default function OrgSignUpPage({ onSignUp, onNavigate }: OrgSignUpPageProps) {
+export default function OrgSignUpPage() {
+  const { setAuthView } = useAppContext();
   const [orgName, setOrgName] = useState('');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -25,7 +22,7 @@ export default function OrgSignUpPage({ onSignUp, onNavigate }: OrgSignUpPagePro
       setError(error.message);
     } else {
       alert('Organization created successfully! Please check your email to confirm your account and then log in.');
-      onSignUp();
+      setAuthView('login');
     }
   };
 
@@ -81,7 +78,7 @@ export default function OrgSignUpPage({ onSignUp, onNavigate }: OrgSignUpPagePro
         <div className="mt-6 text-center">
             <p className="text-sm text-gray-600 dark:text-gray-400">
                 Already have an account?{' '}
-                <button onClick={() => onNavigate('login')} className="font-medium text-primary hover:text-primary-500">
+                <button onClick={() => setAuthView('login')} className="font-medium text-primary hover:text-primary-500">
                     Sign in
                 </button>
             </p>

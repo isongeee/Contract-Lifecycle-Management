@@ -1,19 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDownIcon, UserIcon, SettingsIcon, LogOutIcon, HelpCircleIcon, BuildingOfficeIcon, BellIcon } from './icons';
-import type { UserProfile, Notification } from '../types';
+import type { Notification } from '../types';
 import NotificationPanel from './NotificationPanel';
+import { useAppContext } from '../contexts/AppContext';
 
-interface HeaderProps {
-    onLogout: () => void;
-    onNavigate: (view: string) => void;
-    currentUser: UserProfile | null;
-    unreadCount: number;
-    notifications: Notification[];
-    onNotificationClick: (notification: Notification) => void;
-    onMarkAllAsRead: () => void;
-}
+export default function Header() {
+  const { 
+    handleLogout, 
+    handleNavigate, 
+    currentUser, 
+    unreadCount, 
+    notifications, 
+    handleNotificationClick, 
+    handleMarkAllAsRead 
+  } = useAppContext();
 
-export default function Header({ onLogout, onNavigate, currentUser, unreadCount, notifications, onNotificationClick, onMarkAllAsRead }: HeaderProps) {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -35,19 +36,18 @@ export default function Header({ onLogout, onNavigate, currentUser, unreadCount,
   }, []);
 
   const handleMenuItemClick = (view: string) => {
-    onNavigate(view);
+    handleNavigate(view);
     setIsProfileMenuOpen(false);
   };
   
   const handleLogoutClick = () => {
-    onLogout();
+    handleLogout();
     setIsProfileMenuOpen(false);
   }
 
   if (!currentUser) {
     return (
       <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 flex items-center justify-end px-6">
-        {/* Placeholder or nothing when logged out */}
       </header>
     );
   }
@@ -69,10 +69,10 @@ export default function Header({ onLogout, onNavigate, currentUser, unreadCount,
                 <NotificationPanel 
                     notifications={notifications}
                     onNotificationClick={(n) => {
-                      onNotificationClick(n);
+                      handleNotificationClick(n);
                       setIsNotificationPanelOpen(false);
                     }}
-                    onMarkAllAsRead={onMarkAllAsRead}
+                    onMarkAllAsRead={handleMarkAllAsRead}
                 />
             )}
         </div>

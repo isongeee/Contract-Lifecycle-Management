@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import type { Contract } from '../types';
 import { ApprovalStatus } from '../types';
 import { CheckCircleIcon, ClockIcon } from './icons';
+import { useAppContext } from '../contexts/AppContext';
 
 interface ActionItemsProps {
     myApprovals: Contract[];
     myExpiringContracts: (Contract & { daysLeft: number })[];
-    onSelectContract: (contract: Contract) => void;
 }
 
 const TabButton = ({ label, count, isActive, onClick }: { label: string; count: number; isActive: boolean; onClick: () => void; }) => (
@@ -23,8 +23,9 @@ const TabButton = ({ label, count, isActive, onClick }: { label: string; count: 
     </button>
 );
 
-export default function ActionItems({ myApprovals, myExpiringContracts, onSelectContract }: ActionItemsProps) {
+export default function ActionItems({ myApprovals, myExpiringContracts }: ActionItemsProps) {
     const [activeTab, setActiveTab] = useState('approvals');
+    const { handleSelectContract } = useAppContext();
 
     const renderApprovals = () => (
         <div>
@@ -32,7 +33,7 @@ export default function ActionItems({ myApprovals, myExpiringContracts, onSelect
                 <ul className="space-y-3">
                     {myApprovals.map(c => (
                         <li key={c.id}>
-                            <button onClick={() => onSelectContract(c)} className="w-full text-left flex items-center space-x-3 p-2 -m-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                            <button onClick={() => handleSelectContract(c)} className="w-full text-left flex items-center space-x-3 p-2 -m-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
                                 <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-yellow-100 text-yellow-700 rounded-full">
                                     <CheckCircleIcon className="w-5 h-5"/>
                                 </div>
@@ -61,7 +62,7 @@ export default function ActionItems({ myApprovals, myExpiringContracts, onSelect
                 <ul className="space-y-3">
                     {myExpiringContracts.map(c => (
                         <li key={c.id}>
-                            <button onClick={() => onSelectContract(c)} className="w-full text-left flex items-center space-x-3 p-2 -m-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                            <button onClick={() => handleSelectContract(c)} className="w-full text-left flex items-center space-x-3 p-2 -m-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
                                 <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-red-100 text-red-700 rounded-full">
                                     <ClockIcon className="w-5 h-5"/>
                                 </div>

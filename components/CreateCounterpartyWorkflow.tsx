@@ -1,14 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { XIcon } from './icons';
 import { Counterparty, CounterpartyType } from '../types';
+import { useAppContext } from '../contexts/AppContext';
 
-interface CreateCounterpartyWorkflowProps {
-  onCancel: () => void;
-  onFinish: (data: Partial<Counterparty>) => void;
-  initialData?: Counterparty;
-}
-
-// FIX: Made children prop optional to satisfy type checker.
 const FormField = ({ label, children, className = 'col-span-1' }: { label: string; children?: React.ReactNode; className?: string }) => (
     <div className={className}>
         <label className="block text-sm font-medium leading-6 text-gray-900">{label}</label>
@@ -19,7 +13,21 @@ const TextInput = (props: React.ComponentProps<'input'>) => <input {...props} cl
 const SelectInput = (props: React.ComponentProps<'select'>) => <select {...props} className="block w-full rounded-md border-0 py-1.5 px-2 bg-white text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" />
 
 
-export default function CreateCounterpartyWorkflow({ onCancel, onFinish, initialData }: CreateCounterpartyWorkflowProps) {
+export default function CreateCounterpartyWorkflow() {
+    const { 
+        handleCancelCreateCounterparty, 
+        handleFinalizeCreateCounterparty,
+        editingCounterparty,
+        handleCancelEditCounterparty,
+        handleFinalizeEditCounterparty
+    } = useAppContext();
+
+    const isEditMode = !!editingCounterparty;
+    const initialData = editingCounterparty;
+
+    const onCancel = isEditMode ? handleCancelEditCounterparty : handleCancelCreateCounterparty;
+    const onFinish = isEditMode ? handleFinalizeEditCounterparty : handleFinalizeCreateCounterparty;
+
     const [formData, setFormData] = useState<Omit<Counterparty, 'id'>>({
         name: '',
         type: CounterpartyType.VENDOR,
@@ -57,15 +65,12 @@ export default function CreateCounterpartyWorkflow({ onCancel, onFinish, initial
     };
 
     const handleSubmit = () => {
-        // Basic validation
         if (!formData.name || !formData.type || !formData.addressLine1 || !formData.city || !formData.state || !formData.country || !formData.zipCode) {
             alert('Please fill in all required fields.');
             return;
         }
         onFinish({ ...formData, id: initialData?.id });
     };
-
-    const isEditMode = !!initialData;
 
     return (
         <div className="relative z-10" aria-labelledby="modal-title" role="dialog" aria-modal="true">
@@ -86,7 +91,6 @@ export default function CreateCounterpartyWorkflow({ onCancel, onFinish, initial
                                 </h3>
                                 <div className="mt-6 space-y-6">
                                     
-                                    {/* Basic Info Section */}
                                     <div>
                                         <h4 className="text-sm font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">Basic Information</h4>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -103,7 +107,6 @@ export default function CreateCounterpartyWorkflow({ onCancel, onFinish, initial
                                         </div>
                                     </div>
                                     
-                                    {/* Primary Contact Section */}
                                     <div>
                                         <h4 className="text-sm font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">Primary Contact (Optional)</h4>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -119,7 +122,6 @@ export default function CreateCounterpartyWorkflow({ onCancel, onFinish, initial
                                         </div>
                                     </div>
                                     
-                                    {/* Address Section */}
                                     <div>
                                         <h4 className="text-sm font-semibold text-gray-500 border-b border-gray-200 pb-2 mb-4">Address</h4>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

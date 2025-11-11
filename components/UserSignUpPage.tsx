@@ -1,13 +1,10 @@
 import React, { useState } from 'react';
 import { FileTextIcon, LoaderIcon } from './icons';
 import { userSignUp } from '../lib/auth';
+import { useAppContext } from '../contexts/AppContext';
 
-interface UserSignUpPageProps {
-  onSignUp: () => void;
-  onNavigate: (view: 'login') => void;
-}
-
-export default function UserSignUpPage({ onSignUp, onNavigate }: UserSignUpPageProps) {
+export default function UserSignUpPage() {
+  const { setAuthView } = useAppContext();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,7 +22,7 @@ export default function UserSignUpPage({ onSignUp, onNavigate }: UserSignUpPageP
       setError(error.message);
     } else {
       alert('Account created successfully! Please check your email to confirm your account and then log in.');
-      onSignUp();
+      setAuthView('login');
     }
   };
 
@@ -81,7 +78,7 @@ export default function UserSignUpPage({ onSignUp, onNavigate }: UserSignUpPageP
         <div className="mt-6 text-center">
             <p className="text-sm text-gray-600 dark:text-gray-400">
                 Already have an account?{' '}
-                <button onClick={() => onNavigate('login')} className="font-medium text-primary hover:text-primary-500">
+                <button onClick={() => setAuthView('login')} className="font-medium text-primary hover:text-primary-500">
                     Sign in
                 </button>
             </p>

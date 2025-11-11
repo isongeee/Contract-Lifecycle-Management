@@ -1,20 +1,12 @@
-
 import React, { useState, useMemo } from 'react';
-import type { Contract, Counterparty, UserProfile } from '../types';
+import type { Contract, Counterparty } from '../types';
 import { ContractStatus } from '../types';
 import { SearchIcon, BuildingOfficeIcon, PlusIcon } from './icons';
+import { useAppContext } from '../contexts/AppContext';
 
 interface CounterpartyWithMeta extends Counterparty {
     activeContracts: number;
     totalContracts: number;
-}
-
-interface CounterpartiesListProps {
-  contracts: Contract[];
-  counterparties: Counterparty[];
-  onSelectCounterparty: (counterparty: Counterparty) => void;
-  onStartCreate: () => void;
-  currentUser: UserProfile;
 }
 
 const formatAddress = (counterparty: Counterparty) => {
@@ -25,43 +17,46 @@ const formatFullAddress = (cp: Counterparty) => {
     return [cp.addressLine1, cp.addressLine2, `${cp.city}, ${cp.state} ${cp.zipCode}`, cp.country].filter(Boolean).join(', ');
 }
 
-// FIX: Changed component to React.FC to correctly handle props including the 'key' prop.
-const CounterpartyCard: React.FC<{ counterparty: CounterpartyWithMeta; onSelect: () => void; }> = ({ counterparty, onSelect }) => (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md hover:border-primary-300 dark:hover:border-primary-700 transition-all duration-200 flex flex-col h-full">
-        <div className="p-5">
-            <div className="flex items-start space-x-4">
-                <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-lg">
-                    <BuildingOfficeIcon className="w-6 h-6 text-gray-500 dark:text-gray-400" />
-                </div>
-                <div>
-                    <div className="flex items-center gap-x-3">
-                        <h3 className="font-bold text-gray-800 dark:text-gray-100 text-lg">{counterparty.name}</h3>
-                        <span className="text-xs font-semibold bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 px-2 py-0.5 rounded-full">{counterparty.type}</span>
+const CounterpartyCard: React.FC<{ counterparty: CounterpartyWithMeta }> = ({ counterparty }) => {
+    const { handleSelectCounterparty } = useAppContext();
+    return (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md hover:border-primary-300 dark:hover:border-primary-700 transition-all duration-200 flex flex-col h-full">
+            <div className="p-5">
+                <div className="flex items-start space-x-4">
+                    <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <BuildingOfficeIcon className="w-6 h-6 text-gray-500 dark:text-gray-400" />
                     </div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{formatAddress(counterparty)}</p>
+                    <div>
+                        <div className="flex items-center gap-x-3">
+                            <h3 className="font-bold text-gray-800 dark:text-gray-100 text-lg">{counterparty.name}</h3>
+                            <span className="text-xs font-semibold bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 px-2 py-0.5 rounded-full">{counterparty.type}</span>
+                        </div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{formatAddress(counterparty)}</p>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div className="border-t border-gray-200 dark:border-gray-700 px-5 py-3 grid grid-cols-2 gap-2">
-            <div className="text-center">
-                <p className="text-xl font-bold text-primary-800 dark:text-primary-300">{counterparty.activeContracts}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">Active</p>
+            <div className="border-t border-gray-200 dark:border-gray-700 px-5 py-3 grid grid-cols-2 gap-2">
+                <div className="text-center">
+                    <p className="text-xl font-bold text-primary-800 dark:text-primary-300">{counterparty.activeContracts}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">Active</p>
+                </div>
+                 <div className="text-center">
+                    <p className="text-xl font-bold text-gray-700 dark:text-gray-200">{counterparty.totalContracts}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">Total</p>
+                </div>
             </div>
-             <div className="text-center">
-                <p className="text-xl font-bold text-gray-700 dark:text-gray-200">{counterparty.totalContracts}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">Total</p>
+            <div className="bg-gray-50 dark:bg-gray-700/50 p-3 text-right mt-auto">
+                <button onClick={() => handleSelectCounterparty(counterparty)} className="text-sm font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-200">
+                    View Details &rarr;
+                </button>
             </div>
         </div>
-        <div className="bg-gray-50 dark:bg-gray-700/50 p-3 text-right mt-auto">
-            <button onClick={onSelect} className="text-sm font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-200">
-                View Details &rarr;
-            </button>
-        </div>
-    </div>
-);
+    );
+};
 
 
-export default function CounterpartiesList({ contracts, counterparties, onSelectCounterparty, onStartCreate, currentUser }: CounterpartiesListProps) {
+export default function CounterpartiesList() {
+  const { contracts, counterparties, handleStartCreateCounterparty, currentUser } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
 
   const counterpartiesWithMeta = useMemo<CounterpartyWithMeta[]>(() => {
@@ -83,6 +78,8 @@ export default function CounterpartiesList({ contracts, counterparties, onSelect
     );
   });
 
+  if (!currentUser) return null;
+
   return (
     <div className="space-y-6">
         <div className="flex justify-between items-start">
@@ -92,7 +89,7 @@ export default function CounterpartiesList({ contracts, counterparties, onSelect
             </div>
             {currentUser.role === 'Admin' && (
                 <button 
-                    onClick={onStartCreate}
+                    onClick={handleStartCreateCounterparty}
                     className="flex items-center px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
                     <PlusIcon className="w-5 h-5 mr-2" />
                     Add Counterparty
@@ -116,7 +113,7 @@ export default function CounterpartiesList({ contracts, counterparties, onSelect
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCounterparties.map(cp => (
-                <CounterpartyCard key={cp.id} counterparty={cp} onSelect={() => onSelectCounterparty(cp)} />
+                <CounterpartyCard key={cp.id} counterparty={cp} />
             ))}
         </div>
         

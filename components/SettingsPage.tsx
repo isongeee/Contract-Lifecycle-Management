@@ -1,11 +1,6 @@
 import React from 'react';
-import type { UserProfile } from '../types';
 import { UserIcon, BuildingOfficeIcon, ChevronRightIcon } from './icons';
-
-interface SettingsPageProps {
-    onNavigate: (view: string) => void;
-    currentUser: UserProfile;
-}
+import { useAppContext } from '../contexts/AppContext';
 
 const SettingLinkCard = ({ title, description, icon, onClick }: { title: string, description: string, icon: React.ReactNode, onClick: () => void }) => (
     <button onClick={onClick} className="w-full text-left bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 hover:shadow-md transition-all duration-200">
@@ -22,7 +17,11 @@ const SettingLinkCard = ({ title, description, icon, onClick }: { title: string,
     </button>
 );
 
-export default function SettingsPage({ onNavigate, currentUser }: SettingsPageProps) {
+export default function SettingsPage() {
+    const { handleNavigate, currentUser } = useAppContext();
+
+    if (!currentUser) return null;
+
     return (
         <div className="space-y-6">
             <div>
@@ -34,14 +33,14 @@ export default function SettingsPage({ onNavigate, currentUser }: SettingsPagePr
                     title="My Profile"
                     description="Update your personal information, preferences, and notification settings."
                     icon={<UserIcon className="w-6 h-6 text-gray-600 dark:text-gray-300" />}
-                    onClick={() => onNavigate('profile')}
+                    onClick={() => handleNavigate('profile')}
                 />
                 {currentUser.role === 'Admin' && (
                     <SettingLinkCard 
                         title="Company Settings"
                         description="Manage users, roles, permissions, and other organization-wide configurations."
                         icon={<BuildingOfficeIcon className="w-6 h-6 text-gray-600 dark:text-gray-300" />}
-                        onClick={() => onNavigate('company-settings')}
+                        onClick={() => handleNavigate('company-settings')}
                     />
                 )}
             </div>

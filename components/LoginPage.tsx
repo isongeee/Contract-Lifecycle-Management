@@ -1,13 +1,10 @@
 import React, { useState } from 'react';
 import { FileTextIcon, LoaderIcon } from './icons';
 import { signIn, resetPassword } from '../lib/auth';
+import { useAppContext } from '../contexts/AppContext';
 
-interface LoginPageProps {
-  onLogin: () => void;
-  onNavigate: (view: 'org-signup' | 'user-signup') => void;
-}
-
-export default function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
+export default function LoginPage() {
+  const { handleLogin, setAuthView } = useAppContext();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -26,7 +23,7 @@ export default function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
     if (error) {
       setError(error.message);
     } else {
-      onLogin(); // App.tsx's onAuthStateChange handles the rest
+      handleLogin();
     }
   };
   
@@ -121,7 +118,7 @@ export default function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
           <div className="mt-4 grid grid-cols-2 gap-3">
               <div>
                   <button
-                      onClick={() => onNavigate('org-signup')}
+                      onClick={() => setAuthView('org-signup')}
                       className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50"
                   >
                       Create Organization
@@ -129,7 +126,7 @@ export default function LoginPage({ onLogin, onNavigate }: LoginPageProps) {
               </div>
               <div>
                   <button
-                      onClick={() => onNavigate('user-signup')}
+                      onClick={() => setAuthView('user-signup')}
                       className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50"
                   >
                       Join with Invite Code

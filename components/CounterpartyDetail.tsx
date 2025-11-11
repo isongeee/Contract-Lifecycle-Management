@@ -1,16 +1,8 @@
-import React from 'react';
-import type { Contract, Counterparty, UserProfile } from '../types';
+import React, { useMemo } from 'react';
+import type { Counterparty } from '../types';
 import { ArrowLeftIcon, BuildingOfficeIcon, EditIcon } from './icons';
 import StatusTag from './StatusTag';
-
-interface CounterpartyDetailProps {
-  counterparty: Counterparty;
-  contracts: Contract[];
-  onBack: () => void;
-  onSelectContract: (contract: Contract) => void;
-  onStartEdit: (counterparty: Counterparty) => void;
-  currentUser: UserProfile;
-}
+import { useAppContext } from '../contexts/AppContext';
 
 const DetailItem = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div>
@@ -23,10 +15,26 @@ const formatFullAddress = (cp: Counterparty) => {
     return [cp.addressLine1, cp.addressLine2, `${cp.city}, ${cp.state} ${cp.zipCode}`, cp.country].filter(Boolean).join(', ');
 }
 
-export default function CounterpartyDetail({ counterparty, contracts, onBack, onSelectContract, onStartEdit, currentUser }: CounterpartyDetailProps) {
+export default function CounterpartyDetail() {
+  const { 
+    selectedCounterparty, 
+    contracts, 
+    handleBackToCounterpartiesList, 
+    handleSelectContract, 
+    handleStartEditCounterparty, 
+    currentUser 
+  } = useAppContext();
+
+  const associatedContracts = useMemo(() => {
+    if (!selectedCounterparty) return [];
+    return contracts.filter(c => c.counterparty.id === selectedCounterparty.id);
+  }, [contracts, selectedCounterparty]);
+
+  if (!selectedCounterparty || !currentUser) return null;
+
   return (
     <div>
-      <button onClick={onBack} className="flex items-center text-sm font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 mb-4">
+      <button onClick={handleBackToCounterpartiesList} className="flex items-center text-sm font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 mb-4">
         <ArrowLeftIcon className="w-4 h-4 mr-2" />
         Back to all counterparties
       </button>
@@ -39,29 +47,29 @@ export default function CounterpartyDetail({ counterparty, contracts, onBack, on
                 </div>
                 <div>
                     <div className="flex items-center gap-x-3">
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{counterparty.name}</h1>
-                        <span className="text-sm font-semibold bg-primary-100 dark:bg-primary-900/20 text-primary-800 dark:text-primary-200 px-2.5 py-1 rounded-full">{counterparty.type}</span>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{selectedCounterparty.name}</h1>
+                        <span className="text-sm font-semibold bg-primary-100 dark:bg-primary-900/20 text-primary-800 dark:text-primary-200 px-2.5 py-1 rounded-full">{selectedCounterparty.type}</span>
                     </div>
-                    <p className="mt-1 text-md text-gray-600 dark:text-gray-400">{formatFullAddress(counterparty)}</p>
+                    <p className="mt-1 text-md text-gray-600 dark:text-gray-400">{formatFullAddress(selectedCounterparty)}</p>
                 </div>
             </div>
             {currentUser.role === 'Admin' && (
-                <button onClick={() => onStartEdit(counterparty)} className="flex items-center px-4 py-2 text-sm font-semibold text-primary-700 bg-primary-100 rounded-lg hover:bg-primary-200">
+                <button onClick={() => handleStartEditCounterparty(selectedCounterparty)} className="flex items-center px-4 py-2 text-sm font-semibold text-primary-700 bg-primary-100 rounded-lg hover:bg-primary-200">
                     <EditIcon className="w-4 h-4 mr-2" />
                     Edit
                 </button>
             )}
         </div>
         <dl className="mt-6 grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-3">
-            <DetailItem label="Primary Contact" value={counterparty.contactName} />
-            <DetailItem label="Contact Email" value={counterparty.contactEmail} />
-            <DetailItem label="Contact Phone" value={counterparty.contactPhone} />
+            <DetailItem label="Primary Contact" value={selectedCounterparty.contactName} />
+            <DetailItem label="Contact Email" value={selectedCounterparty.contactEmail} />
+            <DetailItem label="Contact Phone" value={selectedCounterparty.contactPhone} />
         </dl>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm">
          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Associated Contracts ({contracts.length})</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Associated Contracts ({associatedContracts.length})</h2>
          </div>
          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -74,8 +82,8 @@ export default function CounterpartyDetail({ counterparty, contracts, onBack, on
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {contracts.map((contract) => (
-                  <tr key={contract.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => onSelectContract(contract)}>
+                {associatedContracts.map((contract) => (
+                  <tr key={contract.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => handleSelectContract(contract)}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{contract.title}</div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">{contract.type}</div>
@@ -92,7 +100,7 @@ export default function CounterpartyDetail({ counterparty, contracts, onBack, on
               </tbody>
             </table>
           </div>
-          {contracts.length === 0 && (
+          {associatedContracts.length === 0 && (
             <div className="text-center py-12">
               <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">No Associated Contracts</h3>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">This counterparty does not have any contracts in the system.</p>

@@ -1,16 +1,9 @@
-import React, { useState, useMemo } from 'react';
-import type { Contract, UserProfile, ContractStatus as ContractStatusType } from '../types';
+import React, { useMemo } from 'react';
+import type { Contract } from '../types';
 import { ContractStatus, ApprovalStatus } from '../types';
 import ApprovalRequestCard from './ApprovalRequestCard';
 import { CheckCircleIcon } from './icons';
-
-type ContractAction = ContractStatusType | 'APPROVE_STEP' | 'REJECT_STEP';
-
-interface ApprovalsPageProps {
-  contracts: Contract[];
-  onTransition: (contractId: string, action: ContractAction, payload?: any) => void;
-  currentUser: UserProfile;
-}
+import { useAppContext } from '../contexts/AppContext';
 
 const Section = ({ title, children, count }: { title: string; children?: React.ReactNode; count: number}) => (
     <div>
@@ -22,9 +15,11 @@ const Section = ({ title, children, count }: { title: string; children?: React.R
     </div>
 );
 
-export default function ApprovalsPage({ contracts, onTransition, currentUser }: ApprovalsPageProps) {
+export default function ApprovalsPage() {
+    const { contracts, handleContractTransition, currentUser } = useAppContext();
 
     const { myPending, allPending } = useMemo(() => {
+        if (!currentUser) return { myPending: [], allPending: [] };
         const myPending: Contract[] = [];
         const allPending: Contract[] = [];
 
@@ -40,17 +35,19 @@ export default function ApprovalsPage({ contracts, onTransition, currentUser }: 
             }
         });
         return { myPending, allPending };
-    }, [contracts, currentUser.id]);
+    }, [contracts, currentUser]);
 
     const handleApprove = (contractId: string, stepId: string) => {
-        onTransition(contractId, 'APPROVE_STEP', { stepId });
+        handleContractTransition(contractId, 'APPROVE_STEP', { stepId });
     };
 
     const handleReject = (contractId: string, stepId: string) => {
          if (window.confirm("Are you sure you want to reject this approval? This will send the contract back to the 'In Review' stage.")) {
-            onTransition(contractId, 'REJECT_STEP', { stepId });
+            handleContractTransition(contractId, 'REJECT_STEP', { stepId });
         }
     };
+
+    if (!currentUser) return null;
 
     return (
         <div className="space-y-8">

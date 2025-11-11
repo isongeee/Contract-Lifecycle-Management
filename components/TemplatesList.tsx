@@ -1,39 +1,37 @@
-
 import React, { useState } from 'react';
 import type { ContractTemplate } from '../types';
 import { ContractType } from '../types';
 import { SearchIcon, BookTextIcon } from './icons';
+import { useAppContext } from '../contexts/AppContext';
 
-interface TemplatesListProps {
-  templates: ContractTemplate[];
-  onSelectTemplate: (template: ContractTemplate) => void;
-}
-
-// FIX: Changed component to React.FC to correctly handle props including the 'key' prop.
-const TemplateCard: React.FC<{ template: ContractTemplate, onSelect: () => void }> = ({ template, onSelect }) => (
-    <button onClick={onSelect} className="w-full text-left bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md hover:border-primary-300 dark:hover:border-primary-700 transition-all duration-200 p-5 flex flex-col h-full">
-        <div className="flex-shrink-0 flex items-center mb-3">
-            <div className="w-10 h-10 flex items-center justify-center bg-primary-100 dark:bg-primary-900/20 rounded-lg mr-4">
-                <BookTextIcon className="w-5 h-5 text-primary-700" />
+const TemplateCard: React.FC<{ template: ContractTemplate }> = ({ template }) => {
+    const { handleSelectTemplate } = useAppContext();
+    return (
+        <button onClick={() => handleSelectTemplate(template)} className="w-full text-left bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md hover:border-primary-300 dark:hover:border-primary-700 transition-all duration-200 p-5 flex flex-col h-full">
+            <div className="flex-shrink-0 flex items-center mb-3">
+                <div className="w-10 h-10 flex items-center justify-center bg-primary-100 dark:bg-primary-900/20 rounded-lg mr-4">
+                    <BookTextIcon className="w-5 h-5 text-primary-700" />
+                </div>
+                <div>
+                     <span className="text-xs font-semibold bg-primary-200 text-primary-800 px-2 py-0.5 rounded-full">{template.type}</span>
+                </div>
             </div>
-            <div>
-                 <span className="text-xs font-semibold bg-primary-200 text-primary-800 px-2 py-0.5 rounded-full">{template.type}</span>
+            <div className="flex-grow">
+                <h3 className="font-bold text-gray-800 dark:text-gray-100 text-md">{template.name}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{template.description}</p>
             </div>
-        </div>
-        <div className="flex-grow">
-            <h3 className="font-bold text-gray-800 dark:text-gray-100 text-md">{template.name}</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{template.description}</p>
-        </div>
-        <div className="mt-4">
-             <span className="text-sm font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-200">
-                View Template &rarr;
-            </span>
-        </div>
-    </button>
-);
+            <div className="mt-4">
+                 <span className="text-sm font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-200">
+                    View Template &rarr;
+                </span>
+            </div>
+        </button>
+    );
+};
 
 
-export default function TemplatesList({ templates, onSelectTemplate }: TemplatesListProps) {
+export default function TemplatesList() {
+  const { templates } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredTemplates = templates.filter(template => {
@@ -70,7 +68,6 @@ export default function TemplatesList({ templates, onSelectTemplate }: Templates
                 <TemplateCard 
                     key={template.id} 
                     template={template} 
-                    onSelect={() => onSelectTemplate(template)}
                 />
             ))}
         </div>

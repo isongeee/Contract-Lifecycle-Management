@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
-import type { Contract, UserProfile } from '../types';
+import type { Contract } from '../types';
 import { ContractStatus, RiskLevel, ApprovalStatus } from '../types';
 import { FileTextIcon, UsersIcon, DollarSignIcon, AlertTriangleIcon, UserIcon } from './icons';
 import ContractsByStatusChart from './ContractsByStatusChart';
 import ActionItems from './ActionItems';
+import { useAppContext } from '../contexts/AppContext';
 
 // A utility to format currency
 const formatCurrency = (value: number) => {
@@ -44,7 +45,8 @@ const MetricCard = ({ icon, label, value, color, onClick }: { icon: React.ReactN
 );
 
 
-export default function Dashboard({ contracts, onMetricClick, currentUser, onSelectContract }: { contracts: Contract[]; onMetricClick: (metric: 'active' | 'pending' | 'high-risk' | 'my-contracts') => void; currentUser: UserProfile; onSelectContract: (contract: Contract) => void; }) {
+export default function Dashboard() {
+    const { contracts, handleMetricNavigation, currentUser } = useAppContext();
 
     const {
         totalValue,
@@ -54,6 +56,8 @@ export default function Dashboard({ contracts, onMetricClick, currentUser, onSel
         myExpiringContracts,
         riskCount
     } = useMemo(() => {
+        if (!currentUser) return { totalValue: 0, activeCount: 0, myContractsCount: 0, myApprovals: [], myExpiringContracts: [], riskCount: 0 };
+
         const activeContracts = contracts.filter(c => c.status === ContractStatus.ACTIVE);
         const myContracts = contracts.filter(c => c.owner.id === currentUser.id);
         
@@ -80,6 +84,8 @@ export default function Dashboard({ contracts, onMetricClick, currentUser, onSel
         };
     }, [contracts, currentUser]);
 
+    if (!currentUser) return null;
+
     return (
         <div className="space-y-6">
             <div>
@@ -89,35 +95,35 @@ export default function Dashboard({ contracts, onMetricClick, currentUser, onSel
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
                  <MetricCard 
-                    onClick={() => onMetricClick('active')}
+                    onClick={() => handleMetricNavigation('active')}
                     icon={<DollarSignIcon className="w-6 h-6 text-green-600" />}
                     label="Total Active Value"
                     value={formatCurrency(totalValue)}
                     color="bg-green-100"
                 />
                 <MetricCard 
-                    onClick={() => onMetricClick('active')}
+                    onClick={() => handleMetricNavigation('active')}
                     icon={<FileTextIcon className="w-6 h-6 text-blue-600" />}
                     label="Active Contracts"
                     value={activeCount}
                     color="bg-blue-100"
                 />
                 <MetricCard 
-                    onClick={() => onMetricClick('my-contracts')}
+                    onClick={() => handleMetricNavigation('my-contracts')}
                     icon={<UserIcon className="w-6 h-6 text-indigo-600" />}
                     label="My Assigned"
                     value={myContractsCount}
                     color="bg-indigo-100"
                 />
                  <MetricCard 
-                    onClick={() => onMetricClick('pending')}
+                    onClick={() => handleMetricNavigation('pending')}
                     icon={<UsersIcon className="w-6 h-6 text-yellow-600" />}
                     label="Pending Approval"
                     value={contracts.filter(c => c.status === ContractStatus.PENDING_APPROVAL).length}
                     color="bg-yellow-100"
                 />
                  <MetricCard 
-                    onClick={() => onMetricClick('high-risk')}
+                    onClick={() => handleMetricNavigation('high-risk')}
                     icon={<AlertTriangleIcon className="w-6 h-6 text-red-600" />}
                     label="High-Risk"
                     value={riskCount}
@@ -130,7 +136,6 @@ export default function Dashboard({ contracts, onMetricClick, currentUser, onSel
                     <ActionItems 
                         myApprovals={myApprovals}
                         myExpiringContracts={myExpiringContracts}
-                        onSelectContract={onSelectContract}
                     />
                 </div>
                 <div className="lg:col-span-1">

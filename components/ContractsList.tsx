@@ -1,16 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import type { Contract, UserProfile } from '../types';
+import type { Contract } from '../types';
 import { ContractStatus, ContractType, RiskLevel, ContractFrequency } from '../types';
 import StatusTag from './StatusTag';
 import { SearchIcon, ChevronDownIcon, PlusIcon, ArrowUpIcon, ArrowDownIcon } from './icons';
-
-interface ContractsListProps {
-  contracts: Contract[];
-  onSelectContract: (contract: Contract) => void;
-  onStartCreate: () => void;
-  initialFilters?: { status?: string; riskLevels?: RiskLevel[]; ownerId?: string };
-  currentUser: UserProfile;
-}
+import { useAppContext } from '../contexts/AppContext';
 
 interface FilterOption {
   value: string;
@@ -102,7 +95,8 @@ const StatusFilterDropdown = ({ selected, onChange }: { selected: Set<ContractSt
 };
 
 
-export default function ContractsList({ contracts, onSelectContract, onStartCreate, initialFilters = {}, currentUser }: ContractsListProps) {
+export default function ContractsList() {
+  const { contracts, handleSelectContract, handleStartCreate, initialFilters, currentUser } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [visibleStatuses, setVisibleStatuses] = useState<Set<ContractStatus>>(new Set(defaultVisibleStatuses));
   const [typeFilter, setTypeFilter] = useState('');
@@ -125,7 +119,6 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
     } else {
         setRiskFilter('');
     }
-    // Reset other filters
     if (!initialFilters.ownerId) setOwnerFilter('');
     if (!initialFilters.riskLevels) setRiskFilter('');
     setTypeFilter('');
@@ -197,10 +190,6 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
     }
   };
 
-  const handleCreateNew = () => {
-    onStartCreate();
-  };
-  
   const handleClearFilters = () => {
     setSearchTerm('');
     setVisibleStatuses(new Set(defaultVisibleStatuses));
@@ -215,7 +204,6 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
       { value: 'HighAndCritical', label: 'High / Critical' }
   ];
 
-  // FIX: Refactored SortableHeader to use a 'label' prop instead of children to resolve typing issue.
   const SortableHeader = ({ label, columnKey }: { label: React.ReactNode; columnKey: string }) => {
     const isActive = sortKey === columnKey;
     return (
@@ -231,6 +219,8 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
         </th>
     );
   };
+  
+  if (!currentUser) return null;
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm">
@@ -243,7 +233,7 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
                 </p>
             </div>
             <button 
-                onClick={handleCreateNew}
+                onClick={() => handleStartCreate()}
                 className="flex items-center px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 whitespace-nowrap">
                 <PlusIcon className="w-5 h-5 mr-2" />
                 Create new Contract
@@ -289,7 +279,7 @@ export default function ContractsList({ contracts, onSelectContract, onStartCrea
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {sortedContracts.map((contract) => (
-              <tr key={contract.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => onSelectContract(contract)}>
+              <tr key={contract.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => handleSelectContract(contract)}>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{contract.title}</div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">{contract.type}</div>

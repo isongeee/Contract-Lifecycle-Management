@@ -1,6 +1,6 @@
 import React from 'react';
 import { LayoutDashboardIcon, FileTextIcon, UsersIcon, BookTextIcon, CheckCircleIcon, SettingsIcon, HomeIcon, BuildingOfficeIcon, UserIcon, RefreshCwIcon, PenSquareIcon } from './icons';
-import type { UserProfile } from '../types';
+import { useAppContext } from '../contexts/AppContext';
 
 const NavItem: React.FC<{ icon: React.ReactNode; label: string; active?: boolean; onClick: () => void; }> = ({ icon, label, active = false, onClick }) => (
   <button
@@ -27,7 +27,8 @@ const navItems = [
     { id: 'signing', label: 'Signing', icon: <PenSquareIcon className="h-5 w-5" /> },
 ];
 
-export default function Sidebar({ activeView, onNavigate, currentUser }: { activeView: string; onNavigate: (view: string) => void; currentUser: UserProfile | null }) {
+export default function Sidebar() {
+  const { activeView, handleNavigate } = useAppContext();
   return (
     <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 hidden md:flex flex-col">
       <div className="h-16 flex items-center px-6 border-b border-gray-200 dark:border-gray-700">
@@ -41,7 +42,7 @@ export default function Sidebar({ activeView, onNavigate, currentUser }: { activ
                 icon={item.icon} 
                 label={item.label} 
                 active={activeView === item.id} 
-                onClick={() => onNavigate(item.id)}
+                onClick={() => handleNavigate(item.id)}
             />
         ))}
       </nav>
@@ -50,7 +51,7 @@ export default function Sidebar({ activeView, onNavigate, currentUser }: { activ
          <NavItem 
             icon={<SettingsIcon className="h-5 w-5" />} 
             label="Settings" 
-            onClick={() => onNavigate('settings')}
+            onClick={() => handleNavigate('settings')}
             active={['settings', 'profile', 'company-settings'].includes(activeView)}
         />
       </div>

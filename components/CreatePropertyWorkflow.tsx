@@ -1,14 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { XIcon } from './icons';
 import type { Property } from '../types';
+import { useAppContext } from '../contexts/AppContext';
 
-interface CreatePropertyWorkflowProps {
-  onCancel: () => void;
-  onFinish: (data: Partial<Property>) => void;
-  initialData?: Property;
-}
-
-// FIX: Made children prop optional to satisfy type checker.
 const FormField = ({ label, children, className = 'col-span-1' }: { label: string; children?: React.ReactNode; className?: string }) => (
     <div className={className}>
         <label className="block text-sm font-medium leading-6 text-gray-900">{label}</label>
@@ -17,7 +11,21 @@ const FormField = ({ label, children, className = 'col-span-1' }: { label: strin
 );
 const TextInput = (props: React.ComponentProps<'input'>) => <input {...props} className="block w-full rounded-md border-0 py-1.5 px-2 bg-white text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-[#9ca3af] focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" />
 
-export default function CreatePropertyWorkflow({ onCancel, onFinish, initialData }: CreatePropertyWorkflowProps) {
+export default function CreatePropertyWorkflow() {
+    const { 
+        handleCancelCreateProperty, 
+        handleFinalizeCreateProperty,
+        editingProperty,
+        handleCancelEditProperty,
+        handleFinalizeEditProperty
+    } = useAppContext();
+
+    const isEditMode = !!editingProperty;
+    const initialData = editingProperty;
+
+    const onCancel = isEditMode ? handleCancelEditProperty : handleCancelCreateProperty;
+    const onFinish = isEditMode ? handleFinalizeEditProperty : handleFinalizeCreateProperty;
+
     const [formData, setFormData] = useState<Omit<Property, 'id'>>({
         name: '',
         addressLine1: '',
@@ -47,15 +55,12 @@ export default function CreatePropertyWorkflow({ onCancel, onFinish, initialData
     };
 
     const handleSubmit = () => {
-        // Basic validation
         if (!formData.name || !formData.addressLine1 || !formData.city || !formData.state || !formData.country || !formData.zipCode) {
             alert('Please fill in all required fields.');
             return;
         }
         onFinish({ ...formData, id: initialData?.id });
     };
-    
-    const isEditMode = !!initialData;
 
     return (
         <div className="relative z-10" aria-labelledby="modal-title" role="dialog" aria-modal="true">
