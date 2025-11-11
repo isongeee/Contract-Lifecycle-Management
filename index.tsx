@@ -11,6 +11,7 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
+    {/* FIX: Explicitly pass App as children to AppProvider to resolve typing issue. */}
     <AppProvider>
       <App />
     </AppProvider>

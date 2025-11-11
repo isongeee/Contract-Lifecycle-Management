@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
-import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType, PermissionSet, AuditLog, RenewalRequest, RenewalStatus, SigningStatus, Notification, Comment, RenewalFeedback } from '../types';
+import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType, PermissionSet, AuditLog, RenewalRequest, RenewalStatus, SigningStatus, Notification, Comment, RenewalFeedback, SearchResult } from '../types';
 import { ContractStatus, RiskLevel, ApprovalStatus, RenewalStatus as RenewalStatusEnum, RenewalMode, SigningStatus as SigningStatusEnum } from '../types';
 import { MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS, requestorPermissions } from '../constants';
 import { supabase } from '../lib/supabaseClient';
@@ -103,6 +103,12 @@ export interface AppContextType {
     handleSelectProperty: (property: Property) => void;
     handleBackToPropertiesList: () => void;
 
+    // Global Search
+    isPerformingGlobalSearch: boolean;
+    globalSearchResults: SearchResult[];
+    globalSearchTerm: string;
+    handleGlobalSearch: (term: string) => Promise<void>;
+
     setNotificationSettings: React.Dispatch<React.SetStateAction<NotificationSetting[]>>;
     setUserNotificationSettings: React.Dispatch<React.SetStateAction<UserNotificationSettings>>;
     setUsers: React.Dispatch<React.SetStateAction<UserProfile[]>>;
@@ -144,6 +150,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [company, setCompany] = useState<{ id: string; name: string; slug: string; } | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authView, setAuthView] = useState<'login' | 'org-signup' | 'user-signup'>('login');
+
+  // Global Search State
+  const [isPerformingGlobalSearch, setIsPerformingGlobalSearch] = useState(false);
+  const [globalSearchResults, setGlobalSearchResults] = useState<SearchResult[]>([]);
+  const [globalSearchTerm, setGlobalSearchTerm] = useState('');
 
   const unreadCount = useMemo(() => notifications.filter(n => !n.is_read).length, [notifications]);
 
@@ -1169,6 +1180,56 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  const handleGlobalSearch = useCallback(async (term: string) => {
+    if (!term.trim()) {
+        setGlobalSearchResults([]);
+        setGlobalSearchTerm('');
+        return;
+    }
+    setActiveView('search');
+    setSelectedContract(null);
+    setSelectedTemplate(null);
+    setSelectedCounterparty(null);
+    setSelectedProperty(null);
+    setIsPerformingGlobalSearch(true);
+    setGlobalSearchTerm(term);
+
+    // Mock search logic. In a real app, this would be an API call.
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    const results: SearchResult[] = [];
+    const lowerCaseTerm = term.toLowerCase();
+
+    contracts.forEach(contract => {
+      contract.versions.forEach(version => {
+        const content = version.content.toLowerCase();
+        let matchIndex = -1;
+        let lastIndex = 0;
+        // Find all matches to make snippet more relevant
+        while((matchIndex = content.indexOf(lowerCaseTerm, lastIndex)) !== -1) {
+          const snippetStart = Math.max(0, matchIndex - 80);
+          const snippetEnd = Math.min(version.content.length, matchIndex + lowerCaseTerm.length + 80);
+          const snippet = `${snippetStart > 0 ? '...' : ''}${version.content.substring(snippetStart, snippetEnd)}${snippetEnd < version.content.length ? '...' : ''}`;
+          
+          if (!results.some(r => r.versionId === version.id)) {
+            results.push({
+              contractId: contract.id,
+              contractTitle: contract.title,
+              counterpartyName: contract.counterparty.name,
+              versionId: version.id,
+              versionNumber: version.versionNumber,
+              snippet: snippet,
+            });
+          }
+          lastIndex = matchIndex + 1;
+        }
+      });
+    });
+
+    setGlobalSearchResults(results);
+    setIsPerformingGlobalSearch(false);
+  }, [contracts]);
+
     const contextValue: AppContextType = {
         session, currentUser, company, isAuthenticated, authView, setAuthView, handleLogin, handleLogout,
         isLoading, activeView, theme, handleThemeChange, handleNavigate, handleMetricNavigation,
@@ -1183,6 +1244,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         handleCreateComment, handleResolveComment, handleCreateRenewalFeedback, handleMarkAllAsRead, handleMarkOneAsRead, handleNotificationClick, handleCreateUser,
         handleSelectContract, handleBackToList, handleSelectTemplate, handleBackToTemplatesList, handleSelectCounterparty, handleBackToCounterpartiesList,
         handleSelectProperty, handleBackToPropertiesList,
+        isPerformingGlobalSearch, globalSearchResults, globalSearchTerm, handleGlobalSearch,
         setNotificationSettings, setUserNotificationSettings, setUsers
     };
 

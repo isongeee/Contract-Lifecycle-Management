@@ -1,5 +1,6 @@
 
 
+
 import React from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -23,10 +24,10 @@ import UserSignUpPage from './components/UserSignUpPage';
 import CompanySettingsPage from './components/CompanySettingsPage';
 import RenewalsPage from './components/RenewalsPage';
 import SigningPage from './components/SigningPage';
-import SettingsPage from './components/SettingsPage';
 import { LoaderIcon, AlertTriangleIcon } from './components/icons';
 import AddUserModal from './components/AddUserModal';
 import { useAppContext } from './contexts/AppContext';
+import SearchResultsPage from './components/SearchResultsPage';
 
 
 export default function App() {
@@ -79,8 +80,7 @@ export default function App() {
     handleBackToTemplatesList,
     handleBackToCounterpartiesList,
     handleStartEditCounterparty,
-    // FIX: `handleUpdateSigningStatus` was not destructured, causing an error when passed to ContractDetail.
-    handleUpdateSigningStatus,
+    // FIX: `handleUpdateSigningStatus` was destructured but does not exist. The correct name is `handleSigningStatusUpdate`. This is now correctly passed to ContractDetail.
     handleNavigate,
   } = useAppContext();
 
@@ -124,6 +124,7 @@ export default function App() {
       case 'templates': return <TemplatesList />;
       case 'counterparties': return <CounterpartiesList />;
       case 'properties': return <PropertiesList />;
+      case 'search': return <SearchResultsPage />;
       // FIX: Pass required props to ProfilePage component.
       case 'profile': return <ProfilePage 
         currentUser={currentUser!}
@@ -132,7 +133,6 @@ export default function App() {
         notificationSettings={userNotificationSettings}
         setNotificationSettings={setUserNotificationSettings}
       />;
-      case 'settings': return <SettingsPage />;
       // FIX: Pass required props to CompanySettingsPage component.
       case 'company-settings': return <CompanySettingsPage
         users={users}
@@ -167,7 +167,8 @@ export default function App() {
       onSelectContract={handleSelectContract}
       onRenewAsIs={handleRenewAsIs}
       onStartRenegotiation={handleStartRenegotiation}
-      onUpdateSigningStatus={handleUpdateSigningStatus}
+      // FIX: Pass the correctly named `handleSigningStatusUpdate` function from the context to the `onUpdateSigningStatus` prop.
+      onUpdateSigningStatus={handleSigningStatusUpdate}
       onCreateComment={handleCreateComment}
       onResolveComment={handleResolveComment}
       onCreateRenewalFeedback={handleCreateRenewalFeedback}

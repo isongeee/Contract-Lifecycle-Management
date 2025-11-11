@@ -28,7 +28,19 @@ const navItems = [
 ];
 
 export default function Sidebar() {
-  const { activeView, handleNavigate } = useAppContext();
+  const { activeView, handleNavigate, currentUser } = useAppContext();
+
+  if (!currentUser) {
+      return (
+        <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 hidden md:flex flex-col">
+          <div className="h-16 flex items-center px-6 border-b border-gray-200 dark:border-gray-700">
+            <FileTextIcon className="h-8 w-8 text-primary" />
+            <span className="ml-2 text-xl font-bold text-gray-800 dark:text-gray-200">CLM System</span>
+          </div>
+        </aside>
+      );
+  }
+
   return (
     <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 hidden md:flex flex-col">
       <div className="h-16 flex items-center px-6 border-b border-gray-200 dark:border-gray-700">
@@ -46,14 +58,22 @@ export default function Sidebar() {
             />
         ))}
       </nav>
-      <div className="px-4 py-6 border-t border-gray-200 dark:border-gray-700 space-y-4">
-        <p className="px-4 text-xs font-semibold text-gray-400 uppercase">Configuration</p>
+      <div className="px-4 py-6 border-t border-gray-200 dark:border-gray-700 space-y-2">
+        <p className="px-4 pb-2 text-xs font-semibold text-gray-400 uppercase">Configuration</p>
          <NavItem 
-            icon={<SettingsIcon className="h-5 w-5" />} 
-            label="Settings" 
-            onClick={() => handleNavigate('settings')}
-            active={['settings', 'profile', 'company-settings'].includes(activeView)}
+            icon={<UserIcon className="h-5 w-5" />} 
+            label="My Profile" 
+            onClick={() => handleNavigate('profile')}
+            active={activeView === 'profile'}
         />
+        {currentUser.role === 'Admin' && (
+            <NavItem 
+                icon={<BuildingOfficeIcon className="h-5 w-5" />} 
+                label="Company Settings" 
+                onClick={() => handleNavigate('company-settings')}
+                active={activeView === 'company-settings'}
+            />
+        )}
       </div>
     </aside>
   );

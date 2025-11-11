@@ -327,3 +327,12 @@ export interface ReviewChecklistItem {
   text: string;
   isCompleted: boolean;
 }
+
+export interface SearchResult {
+  contractId: string;
+  contractTitle: string;
+  counterpartyName: string;
+  versionId: string;
+  versionNumber: number;
+  snippet: string;
+}

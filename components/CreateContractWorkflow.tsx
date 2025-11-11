@@ -343,7 +343,8 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                 }));
             } else {
                  // FIX: Add a unique 'id' to each allocation object to satisfy the ContractPropertyAllocation type.
-                 updates.propertyAllocations = multiAllocations.map(({ id, ...rest }: MultiPropertyAllocation, index) => ({
+                 // FIX: Destructure manualEdits to remove it from the final object for non-seasonal allocations, resolving a type conflict.
+                 updates.propertyAllocations = multiAllocations.map(({ id, manualEdits, ...rest }: MultiPropertyAllocation, index) => ({
                     id: `alloc-${Date.now()}-${index}`,
                     ...rest,
                  }));
