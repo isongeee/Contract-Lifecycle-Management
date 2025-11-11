@@ -4,11 +4,14 @@ import { ContractStatus, ContractType, RiskLevel, ContractFrequency } from '../t
 import StatusTag from './StatusTag';
 import { SearchIcon, ChevronDownIcon, PlusIcon, ArrowUpIcon, ArrowDownIcon } from './icons';
 import { useAppContext } from '../contexts/AppContext';
+import Pagination from './Pagination';
 
 interface FilterOption {
   value: string;
   label:string;
 }
+
+const ITEMS_PER_PAGE = 10;
 
 const FilterDropdown = ({ label, options, selected, onChange }: { label: string; options: FilterOption[]; selected: string; onChange: (value: string) => void; }) => (
     <div className="relative">
@@ -105,6 +108,7 @@ export default function ContractsList() {
   const [ownerFilter, setOwnerFilter] = useState(initialFilters.ownerId || '');
   const [sortKey, setSortKey] = useState('endDate');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
       if (initialFilters.status) {
@@ -124,6 +128,11 @@ export default function ContractsList() {
     setTypeFilter('');
     setFrequencyFilter('');
   }, [initialFilters]);
+  
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, visibleStatuses, typeFilter, riskFilter, frequencyFilter, ownerFilter]);
 
 
   const filteredContracts = useMemo(() => contracts.filter(contract => {
@@ -180,6 +189,13 @@ export default function ContractsList() {
         return 0;
     });
   }, [filteredContracts, sortKey, sortDirection]);
+
+  const paginatedContracts = useMemo(() => {
+    return sortedContracts.slice(
+      (currentPage - 1) * ITEMS_PER_PAGE,
+      currentPage * ITEMS_PER_PAGE
+    );
+  }, [sortedContracts, currentPage]);
   
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -234,7 +250,7 @@ export default function ContractsList() {
             </div>
             <button 
                 onClick={() => handleStartCreate()}
-                className="flex items-center px-4 py-2 text-sm font-semibold text-primary-900 bg-primary rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 whitespace-nowrap">
+                className="flex items-center px-4 py-2 text-sm font-semibold text-white dark:text-primary-900 bg-primary rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 whitespace-nowrap">
                 <PlusIcon className="w-5 h-5 mr-2" />
                 Create new Contract
             </button>
@@ -278,7 +294,7 @@ export default function ContractsList() {
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-            {sortedContracts.map((contract) => (
+            {paginatedContracts.map((contract) => (
               <tr key={contract.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => handleSelectContract(contract)}>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{contract.title}</div>
@@ -303,6 +319,13 @@ export default function ContractsList() {
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Try adjusting your search or filter criteria.</p>
           </div>
         )}
+      <Pagination
+        currentPage={currentPage}
+        totalPages={Math.ceil(sortedContracts.length / ITEMS_PER_PAGE)}
+        onPageChange={setCurrentPage}
+        totalItems={sortedContracts.length}
+        itemsPerPage={ITEMS_PER_PAGE}
+      />
     </div>
   );
 }

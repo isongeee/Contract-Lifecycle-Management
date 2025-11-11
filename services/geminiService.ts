@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI, Type } from "@google/genai";
 import type { Clause } from '../types';
 
@@ -158,4 +159,45 @@ export const suggestCommentReply = async (contractClause: string, commentThread:
         console.error("Error suggesting comment reply:", error);
         return "An error occurred while generating a suggestion.";
     }
+};
+
+export const draftInitialContract = async (contractDetails: {
+  contractType: string;
+  counterpartyName: string;
+  effectiveDate: string;
+  value: number;
+}): Promise<string> => {
+  if (!API_KEY) return "API Key not configured.";
+  
+  const { contractType, counterpartyName, effectiveDate, value } = contractDetails;
+  
+  const prompt = `You are an expert contract lawyer. Your task is to draft a simple, standard contract based on the following details. The draft should be a complete document with common clauses appropriate for the contract type.
+
+  - Contract Type: ${contractType}
+  - Our Counterparty: ${counterpartyName}
+  - Effective Date: ${effectiveDate}
+  - Total Value: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)}
+
+  Please include standard clauses for:
+  1.  Scope of Services/Products
+  2.  Term and Termination
+  3.  Payment Terms
+  4.  Confidentiality
+  5.  Limitation of Liability
+  
+  Generate the full contract text.`;
+  
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-pro', // Good for drafting
+      contents: prompt,
+      config: {
+        temperature: 0.5,
+      },
+    });
+    return response.text;
+  } catch (error) {
+    console.error("Error drafting initial contract:", error);
+    return "An error occurred while drafting the contract. Please try again or enter the text manually.";
+  }
 };

@@ -1,5 +1,3 @@
-
-
 import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet, UserNotificationSettings, CounterpartyType, AllocationType, RenewalStatus, AutoRenewType, ReviewChecklistItem, SigningStatus, ReportConfiguration } from './types';
 import type { UserProfile, Counterparty, Property } from './types';
 
@@ -110,6 +108,12 @@ export const MOCK_CONTRACTS: Omit<Contract, 'renewalRequest'>[] = [
       { id: 'app-1-1', approver: USERS['bob'], status: ApprovalStatus.APPROVED, approvedAt: '2023-01-12', versionId: 'v1-2' },
       { id: 'app-1-2', approver: USERS['charlie'], status: ApprovalStatus.APPROVED, approvedAt: '2023-01-13', versionId: 'v1-2' },
     ],
+    submittedAt: '2023-01-08',
+    approvalStartedAt: '2023-01-11',
+    approvalCompletedAt: '2023-01-13',
+    sentForSignatureAt: '2023-01-14',
+    executedAt: '2023-01-15',
+    activeAt: '2023-01-15',
   },
   {
     id: 'contract-002',
@@ -136,6 +140,8 @@ export const MOCK_CONTRACTS: Omit<Contract, 'renewalRequest'>[] = [
       { id: 'app-2-1', approver: USERS['alice'], status: ApprovalStatus.PENDING, versionId: 'v2-1' },
       { id: 'app-2-2', approver: USERS['charlie'], status: ApprovalStatus.PENDING, versionId: 'v2-1' },
     ],
+    submittedAt: '2024-07-22',
+    approvalStartedAt: '2024-07-25',
   },
    {
     id: 'contract-005',
@@ -162,6 +168,12 @@ export const MOCK_CONTRACTS: Omit<Contract, 'renewalRequest'>[] = [
       { id: 'app-5-1', approver: USERS['alice'], status: ApprovalStatus.APPROVED, versionId: 'v5-1' },
       { id: 'app-5-2', approver: USERS['charlie'], status: ApprovalStatus.APPROVED, versionId: 'v5-1' },
     ],
+    submittedAt: '2023-08-29',
+    approvalStartedAt: '2023-08-30',
+    approvalCompletedAt: '2023-08-30', // Fast approval
+    sentForSignatureAt: '2023-08-31',
+    executedAt: '2023-09-01',
+    activeAt: '2023-09-01',
   },
   {
     id: 'contract-003',
@@ -206,7 +218,12 @@ export const MOCK_CONTRACTS: Omit<Contract, 'renewalRequest'>[] = [
     approvalSteps: [
       // FIX: Added versionId to satisfy the ApprovalStep type.
        { id: 'app-4-1', approver: USERS['charlie'], status: ApprovalStatus.APPROVED, approvedAt: '2024-05-25', versionId: 'v4-1' },
-    ]
+    ],
+    submittedAt: '2024-05-22',
+    approvalStartedAt: '2024-05-24',
+    approvalCompletedAt: '2024-05-25',
+    sentForSignatureAt: '2024-05-28',
+    executedAt: '2024-06-01',
   },
   {
     id: 'contract-006',
@@ -232,27 +249,36 @@ export const MOCK_CONTRACTS: Omit<Contract, 'renewalRequest'>[] = [
       // FIX: Added versionId to satisfy the ApprovalStep type.
       { id: 'app-6-1', approver: USERS['bob'], status: ApprovalStatus.APPROVED, versionId: 'v6-1' },
     ],
+    submittedAt: '2020-09-20',
+    reviewStartedAt: '2020-09-20',
+    approvalStartedAt: '2020-09-25',
+    approvalCompletedAt: '2020-09-28',
+    sentForSignatureAt: '2020-09-29',
+    executedAt: '2020-10-01',
+    activeAt: '2020-10-01',
   },
-].map(c => ({
-    ...c,
-    submittedAt: undefined,
-    reviewStartedAt: undefined,
-    approvalStartedAt: undefined,
-    approvalCompletedAt: undefined,
-    sentForSignatureAt: undefined,
-    executedAt: undefined,
-    activeAt: undefined,
-    expiredAt: undefined,
-    archivedAt: undefined,
-    draftVersionId: undefined,
-    executedVersionId: undefined,
-    // Add new nullable fields for renewals to mock data
-    startDate: c.effectiveDate,
-    autoRenew: AutoRenewType.NONE,
-    noticePeriodDays: 30,
-    renewalTermMonths: 12,
-    upliftPercent: 0,
-    parentContractId: undefined,
+].map(c => {
+    const defaults = {
+        submittedAt: undefined,
+        reviewStartedAt: c.submittedAt, // Assume review starts on submission
+        approvalStartedAt: undefined,
+        approvalCompletedAt: undefined,
+        sentForSignatureAt: undefined,
+        executedAt: undefined,
+        activeAt: undefined,
+        expiredAt: undefined,
+        archivedAt: undefined,
+        draftVersionId: undefined,
+        executedVersionId: undefined,
+        // Add new nullable fields for renewals to mock data
+        startDate: c.effectiveDate,
+        autoRenew: AutoRenewType.NONE,
+        noticePeriodDays: 30,
+        renewalTermMonths: 12,
+        upliftPercent: 0,
+        parentContractId: undefined,
+    };
+    return { ...defaults, ...c };
 }));
 
 export const requestorPermissions: PermissionSet = {

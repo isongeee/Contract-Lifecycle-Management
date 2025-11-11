@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Contract, Counterparty, UserProfile, Property, AllocationType, ContractPropertyAllocation } from '../types';
 import { ContractType, ContractStatus, RiskLevel, ContractFrequency } from '../types';
-import { UploadCloudIcon, XIcon, PlusIcon, Trash2Icon } from './icons';
+import { UploadCloudIcon, XIcon, PlusIcon, Trash2Icon, SparklesIcon, LoaderIcon } from './icons';
+import { draftInitialContract } from '../services/geminiService';
 
 interface CreateContractWorkflowProps {
   properties: Property[];
@@ -28,19 +29,19 @@ const ProgressBar = ({ currentStep }: { currentStep: number }) => (
         {STEPS.map((step) => (
           <li key={step.name} className="md:flex-1">
             {currentStep > step.id ? (
-              <div className="group flex w-full flex-col border-l-4 border-primary py-2 pl-4 transition-colors md:border-l-0 md:border-t-4 md:pb-0 md:pl-0 md:pt-4">
-                <span className="text-sm font-medium text-primary transition-colors">{step.name}</span>
+              <div className="group flex w-full flex-col border-l-4 border-primary dark:border-primary-500 py-2 pl-4 transition-colors md:border-l-0 md:border-t-4 md:pb-0 md:pl-0 md:pt-4">
+                <span className="text-sm font-medium text-primary dark:text-primary-300 transition-colors">{step.name}</span>
               </div>
             ) : currentStep === step.id ? (
               <div
-                className="flex w-full flex-col border-l-4 border-primary py-2 pl-4 md:border-l-0 md:border-t-4 md:pb-0 md:pl-0 md:pt-4"
+                className="flex w-full flex-col border-l-4 border-primary dark:border-primary-400 py-2 pl-4 md:border-l-0 md:border-t-4 md:pb-0 md:pl-0 md:pt-4"
                 aria-current="step"
               >
-                <span className="text-sm font-medium text-primary">{step.name}</span>
+                <span className="text-sm font-medium text-primary dark:text-primary-200">{step.name}</span>
               </div>
             ) : (
-              <div className="group flex w-full flex-col border-l-4 border-gray-200 py-2 pl-4 transition-colors md:border-l-0 md:border-t-4 md:pb-0 md:pl-0 md:pt-4">
-                <span className="text-sm font-medium text-gray-500 transition-colors">{step.name}</span>
+              <div className="group flex w-full flex-col border-l-4 border-gray-200 dark:border-gray-700 py-2 pl-4 transition-colors md:border-l-0 md:border-t-4 md:pb-0 md:pl-0 md:pt-4">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 transition-colors">{step.name}</span>
               </div>
             )}
           </li>
@@ -61,23 +62,23 @@ const Stage1_Upload = ({ onNext, onFileSelect, fileName }: { onNext: () => void;
 
     return (
         <div>
-            <h2 className="text-lg font-semibold text-gray-800">Upload Documents (Optional)</h2>
-            <p className="mt-1 text-sm text-gray-500">Upload a third-party paper or other relevant documents to start.</p>
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Upload Documents (Optional)</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Upload a third-party paper or other relevant documents to start.</p>
             <div className="mt-6">
-                <div className="mt-2 flex justify-center rounded-lg border border-dashed border-gray-900/25 px-6 py-10">
+                <div className="mt-2 flex justify-center rounded-lg border border-dashed border-gray-900/25 dark:border-gray-100/25 px-6 py-10">
                     <div className="text-center">
-                        <UploadCloudIcon className="mx-auto h-12 w-12 text-gray-300" aria-hidden="true" />
-                        <div className="mt-4 flex text-sm leading-6 text-gray-600">
-                            <label htmlFor="file-upload" className="relative cursor-pointer rounded-md bg-white font-semibold text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-primary-600 focus-within:ring-offset-2 hover:text-primary-500">
+                        <UploadCloudIcon className="mx-auto h-12 w-12 text-gray-300 dark:text-gray-500" aria-hidden="true" />
+                        <div className="mt-4 flex text-sm leading-6 text-gray-600 dark:text-gray-400">
+                            <label htmlFor="file-upload" className="relative cursor-pointer rounded-md bg-white dark:bg-gray-800 font-semibold text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-primary-600 focus-within:ring-offset-2 hover:text-primary-500">
                                 <span>Upload a file</span>
                                 <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} />
                             </label>
                             <p className="pl-1">or drag and drop</p>
                         </div>
-                        <p className="text-xs leading-5 text-gray-600">PDF, DOCX, etc. up to 10MB</p>
+                        <p className="text-xs leading-5 text-gray-600 dark:text-gray-400">PDF, DOCX, etc. up to 10MB</p>
                     </div>
                 </div>
-                 {fileName && <p className="mt-3 text-sm text-gray-700 font-medium">Uploaded: {fileName}</p>}
+                 {fileName && <p className="mt-3 text-sm text-gray-700 dark:text-gray-300 font-medium">Uploaded: {fileName}</p>}
             </div>
             <div className="mt-8 flex justify-end">
                 <button onClick={onNext} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Next</button>
@@ -99,12 +100,12 @@ interface Stage2Props {
 const FormRow = ({ children }: { children?: React.ReactNode }) => <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-6">{children}</div>
 const FormField = ({ label, children, className = 'sm:col-span-3' }: { label: string; children?: React.ReactNode; className?: string }) => (
     <div className={className}>
-        <label className="block text-sm font-medium leading-6 text-gray-900">{label}</label>
+        <label className="block text-sm font-medium leading-6 text-gray-900 dark:text-gray-100">{label}</label>
         <div className="mt-2">{children}</div>
     </div>
 );
-const TextInput = (props: React.ComponentProps<'input'>) => <input {...props} className="block w-full rounded-md border-0 py-1.5 px-3 bg-white text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-[#9ca3af] focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" />
-const SelectInput = (props: React.ComponentProps<'select'>) => <select {...props} className="block w-full rounded-md border-0 py-1.5 px-3 bg-white text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" />
+const TextInput = (props: React.ComponentProps<'input'>) => <input {...props} className="block w-full rounded-md border-0 py-1.5 px-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 placeholder:text-[#9ca3af] dark:placeholder-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" />
+const SelectInput = (props: React.ComponentProps<'select'>) => <select {...props} className="block w-full rounded-md border-0 py-1.5 px-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" />
 
 
 const getMonthsInRange = (startDateStr: string, endDateStr: string): { year: number; months: string[] }[] => {
@@ -140,6 +141,23 @@ const getMonthsInRange = (startDateStr: string, endDateStr: string): { year: num
 
 const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, counterparties, users }: Stage2Props) => {
     const availableMonthsByYear = useMemo(() => getMonthsInRange(data.effectiveDate!, data.endDate!), [data.effectiveDate, data.endDate]);
+    const [isDrafting, setIsDrafting] = useState(false);
+
+    const handleDraftWithAI = async () => {
+        if (!data.type || !data.counterparty?.name) {
+            alert('Please select a Contract Type and Counterparty before using AI draft.');
+            return;
+        }
+        setIsDrafting(true);
+        const draft = await draftInitialContract({
+            contractType: data.type,
+            counterpartyName: data.counterparty.name,
+            effectiveDate: data.effectiveDate || new Date().toISOString().split('T')[0],
+            value: data.value || 0,
+        });
+        setData('content', draft);
+        setIsDrafting(false);
+    };
 
     const isFormValid = useMemo(() => {
         if (!data.title || data.title.trim() === '') return false;
@@ -158,8 +176,8 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
 
     return (
         <div>
-            <h2 className="text-lg font-semibold text-gray-800">Contract Information</h2>
-            <p className="mt-1 text-sm text-gray-500">Enter the essential details for this contract.</p>
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Contract Information</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Enter the essential details for this contract.</p>
             <div className="mt-6 space-y-6">
                  <FormRow>
                     <FormField label="Contract Title" className="sm:col-span-6">
@@ -204,13 +222,13 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
                     </FormField>
                     {data.frequency === ContractFrequency.SEASONAL && (
                         <div className="sm:col-span-6">
-                            <label className="block text-sm font-medium leading-6 text-gray-900">Active Months</label>
-                             <p className="text-sm text-gray-500">Select the months within the contract period that are considered active.</p>
+                            <label className="block text-sm font-medium leading-6 text-gray-900 dark:text-gray-100">Active Months</label>
+                             <p className="text-sm text-gray-500 dark:text-gray-400">Select the months within the contract period that are considered active.</p>
                             {availableMonthsByYear.length > 0 ? (
                                 <div className="mt-2 space-y-4">
                                     {availableMonthsByYear.map(({ year, months }) => (
                                         <div key={year}>
-                                            <p className="text-sm font-semibold text-gray-700">{year}</p>
+                                            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{year}</p>
                                             <div className="mt-2 grid grid-cols-4 sm:grid-cols-6 gap-2">
                                                 {months.map(month => {
                                                     const monthIndex = MONTHS.indexOf(month);
@@ -223,8 +241,8 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
                                                             onClick={() => onToggleMonth(monthYearKey)}
                                                             className={`rounded-md px-3 py-2 text-sm font-semibold shadow-sm transition-colors ${
                                                                 isSelected
-                                                                    ? 'bg-primary text-white hover:bg-primary-500'
-                                                                    : 'bg-white text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50'
+                                                                    ? 'bg-primary text-primary-900'
+                                                                    : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200 ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
                                                             }`}
                                                         >
                                                             {month}
@@ -236,14 +254,42 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
                                     ))}
                                 </div>
                             ) : (
-                                <p className="mt-2 text-sm text-gray-500">Please set a valid Effective and End Date to select active months.</p>
+                                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Please set a valid Effective and End Date to select active months.</p>
                             )}
                         </div>
                     )}
                 </FormRow>
+                <div className="sm:col-span-6">
+                    <div className="flex justify-between items-center mb-2">
+                        <label htmlFor="contract-content" className="block text-sm font-medium leading-6 text-gray-900 dark:text-gray-100">
+                            Contract Document
+                        </label>
+                        <button
+                            type="button"
+                            onClick={handleDraftWithAI}
+                            disabled={isDrafting}
+                            className="flex items-center px-3 py-1.5 text-xs font-semibold text-primary-800 dark:text-primary-200 bg-primary-100 dark:bg-primary-900/40 rounded-md hover:bg-primary-200 disabled:opacity-50 disabled:cursor-wait"
+                        >
+                            {isDrafting ? (
+                                <LoaderIcon className="w-4 h-4 mr-1.5" />
+                            ) : (
+                                <SparklesIcon className="w-4 h-4 mr-1.5" />
+                            )}
+                            {isDrafting ? 'Drafting...' : 'Draft with AI'}
+                        </button>
+                    </div>
+                    <textarea
+                        id="contract-content"
+                        value={data.content}
+                        onChange={(e) => setData('content', e.target.value)}
+                        rows={15}
+                        className="block w-full rounded-md border-0 py-1.5 px-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 placeholder:text-[#9ca3af] dark:placeholder-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6 font-mono text-xs"
+                        placeholder="Paste contract text here or use AI to draft..."
+                    />
+                </div>
             </div>
             <div className="mt-8 flex justify-between">
-                <button onClick={onBack} type="button" className="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Back</button>
+                <button onClick={onBack} type="button" className="rounded-md bg-white dark:bg-gray-700 px-3.5 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-200 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600">Back</button>
                 <button 
                     onClick={onNext} 
                     type="button"
@@ -483,27 +529,27 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
 
     return (
         <div>
-            <h2 className="text-lg font-semibold text-gray-800">Property & Cost Allocation</h2>
-            <p className="mt-1 text-sm text-gray-500">Specify the financial details and associate properties.</p>
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Property & Cost Allocation</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Specify the financial details and associate properties.</p>
             <div className="mt-6 space-y-6">
                 <FormField label="Total Contract Value (USD)" className="sm:col-span-3">
                     <div className="relative rounded-md shadow-sm">
                         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div>
-                        <input type="number" value={data.value} onChange={e => setData('value', Number(e.target.value))} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 pr-12 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-[#9ca3af] focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" placeholder="0.00" />
+                        <input type="number" value={data.value} onChange={e => setData('value', Number(e.target.value))} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 pr-12 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ring-1 ring-inset ring-gray-300 dark:ring-gray-600 placeholder:text-[#9ca3af] focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" placeholder="0.00" />
                         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3"><span className="text-gray-500 sm:text-sm">USD</span></div>
                     </div>
                 </FormField>
 
                 <div className="sm:col-span-6">
-                    <label className="block text-sm font-medium leading-6 text-gray-900">Allocation Type</label>
+                    <label className="block text-sm font-medium leading-6 text-gray-900 dark:text-gray-100">Allocation Type</label>
                     <fieldset className="mt-2">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             {(['Property-specific Contract', 'Multi-property Contract', 'Portfolio-wide Contract'] as const).map((label, idx) => {
                                 const type = (['single', 'multi', 'portfolio'] as const)[idx];
                                 return (
-                                <label key={type} className={`relative flex cursor-pointer rounded-lg border bg-white p-4 shadow-sm focus:outline-none ${allocationType === type ? 'border-primary ring-2 ring-primary' : 'border-gray-300'}`}>
+                                <label key={type} className={`relative flex cursor-pointer rounded-lg border bg-white dark:bg-gray-700 p-4 shadow-sm focus:outline-none ${allocationType === type ? 'border-primary ring-2 ring-primary' : 'border-gray-300 dark:border-gray-600'}`}>
                                     <input type="radio" name="allocation-type" value={type} className="sr-only" checked={allocationType === type} onChange={(e) => setAllocationType(e.target.value as AllocationType)} />
-                                    <span className="flex flex-1"><span className="flex flex-col"><span className="block text-sm font-medium text-gray-900">{label}</span></span></span>
+                                    <span className="flex flex-1"><span className="flex flex-col"><span className="block text-sm font-medium text-gray-900 dark:text-gray-100">{label}</span></span></span>
                                 </label>
                                 );
                             })}
@@ -523,19 +569,19 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                         {multiAllocations.map((alloc: any, index: number) => (
                             <div key={alloc.id} className="grid grid-cols-12 gap-x-4 items-center">
                                 <div className="col-span-6"><SelectInput value={alloc.propertyId} onChange={e => handleAllocationChange(alloc.id, 'propertyId', e.target.value)}><option value="">Select property...</option>{properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}</SelectInput></div>
-                                <div className="col-span-5"><div className="relative rounded-md shadow-sm"><div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div><input type="number" value={alloc.allocatedValue} onChange={e => handleAllocationChange(alloc.id, 'allocatedValue', e.target.value)} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm"/></div></div>
+                                <div className="col-span-5"><div className="relative rounded-md shadow-sm"><div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div><input type="number" value={alloc.allocatedValue} onChange={e => handleAllocationChange(alloc.id, 'allocatedValue', e.target.value)} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ring-1 ring-inset ring-gray-300 dark:ring-gray-600 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm"/></div></div>
                                 <div className="col-span-1">{multiAllocations.length > 1 && <button type="button" onClick={() => handleDeleteRow(alloc.id)} className="text-gray-400 hover:text-red-600"><Trash2Icon className="w-5 h-5"/></button>}</div>
                             </div>
                         ))}
                         <div className="flex justify-between items-center pt-2">
-                            <button type="button" onClick={handleAddRow} className="flex items-center text-sm font-semibold text-primary hover:text-primary-600"><PlusIcon className="w-4 h-4 mr-1"/> Add Property</button>
+                            <button type="button" onClick={handleAddRow} className="flex items-center text-sm font-semibold text-primary dark:text-primary-400 hover:text-primary-600 dark:hover:text-primary-300"><PlusIcon className="w-4 h-4 mr-1"/> Add Property</button>
                             <div className="flex items-center space-x-4">
-                                <button onClick={handleCalculateAllocation} type="button" className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
+                                <button onClick={handleCalculateAllocation} type="button" className="rounded-md bg-white dark:bg-gray-700 px-3 py-2 text-sm font-semibold text-gray-900 dark:text-gray-200 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600">
                                     Calculate Allocation
                                 </button>
                                 <div className="text-sm font-medium">
                                     <span className={remainingValue.toFixed(2) !== '0.00' ? 'text-red-600' : 'text-green-600'}>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(remainingValue)}</span>
-                                    <span className="text-gray-600"> unallocated</span>
+                                    <span className="text-gray-600 dark:text-gray-400"> unallocated</span>
                                 </div>
                             </div>
                         </div>
@@ -546,20 +592,20 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                     <div className="sm:col-span-6 space-y-4">
                         <div className="overflow-x-auto">
                             <table className="min-w-full">
-                                <thead className="bg-gray-50">
+                                <thead className="bg-gray-50 dark:bg-gray-700/50">
                                     <tr>
-                                        <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{allocationType !== 'portfolio' ? 'Property' : 'Allocation'}</th>
+                                        <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{allocationType !== 'portfolio' ? 'Property' : 'Allocation'}</th>
                                         {data.seasonalMonths.map((monthYear: string) => {
                                              const [year, month] = monthYear.split('-');
                                              const monthName = MONTHS[parseInt(month, 10) - 1];
-                                            return <th key={monthYear} className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-36">{`${monthName} ${year}`}</th>
+                                            return <th key={monthYear} className="py-2 px-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-36">{`${monthName} ${year}`}</th>
                                         })}
                                         {allocationType === 'multi' && <th className="w-10"></th>}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {seasonalAllocations.map(alloc => (
-                                        <tr key={alloc.id} className="border-b">
+                                        <tr key={alloc.id} className="border-b dark:border-gray-700">
                                             <td className="py-2 px-3">
                                                 {allocationType === 'single' ? 
                                                     (<SelectInput value={singlePropertyId} onChange={e => setSinglePropertyId(e.target.value)}>
@@ -567,14 +613,14 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                                                     </SelectInput>) :
                                                 allocationType === 'multi' ?
                                                     (<SelectInput value={alloc.propertyId} onChange={e => handleAllocationChange(alloc.id, 'propertyId', e.target.value)}>{properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}</SelectInput>) :
-                                                    (<span className="text-sm font-medium text-gray-700">Portfolio-wide</span>)
+                                                    (<span className="text-sm font-medium text-gray-700 dark:text-gray-300">Portfolio-wide</span>)
                                                 }
                                             </td>
                                             {data.seasonalMonths.map((monthYear: string) => (
                                                 <td key={monthYear} className="py-2 px-3">
                                                      <div className="relative rounded-md shadow-sm">
                                                         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div>
-                                                        <input type="number" value={alloc.monthlyValues[monthYear] || ''} onChange={e => handleAllocationChange(alloc.id, monthYear, e.target.value)} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 bg-white text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm"/>
+                                                        <input type="number" value={alloc.monthlyValues[monthYear] || ''} onChange={e => handleAllocationChange(alloc.id, monthYear, e.target.value)} className="no-spinner block w-full rounded-md border-0 py-1.5 pl-7 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ring-1 ring-inset ring-gray-300 dark:ring-gray-600 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm"/>
                                                     </div>
                                                 </td>
                                             ))}
@@ -586,13 +632,13 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                         </div>
                         <div className="flex justify-between items-center pt-2">
                             <div>
-                                {allocationType === 'multi' && <button type="button" onClick={handleAddRow} className="flex items-center text-sm font-semibold text-primary hover:text-primary-600"><PlusIcon className="w-4 h-4 mr-1"/> Add Property</button>}
+                                {allocationType === 'multi' && <button type="button" onClick={handleAddRow} className="flex items-center text-sm font-semibold text-primary dark:text-primary-400 hover:text-primary-600 dark:hover:text-primary-300"><PlusIcon className="w-4 h-4 mr-1"/> Add Property</button>}
                             </div>
                             <div className="flex items-center space-x-4">
-                                <button onClick={handleCalculateAllocation} type="button" className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Calculate Allocation</button>
+                                <button onClick={handleCalculateAllocation} type="button" className="rounded-md bg-white dark:bg-gray-700 px-3 py-2 text-sm font-semibold text-gray-900 dark:text-gray-200 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600">Calculate Allocation</button>
                                 <div className="text-sm font-medium">
                                     <span className={remainingValue.toFixed(2) !== '0.00' ? 'text-red-600' : 'text-green-600'}>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(remainingValue)}</span>
-                                    <span className="text-gray-600"> unallocated</span>
+                                    <span className="text-gray-600 dark:text-gray-400"> unallocated</span>
                                 </div>
                             </div>
                         </div>
@@ -600,7 +646,7 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                 )}
             </div>
             <div className="mt-8 flex justify-between">
-                <button onClick={onBack} type="button" className="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Back</button>
+                <button onClick={onBack} type="button" className="rounded-md bg-white dark:bg-gray-700 px-3.5 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-200 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600">Back</button>
                 <button 
                     onClick={handleProceed} 
                     type="button" 
@@ -614,9 +660,9 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
 };
 
 const SummaryItem = ({ label, value }: { label: string; value: React.ReactNode }) => (
-    <div className="flex flex-col rounded-lg bg-gray-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <dt className="text-sm font-medium text-gray-500">{label}</dt>
-        <dd className="mt-1 text-sm font-semibold text-gray-900 sm:mt-0 text-right">{value}</dd>
+    <div className="flex flex-col rounded-lg bg-gray-50 dark:bg-gray-700/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">{label}</dt>
+        <dd className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100 sm:mt-0 text-right">{value}</dd>
     </div>
 );
 
@@ -638,8 +684,8 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
         
     return (
         <div>
-            <h2 className="text-lg font-semibold text-gray-800">Summary</h2>
-            <p className="mt-1 text-sm text-gray-500">Please review the details below before creating the contract draft.</p>
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Summary</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Please review the details below before creating the contract draft.</p>
             <dl className="mt-6 space-y-3">
                 {data.fileName && <SummaryItem label="Uploaded Document" value={data.fileName} />}
                 <SummaryItem label="Contract Title" value={data.title} />
@@ -654,7 +700,7 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
                 <SummaryItem label="Frequency" value={frequencyDisplay} />
             </dl>
             <div className="mt-8 flex justify-between">
-                <button onClick={onBack} type="button" className="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Back</button>
+                <button onClick={onBack} type="button" className="rounded-md bg-white dark:bg-gray-700 px-3.5 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-200 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600">Back</button>
                 <button onClick={onFinish} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Create Contract</button>
             </div>
         </div>
@@ -846,16 +892,16 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
 
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
             <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-                <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-4xl">
+                <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-4xl">
                     <div className="absolute top-0 right-0 hidden pt-4 pr-4 sm:block">
-                        <button type="button" onClick={onCancel} className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
+                        <button type="button" onClick={onCancel} className="rounded-md bg-white dark:bg-gray-800 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
                             <span className="sr-only">Close</span>
                             <XIcon className="h-6 w-6" aria-hidden="true" />
                         </button>
                     </div>
                     <div className="p-6 sm:p-8">
                         <div className="mb-8">
-                           <h3 className="text-xl font-bold leading-6 text-gray-900" id="modal-title">Create New Contract</h3>
+                           <h3 className="text-xl font-bold leading-6 text-gray-900 dark:text-gray-100" id="modal-title">Create New Contract</h3>
                            <div className="mt-4">
                                <ProgressBar currentStep={currentStep} />
                            </div>

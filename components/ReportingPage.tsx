@@ -154,6 +154,100 @@ const ValueByCounterpartyReport = () => {
     );
 };
 
+const calculateDuration = (start: string | undefined, end: string | undefined) => {
+    if (!start || !end) return null;
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || endDate < startDate) return null;
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays === 0 ? 1 : diffDays; // Minimum 1 day
+};
+
+const LifecycleDurationReport = () => {
+    const { contracts } = useAppContext();
+
+    const data = useMemo(() => {
+        const stageData: { [key: string]: { totalDays: number; count: number } } = {
+            'Draft': { totalDays: 0, count: 0 },
+            'In Review': { totalDays: 0, count: 0 },
+            'Pending Approval': { totalDays: 0, count: 0 },
+            'Signing': { totalDays: 0, count: 0 },
+            'Activation': { totalDays: 0, count: 0 },
+        };
+        
+        contracts.forEach(contract => {
+            const firstVersion = contract.versions[0];
+            if (!firstVersion) return;
+            const createdAt = firstVersion.createdAt;
+            let duration;
+
+            duration = calculateDuration(createdAt, contract.submittedAt);
+            if (duration !== null) {
+                stageData['Draft'].totalDays += duration;
+                stageData['Draft'].count++;
+            }
+
+            duration = calculateDuration(contract.reviewStartedAt, contract.approvalStartedAt);
+            if (duration !== null) {
+                stageData['In Review'].totalDays += duration;
+                stageData['In Review'].count++;
+            }
+            
+            duration = calculateDuration(contract.approvalStartedAt, contract.approvalCompletedAt);
+            if (duration !== null) {
+                stageData['Pending Approval'].totalDays += duration;
+                stageData['Pending Approval'].count++;
+            }
+
+            duration = calculateDuration(contract.sentForSignatureAt, contract.executedAt);
+            if (duration !== null) {
+                stageData['Signing'].totalDays += duration;
+                stageData['Signing'].count++;
+            }
+
+            duration = calculateDuration(contract.executedAt, contract.activeAt);
+            if (duration !== null) {
+                stageData['Activation'].totalDays += duration;
+                stageData['Activation'].count++;
+            }
+        });
+
+        return Object.entries(stageData).map(([stage, { totalDays, count }]) => ({
+            'Stage': stage,
+            'Average Duration (Days)': count > 0 ? (totalDays / count).toFixed(1) : 'N/A',
+            'Number of Contracts': count,
+        }));
+
+    }, [contracts]);
+    
+    return (
+        <ReportWrapper title="Average Lifecycle Stage Duration" onExport={() => exportToCsv('lifecycle_duration', data)} dataExists={data.some(d => d['Number of Contracts'] > 0)}>
+            <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-700/50">
+                        <tr>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase">Stage</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase">Average Duration (Days)</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase">Contracts Analyzed</th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                       {data.map((row) => (
+                           <tr key={row.Stage}>
+                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{row.Stage}</td>
+                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 dark:text-gray-200">{row['Average Duration (Days)']}</td>
+                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{row['Number of Contracts']}</td>
+                           </tr>
+                       ))}
+                    </tbody>
+                </table>
+            </div>
+        </ReportWrapper>
+    );
+};
+
+
 const PlaceholderReport = ({ title }: { title: string }) => (
     <ReportWrapper title={title} onExport={() => {}} dataExists={false}>
         <div className="text-center py-12">
@@ -175,6 +269,7 @@ export default function ReportingPage() {
             case 'value_by_counterparty':
                 return <ValueByCounterpartyReport />;
             case 'lifecycle_duration':
+                return <LifecycleDurationReport />;
             case 'clause_analysis':
                 return <PlaceholderReport title={activeReport.title} />;
             default:
