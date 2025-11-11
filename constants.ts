@@ -1,6 +1,6 @@
 
 
-import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet, UserNotificationSettings, CounterpartyType, AllocationType, RenewalStatus, AutoRenewType, ReviewChecklistItem, SigningStatus } from './types';
+import { Contract, ContractStatus, ContractType, RiskLevel, ApprovalStatus, ContractTemplate, ContractFrequency, ContractVersion, Role, UserProfile as FullUserProfile, NotificationSetting, PermissionSet, UserNotificationSettings, CounterpartyType, AllocationType, RenewalStatus, AutoRenewType, ReviewChecklistItem, SigningStatus, ReportConfiguration } from './types';
 import type { UserProfile, Counterparty, Property } from './types';
 
 export const STATUS_COLORS: Record<ContractStatus, string> = {
@@ -302,4 +302,31 @@ export const MOCK_REVIEW_CHECKLIST: ReviewChecklistItem[] = [
     { id: 'chk-5', text: 'Update any references to personnel, locations, or regulations.', isCompleted: false },
     { id: 'chk-6', text: 'Incorporate any new standard clauses (e.g., Data Privacy, ESG).', isCompleted: false },
     { id: 'chk-7', text: 'Secure internal approvals from all required stakeholders.', isCompleted: false },
+];
+
+export const PREBUILT_REPORTS: ReportConfiguration[] = [
+    {
+        id: 'expiring_by_quarter',
+        type: 'expiring_by_quarter',
+        title: 'Contracts Expiring by Quarter',
+        description: 'View active contracts grouped by their expiration quarter and business owner.'
+    },
+    {
+        id: 'value_by_counterparty',
+        type: 'value_by_counterparty',
+        title: 'Total Value by Counterparty Type',
+        description: 'Analyze the total contract value aggregated by the type of counterparty (e.g., Vendor, Customer).'
+    },
+    {
+        id: 'lifecycle_duration',
+        type: 'lifecycle_duration',
+        title: 'Average Lifecycle Stage Duration',
+        description: 'Measure the average time contracts spend in key lifecycle stages like "In Review" or "Pending Approval".'
+    },
+    {
+        id: 'clause_analysis',
+        type: 'clause_analysis',
+        title: 'AI Clause Analysis (Coming Soon)',
+        description: 'Use Gemini to find high-risk contracts that are missing a specific clause, like "Data Privacy".'
+    }
 ];

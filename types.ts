@@ -336,3 +336,10 @@ export interface SearchResult {
   versionNumber: number;
   snippet: string;
 }
+
+export interface ReportConfiguration {
+  id: string;
+  type: 'expiring_by_quarter' | 'value_by_counterparty' | 'lifecycle_duration' | 'clause_analysis';
+  title: string;
+  description: string;
+}

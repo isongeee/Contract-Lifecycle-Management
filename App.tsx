@@ -1,6 +1,7 @@
 
 
 
+
 import React from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -28,6 +29,7 @@ import { LoaderIcon, AlertTriangleIcon } from './components/icons';
 import AddUserModal from './components/AddUserModal';
 import { useAppContext } from './contexts/AppContext';
 import SearchResultsPage from './components/SearchResultsPage';
+import ReportingPage from './components/ReportingPage';
 
 
 export default function App() {
@@ -113,6 +115,7 @@ export default function App() {
         notificationSettings={userNotificationSettings}
         onUpdateNotificationSettings={setUserNotificationSettings}
       />;
+      case 'reporting': return <ReportingPage />;
       case 'approvals': return <ApprovalsPage />;
       // FIX: Pass required props to SigningPage component.
       case 'signing': return <SigningPage

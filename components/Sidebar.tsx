@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboardIcon, FileTextIcon, UsersIcon, BookTextIcon, CheckCircleIcon, SettingsIcon, HomeIcon, BuildingOfficeIcon, UserIcon, RefreshCwIcon, PenSquareIcon } from './icons';
+import { LayoutDashboardIcon, FileTextIcon, UsersIcon, BookTextIcon, CheckCircleIcon, SettingsIcon, HomeIcon, BuildingOfficeIcon, UserIcon, RefreshCwIcon, PenSquareIcon, BarChartIcon } from './icons';
 import { useAppContext } from '../contexts/AppContext';
 
 const NavItem: React.FC<{ icon: React.ReactNode; label: string; active?: boolean; onClick: () => void; }> = ({ icon, label, active = false, onClick }) => (
@@ -20,6 +20,7 @@ const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboardIcon className="h-5 w-5" /> },
     { id: 'contracts', label: 'Contracts', icon: <FileTextIcon className="h-5 w-5" /> },
     { id: 'renewals', label: 'Renewals', icon: <RefreshCwIcon className="h-5 w-5" /> },
+    { id: 'reporting', label: 'Reporting', icon: <BarChartIcon className="h-5 w-5" /> },
     { id: 'counterparties', label: 'Counterparties', icon: <UsersIcon className="h-5 w-5" /> },
     { id: 'properties', label: 'Properties', icon: <HomeIcon className="h-5 w-5" /> },
     { id: 'templates', label: 'Templates', icon: <BookTextIcon className="h-5 w-5" /> },
