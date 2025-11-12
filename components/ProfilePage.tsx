@@ -1,8 +1,10 @@
-
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import type { UserProfile, UserNotificationSettings } from '../types';
 import { SunIcon, MoonIcon, MonitorIcon, UserIcon, SlidersHorizontalIcon, BellIcon, KeyRoundIcon, EditIcon } from './icons';
 import ToggleSwitch from './ToggleSwitch';
+import { useAppContext } from '../contexts/AppContext';
+import ChangePasswordModal from './ChangePasswordModal';
+import TwoFactorAuthModal from './TwoFactorAuthModal';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -152,22 +154,57 @@ const NotificationsTab = ({ settings, setSettings }: { settings: UserNotificatio
     )
 };
 
-const SecurityTab = () => (
-    <SectionCard title="Security" description="Manage your password and account security settings.">
-        <div>
-             <h4 className="text-md font-semibold text-gray-800 dark:text-gray-200">Password</h4>
-             <button className="mt-2 text-sm font-semibold text-primary-600 hover:text-primary-700">Change password</button>
-        </div>
-        <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
-             <h4 className="text-md font-semibold text-gray-800 dark:text-gray-200">Two-Factor Authentication</h4>
-             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Add an extra layer of security to your account.</p>
-             <button className="mt-2 text-sm font-semibold text-primary-600 hover:text-primary-700">Enable 2FA</button>
-        </div>
-    </SectionCard>
-);
+const SecurityTab = ({ onOpenChangePassword, onOpen2faModal }: { onOpenChangePassword: () => void; onOpen2faModal: () => void; }) => {
+    const { mfaFactors, handleUnenrollMFA } = useAppContext();
+    const is2faEnabled = mfaFactors.some(f => f.status === 'verified');
+
+    const handle2faToggle = async () => {
+        if (is2faEnabled) {
+            if (window.confirm("Are you sure you want to disable Two-Factor Authentication?")) {
+                const verifiedFactor = mfaFactors.find(f => f.status === 'verified');
+                if (verifiedFactor) {
+                    await handleUnenrollMFA(verifiedFactor.id);
+                }
+            }
+        } else {
+            onOpen2faModal();
+        }
+    };
+
+    return (
+        <SectionCard title="Security" description="Manage your password and account security settings.">
+            <div>
+                 <h4 className="text-md font-semibold text-gray-800 dark:text-gray-200">Password</h4>
+                 <button onClick={onOpenChangePassword} className="mt-2 text-sm font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300">Change password</button>
+            </div>
+            <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
+                 <h4 className="text-md font-semibold text-gray-800 dark:text-gray-200">Two-Factor Authentication</h4>
+                 <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    {is2faEnabled 
+                        ? "2FA is currently enabled for your account." 
+                        : "Add an extra layer of security to your account."
+                    }
+                </p>
+                 <button onClick={handle2faToggle} className={`mt-2 text-sm font-semibold ${is2faEnabled ? 'text-red-600 hover:text-red-700' : 'text-primary-600 hover:text-primary-700'}`}>
+                    {is2faEnabled ? 'Disable 2FA' : 'Enable 2FA'}
+                </button>
+            </div>
+        </SectionCard>
+    );
+};
 
 export default function ProfilePage(props: ProfilePageProps) {
+  const { handleAvatarUpload } = useAppContext();
   const [activeTab, setActiveTab] = useState('personal');
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [is2faModalOpen, setIs2faModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          await handleAvatarUpload(e.target.files[0]);
+      }
+  };
   
   const tabs = [
     { id: 'personal', label: 'Personal Information', icon: <UserIcon className="w-5 h-5" /> },
@@ -181,7 +218,7 @@ export default function ProfilePage(props: ProfilePageProps) {
         case 'personal': return <PersonalInfoTab user={props.currentUser} />;
         case 'preferences': return <PreferencesTab theme={props.theme} onThemeChange={props.onThemeChange} />;
         case 'notifications': return <NotificationsTab settings={props.notificationSettings} setSettings={props.setNotificationSettings}/>;
-        case 'security': return <SecurityTab />;
+        case 'security': return <SecurityTab onOpenChangePassword={() => setIsChangePasswordOpen(true)} onOpen2faModal={() => setIs2faModalOpen(true)} />;
         default: return null;
     }
   };
@@ -189,10 +226,15 @@ export default function ProfilePage(props: ProfilePageProps) {
   return (
     <div className="space-y-6">
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 flex items-center space-x-5">
-        <div className="relative">
-            <img className="h-20 w-20 rounded-full" src={props.currentUser.avatarUrl} alt="" />
-            <button className="absolute -bottom-1 -right-1 bg-white dark:bg-gray-700 rounded-full p-1 border border-gray-200 dark:border-gray-600 hover:bg-gray-100">
-                <EditIcon className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+        <div className="relative group flex-shrink-0">
+            <img className="h-20 w-20 rounded-full object-cover" src={props.currentUser.avatarUrl} alt="Your profile picture" />
+            <input type="file" ref={fileInputRef} onChange={handleAvatarChange} className="hidden" accept="image/png, image/jpeg" />
+            <button 
+                onClick={() => fileInputRef.current?.click()} 
+                className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all rounded-full flex items-center justify-center cursor-pointer"
+                aria-label="Change profile picture"
+            >
+                <EditIcon className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
         </div>
         <div>
@@ -219,6 +261,8 @@ export default function ProfilePage(props: ProfilePageProps) {
             {renderContent()}
         </div>
       </div>
+      {isChangePasswordOpen && <ChangePasswordModal onClose={() => setIsChangePasswordOpen(false)} />}
+      {is2faModalOpen && <TwoFactorAuthModal onClose={() => setIs2faModalOpen(false)} />}
     </div>
   );
 }

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType, PermissionSet, AuditLog, RenewalRequest, RenewalStatus, SigningStatus, Notification, Comment, RenewalFeedback, SearchResult } from '../types';
 import { ContractStatus, RiskLevel, ApprovalStatus, RenewalStatus as RenewalStatusEnum, RenewalMode, SigningStatus as SigningStatusEnum } from '../types';
@@ -19,6 +18,12 @@ export interface AppContextType {
     setAuthView: React.Dispatch<React.SetStateAction<'login' | 'org-signup' | 'user-signup'>>;
     handleLogin: () => void;
     handleLogout: () => Promise<void>;
+    mfaFactors: any[];
+    handleAvatarUpload: (file: File) => Promise<void>;
+    handleChangePassword: (newPassword: string) => Promise<{ error: Error | null }>;
+    handleEnrollMFA: () => Promise<any>;
+    handleVerifyMFA: (factorId: string, code: string) => Promise<any>;
+    handleUnenrollMFA: (factorId: string) => Promise<any>;
 
     // UI State
     isLoading: boolean;
@@ -160,6 +165,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   const [company, setCompany] = useState<{ id: string; name: string; slug: string; } | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authView, setAuthView] = useState<'login' | 'org-signup' | 'user-signup'>('login');
+  const [mfaFactors, setMfaFactors] = useState<any[]>([]);
 
   // Global Search State
   const [isPerformingGlobalSearch, setIsPerformingGlobalSearch] = useState(false);
@@ -207,6 +213,18 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
 
     return () => subscription.unsubscribe();
   }, []);
+  
+  useEffect(() => {
+    const fetchMfaStatus = async () => {
+        if (currentUser) {
+            const { data: mfaData } = await supabase.auth.mfa.listFactors();
+            if (mfaData) {
+                setMfaFactors(mfaData.all);
+            }
+        }
+    };
+    fetchMfaStatus();
+  }, [currentUser]);
 
 
   const fetchData = useCallback(async (user: UserProfile) => {
@@ -1467,8 +1485,77 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     setIsPerformingGlobalSearch(false);
   }, [currentUser]);
 
+  const handleAvatarUpload = async (file: File) => {
+    if (!currentUser) return;
+
+    const filePath = `public/${currentUser.id}/${Date.now()}-${file.name}`;
+    const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file);
+
+    if (uploadError) {
+        console.error('Error uploading avatar:', uploadError);
+        alert('Failed to upload avatar.');
+        return;
+    }
+
+    const { data: urlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+    
+    const newAvatarUrl = urlData.publicUrl;
+
+    const { error: updateError } = await supabase
+        .from('users')
+        .update({ avatar_url: newAvatarUrl })
+        .eq('id', currentUser.id);
+
+    if (updateError) {
+        console.error('Error updating avatar URL:', updateError);
+        alert('Failed to update profile picture.');
+        return;
+    }
+    
+    setCurrentUser(prev => prev ? { ...prev, avatarUrl: newAvatarUrl } : null);
+    setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, avatarUrl: newAvatarUrl } : u));
+  };
+
+  const handleChangePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    return { error };
+  };
+
+  const refetchMfaFactors = async () => {
+    const { data } = await supabase.auth.mfa.listFactors();
+    if (data) {
+        setMfaFactors(data.all);
+    }
+  };
+
+  const handleEnrollMFA = async () => {
+    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
+    return { data, error };
+  };
+
+  const handleVerifyMFA = async (factorId: string, code: string) => {
+    const { data, error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
+    if (!error) {
+        await refetchMfaFactors();
+    }
+    return { data, error };
+  };
+
+  const handleUnenrollMFA = async (factorId: string) => {
+    const { data, error } = await supabase.auth.mfa.unenroll({ factorId });
+    if (!error) {
+        await refetchMfaFactors();
+    }
+    return { data, error };
+  };
+
     const contextValue: AppContextType = {
         session, currentUser, company, isAuthenticated, authView, setAuthView, handleLogin, handleLogout,
+        mfaFactors, handleAvatarUpload, handleChangePassword, handleEnrollMFA, handleVerifyMFA, handleUnenrollMFA,
         isLoading, activeView, theme, handleThemeChange, handleNavigate, handleMetricNavigation,
         contracts, templates, counterparties, properties, users, roles, notifications, notificationSettings, userNotificationSettings, unreadCount,
         selectedContract, selectedTemplate, selectedCounterparty, selectedProperty, initialFilters,
