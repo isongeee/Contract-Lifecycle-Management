@@ -542,11 +542,15 @@ const SigningProgressWidget = ({ contract, onUpdateSigningStatus, onMarkAsExecut
 
 const daysUntil = (dateStr: string) => {
     if (!dateStr) return Infinity;
+    // Get today's date at midnight UTC to ensure consistent comparison
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const endDate = new Date(dateStr);
-    endDate.setHours(0, 0, 0, 0);
-    const diffTime = endDate.getTime() - today.getTime();
+    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    
+    // Parse the YYYY-MM-DD string as midnight UTC
+    const targetDate = new Date(dateStr + 'T00:00:00Z');
+    if (isNaN(targetDate.getTime())) return Infinity;
+    
+    const diffTime = targetDate.getTime() - todayUTC.getTime();
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
@@ -566,6 +570,17 @@ export default function ContractDetail({ contract: initialContract, contracts, p
   const [viewedVersionId, setViewedVersionId] = useState<string | null>(
     initialContract.versions.length > 0 ? initialContract.versions[initialContract.versions.length - 1].id : null
   );
+  
+  const latestVersion = useMemo(() => 
+    contract.versions.length > 0 ? contract.versions[contract.versions.length - 1] : null
+  , [contract.versions]);
+    
+  const viewedVersion = useMemo(() => 
+    contract.versions.find(v => v.id === viewedVersionId) || latestVersion
+  , [contract.versions, viewedVersionId, latestVersion]);
+
+  const [editedContent, setEditedContent] = useState(viewedVersion?.content || '');
+  const [isDirty, setIsDirty] = useState(false);
 
   const canInitiateRenewal = (
     (contract.status === ContractStatus.EXPIRED || 
@@ -586,13 +601,13 @@ export default function ContractDetail({ contract: initialContract, contracts, p
     setCompareSelection([]);
   }, [initialContract]);
 
-  const latestVersion = useMemo(() => 
-    contract.versions.length > 0 ? contract.versions[contract.versions.length - 1] : null
-  , [contract.versions]);
-    
-  const viewedVersion = useMemo(() => 
-    contract.versions.find(v => v.id === viewedVersionId) || latestVersion
-  , [contract.versions, viewedVersionId, latestVersion]);
+  useEffect(() => {
+    if (viewedVersion) {
+        setEditedContent(viewedVersion.content);
+        setIsDirty(false);
+    }
+  }, [viewedVersion]);
+
 
   const handleSaveNewVersion = (newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => {
     onCreateNewVersion(contract.id, newVersionData);
@@ -626,6 +641,29 @@ export default function ContractDetail({ contract: initialContract, contracts, p
         </div>
     );
   }
+  
+  const canEditContent = [ContractStatus.DRAFT, ContractStatus.IN_REVIEW].includes(contract.status);
+
+  const handleCancelEdit = () => {
+    setEditedContent(viewedVersion.content);
+    setIsDirty(false);
+  };
+
+  const handleSaveChanges = () => {
+    if (!isDirty || !canEditContent) return;
+    
+    // Destructure to get a clean base object, excluding fields that should be regenerated.
+    const { id, versionNumber, createdAt, author, comments, ...baseVersionData } = viewedVersion;
+    
+    const newVersionData = {
+      ...baseVersionData,
+      content: editedContent, // Use the edited content
+    };
+
+    onCreateNewVersion(contract.id, newVersionData);
+    setIsDirty(false);
+  };
+
 
   const handleRequestTransition = (action: ContractAction, payload?: any) => {
     setConfirmModalState({ isOpen: true, action, payload });
@@ -641,19 +679,24 @@ export default function ContractDetail({ contract: initialContract, contracts, p
 
   const handleSummarizeRisk = useCallback(async () => {
     setIsLoadingSummary(true);
-    const summary = await summarizeContractRisk(viewedVersion.content);
+    const summary = await summarizeContractRisk(editedContent);
     setContract(c => ({...c, riskSummary: summary, extractedClauses: undefined }));
     setIsLoadingSummary(false);
-  }, [viewedVersion.content]);
+  }, [editedContent]);
 
   const handleExtractClauses = useCallback(async () => {
     setIsLoadingClauses(true);
-    const clauses = await extractClauses(viewedVersion.content);
+    const clauses = await extractClauses(editedContent);
     setContract(c => ({...c, extractedClauses: clauses, riskSummary: undefined }));
     setIsLoadingClauses(false);
-  }, [viewedVersion.content]);
+  }, [editedContent]);
 
   const handleSelectVersion = (id: string) => {
+    if (isDirty) {
+        if (!window.confirm("You have unsaved changes. Are you sure you want to discard them and switch versions?")) {
+            return;
+        }
+    }
     setViewedVersionId(id);
     setContract(c => ({ ...c, riskSummary: undefined, extractedClauses: undefined }));
   };
@@ -799,9 +842,25 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                         <AiAnalysis onSummary={handleSummarizeRisk} onExtract={handleExtractClauses} riskSummary={contract.riskSummary} extractedClauses={contract.extractedClauses} isLoadingSummary={isLoadingSummary} isLoadingClauses={isLoadingClauses} />
                         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
                             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Contract Document (Version {viewedVersion.versionNumber})</h3>
-                            <div className="prose prose-sm max-w-none p-4 bg-gray-50 dark:bg-gray-900/50 rounded-md border dark:border-gray-700 h-96 overflow-y-auto">
-                                <pre className="whitespace-pre-wrap text-xs font-sans">{viewedVersion.content}</pre>
+                            <div className="prose prose-sm max-w-none">
+                               <textarea
+                                    value={editedContent}
+                                    onChange={(e) => {
+                                        setEditedContent(e.target.value);
+                                        setIsDirty(true);
+                                    }}
+                                    readOnly={!canEditContent}
+                                    rows={15}
+                                    className={`w-full text-xs font-mono p-4 rounded-md border dark:border-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors ${canEditContent ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-900/50 cursor-not-allowed'}`}
+                                />
                             </div>
+                            {isDirty && canEditContent && (
+                                <div className="mt-4 flex justify-end items-center space-x-3">
+                                    <p className="text-sm text-yellow-600 dark:text-yellow-400">You have unsaved changes.</p>
+                                    <button onClick={handleCancelEdit} className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                                    <button onClick={handleSaveChanges} className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700">Save as New Version</button>
+                                </div>
+                            )}
                         </div>
                     </>
                  )}
@@ -809,7 +868,7 @@ export default function ContractDetail({ contract: initialContract, contracts, p
             </div>
             <div className="xl:col-span-4 space-y-6">
                 <VersionHistory versions={contract.versions} selectedVersionId={viewedVersionId} onSelectVersion={handleSelectVersion} onCompare={handleCompare} compareSelection={compareSelection} onToggleCompareSelection={handleToggleCompareSelection}/>
-                <CommentsPanel comments={viewedVersion.comments || []} users={users} currentUser={currentUser} versionId={viewedVersion.id} contractContent={viewedVersion.content} onCreateComment={onCreateComment} onResolveComment={onResolveComment} />
+                <CommentsPanel comments={viewedVersion.comments || []} users={users} currentUser={currentUser} versionId={viewedVersion.id} contractContent={editedContent} onCreateComment={onCreateComment} onResolveComment={onResolveComment} />
             </div>
         </div>
         {isCreatingVersion && ( <CreateVersionModal contract={contract} properties={properties} onClose={() => setIsCreatingVersion(false)} onSave={handleSaveNewVersion} /> )}

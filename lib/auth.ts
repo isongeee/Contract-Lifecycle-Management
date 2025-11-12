@@ -24,65 +24,33 @@ const defaultPermissions: PermissionSet = {
 
 
 export async function orgSignUp(orgName: string, fullName: string, email: string, password: string) {
-    const slug = slugify(orgName);
-    const [firstName, ...lastNameParts] = fullName.split(' ');
-    const lastName = lastNameParts.join(' ');
+    /*
+      This function was moved to a Supabase Edge Function ('org-signup') to ensure atomicity.
+      If any step in the sign-up process fails, the entire transaction is rolled back,
+      preventing inconsistent data states (e.g., a company without a user or a user without a profile).
 
-    // 1. Ensure the hardcoded App record exists in the database to prevent foreign key errors.
-    const { error: appError } = await supabase.from('apps').upsert({
-        id: APP_ID,
-        name: 'Contract Lifecycle Management'
+      The Edge Function performs the following steps transactionally:
+      1. Slugifies the organization name.
+      2. Ensures the hardcoded App record exists.
+      3. Creates a new company record.
+      4. Signs up the new user in Supabase Auth.
+      5. Creates default 'Admin' and 'Requestor' roles for the new company.
+      6. Creates the user's profile, linking them to the company and the 'Admin' role.
+    */
+    const { data, error } = await supabase.functions.invoke('org-signup', {
+        body: { orgName, fullName, email, password },
     });
-    if (appError) {
-        console.error("Error ensuring app record exists:", appError);
-        return { user: null, session: null, error: appError };
+
+    if (error) {
+        // The error from the function might not be a Supabase AuthError,
+        // but we'll return it in a compatible structure.
+        return { user: null, session: null, error: { name: 'FunctionError', message: error.message } };
     }
-
-    // 2. Create Company, linking it to the hardcoded App ID.
-    const { data: company, error: companyError } = await supabase.from('companies').insert({ 
-        name: orgName, 
-        slug,
-        app: APP_ID 
-    }).select().single();
-    if (companyError) return { user: null, session: null, error: companyError };
-
-    // 3. Sign up user
-    const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
-    if (authError || !authData.user) return { user: null, session: null, error: authError };
-
-    // 4. Create default roles for the new company, linked to the app.
-    const { data: adminRole, error: adminRoleError } = await supabase.from('roles').insert({
-        name: 'Admin',
-        description: 'Full system access',
-        permissions: adminPermissions,
-        app_id: APP_ID,
-        company_id: company.id
-    }).select().single();
-    if (adminRoleError) return { user: null, session: null, error: adminRoleError };
     
-    await supabase.from('roles').insert({
-        name: 'Requestor',
-        description: 'Can view assigned contracts.',
-        permissions: defaultPermissions,
-        app_id: APP_ID,
-        company_id: company.id
-    });
-
-
-    // 5. Create User Profile
-    const { error: profileError } = await supabase.from('users').insert({
-        id: authData.user.id,
-        first_name: firstName,
-        last_name: lastName,
-        email: email,
-        app_id: APP_ID,
-        company_id: company.id,
-        role_id: adminRole.id,
-        avatar_url: `https://i.pravatar.cc/150?u=${authData.user.id}`,
-    });
-    if (profileError) return { user: null, session: null, error: profileError };
-
-    return { user: authData.user, session: authData.session, error: null };
+    // The edge function should return the auth data on success.
+    // The client needs to sign in separately after successful signup and email confirmation.
+    // This part of the flow remains unchanged; the user is redirected to login after seeing the confirmation alert.
+    return { user: data?.user || null, session: data?.session || null, error: null };
 }
 
 export async function userSignUp(fullName: string, email: string, password: string, inviteCode: string) {

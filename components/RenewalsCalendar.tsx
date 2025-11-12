@@ -32,17 +32,23 @@ export default function RenewalsCalendar({ contracts }: RenewalsCalendarProps) {
   
   const eventsByDay = useMemo(() => {
     const events: { [key: number]: { type: 'renewal' | 'notice', contract: Contract }[] } = {};
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
     contracts.forEach(contract => {
-        const endDate = new Date(contract.endDate);
-        if(endDate.getFullYear() === currentDate.getFullYear() && endDate.getMonth() === currentDate.getMonth()) {
-            const day = endDate.getDate() + 1; // adjust for timezone issues
+        // Handle renewal date by parsing as UTC
+        const endDate = new Date(contract.endDate + 'T00:00:00Z');
+        if(endDate.getUTCFullYear() === year && endDate.getUTCMonth() === month) {
+            const day = endDate.getUTCDate();
             if(!events[day]) events[day] = [];
             events[day].push({ type: 'renewal', contract });
         }
+        
+        // Handle notice deadline by parsing as UTC
         if(contract.renewalRequest?.noticeDeadline) {
-             const noticeDate = new Date(contract.renewalRequest.noticeDeadline);
-             if(noticeDate.getFullYear() === currentDate.getFullYear() && noticeDate.getMonth() === currentDate.getMonth()) {
-                const day = noticeDate.getDate() + 1; // adjust for timezone issues
+             const noticeDate = new Date(contract.renewalRequest.noticeDeadline + 'T00:00:00Z');
+             if(noticeDate.getUTCFullYear() === year && noticeDate.getUTCMonth() === month) {
+                const day = noticeDate.getUTCDate();
                 if(!events[day]) events[day] = [];
                 events[day].push({ type: 'notice', contract });
             }
@@ -75,8 +81,8 @@ export default function RenewalsCalendar({ contracts }: RenewalsCalendarProps) {
             <div key={day} className="p-2 h-24 bg-white dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-200">
                 <span>{day}</span>
                 <div className="flex flex-col items-center">
-                    {eventsByDay[day]?.map(event => (
-                        <EventIndicator key={`${event.contract.id}-${event.type}`} type={event.type} />
+                    {eventsByDay[day]?.map((event, index) => (
+                        <EventIndicator key={`${event.contract.id}-${event.type}-${index}`} type={event.type} />
                     ))}
                 </div>
             </div>

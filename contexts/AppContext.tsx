@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, Role, NotificationSetting, UserNotificationSettings, AllocationType, PermissionSet, AuditLog, RenewalRequest, RenewalStatus, SigningStatus, Notification, Comment, RenewalFeedback, SearchResult } from '../types';
 import { ContractStatus, RiskLevel, ApprovalStatus, RenewalStatus as RenewalStatusEnum, RenewalMode, SigningStatus as SigningStatusEnum } from '../types';
@@ -119,6 +120,14 @@ const AppContext = createContext<AppContextType | null>(null);
 
 // FIX: Made children optional to resolve typing issue where the component is used with implicit children.
 export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
+  /*
+   * DEVELOPER NOTE: Monolithic Context
+   * This AppContext has grown to manage a large amount of global state, which can lead to performance issues
+   * and unnecessary re-renders. A future architectural improvement would be to split this into smaller,
+   * more focused contexts (e.g., AuthContext, ContractsContext, UIStateContext). This would improve
+   * performance, maintainability, and separation of concerns. Data fetching could also be moved to a
+   * per-view basis to improve initial load times. For now, optimizations are focused on specific functions.
+   */
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [templates, setTemplates] = useState<ContractTemplate[]>([]);
   const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
@@ -448,8 +457,14 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
       if (!currentUser?.companyId) return;
 
       const handleDbChange = async (payload: any) => {
-          let contractId = payload.new?.contract_id || payload.old?.contract_id || payload.new?.id || payload.old?.id;
+          let contractId: string | null = payload.new?.contract_id || payload.old?.contract_id || null;
 
+          if (!contractId) {
+             if (['contracts', 'renewal_requests', 'audit_logs'].includes(payload.table)) {
+                contractId = payload.new?.id || payload.old?.id || payload.new?.related_entity_id || payload.old?.related_entity_id;
+             }
+          }
+          
           if (payload.table === 'comments') {
               const versionId = payload.new?.version_id || payload.old?.version_id;
               if (versionId) {
@@ -464,6 +479,42 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
               }
           }
           
+          if (payload.table === 'comments' && payload.eventType === 'INSERT' && contractId) {
+              const newCommentRecord = payload.new;
+              setContracts(prevContracts => {
+                  return prevContracts.map(c => {
+                      if (c.id === contractId) {
+                          const newVersions = c.versions.map(v => {
+                              if (v.id === newCommentRecord.version_id) {
+                                  const author = usersMap.get(newCommentRecord.author_id);
+                                  if (!author) return v;
+
+                                  const newComment: Comment = {
+                                      id: newCommentRecord.id,
+                                      createdAt: newCommentRecord.created_at,
+                                      content: newCommentRecord.content,
+                                      author: author,
+                                      resolvedAt: newCommentRecord.resolved_at,
+                                      versionId: newCommentRecord.version_id,
+                                  };
+                                  
+                                  if (v.comments?.some(existing => existing.id === newComment.id)) {
+                                      return v;
+                                  }
+                                  
+                                  const updatedComments = [...(v.comments || []), newComment];
+                                  return { ...v, comments: updatedComments };
+                              }
+                              return v;
+                          });
+                          return { ...c, versions: newVersions };
+                      }
+                      return c;
+                  });
+              });
+              return;
+          }
+
           if (contractId) {
               if (payload.table === 'contracts' && payload.eventType === 'DELETE') {
                   setContracts(prev => prev.filter(c => c.id !== contractId));
@@ -486,7 +537,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
       return () => {
           subscriptions.forEach(sub => sub.unsubscribe());
       };
-  }, [currentUser, fetchAndMergeContract]);
+  }, [currentUser, fetchAndMergeContract, usersMap]);
 
   useEffect(() => {
     if (selectedContract) {
@@ -871,35 +922,54 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   };
 
   const handleRenewalDecision = async (renewalRequestId: string, mode: RenewalMode, notes?: string) => {
-      if (!currentUser) return;
-
-      if (mode === RenewalMode.NEW_CONTRACT || mode === RenewalMode.RENEW_AS_IS) {
-          console.error("handleRenewalDecision should not be called for 'new_contract' or 'renew_as_is'.");
-          return;
+    if (!currentUser) return;
+  
+    if (mode === RenewalMode.NEW_CONTRACT || mode === RenewalMode.RENEW_AS_IS) {
+      console.error("handleRenewalDecision should not be called for 'new_contract' or 'renew_as_is'. Use dedicated handlers.");
+      return;
+    }
+  
+    const contractToUpdate = contracts.find(c => c.renewalRequest?.id === renewalRequestId);
+    if (!contractToUpdate) return;
+  
+    if (mode === RenewalMode.AMENDMENT) {
+      const latestVersion = contractToUpdate.versions.sort((a, b) => b.versionNumber - a.versionNumber)[0];
+      if (latestVersion) {
+        // Exclude fields that should not be in the payload for a new version
+        const { id, versionNumber, createdAt, author, comments, ...newVersionPayload } = latestVersion;
+        
+        newVersionPayload.content = `${latestVersion.content}\n\n--- AMENDMENT ENTERED ${new Date().toISOString().split('T')[0]} ---\n(Please add amendment details here)`;
+        
+        // This function creates the new version and sets the contract status to IN_REVIEW
+        await handleCreateNewVersion(contractToUpdate.id, newVersionPayload);
+  
+        // Now, update the renewal request to reflect the decision
+        const { error: renewalUpdateError } = await supabase.from('renewal_requests').update({
+          mode,
+          status: RenewalStatusEnum.IN_PROGRESS,
+          notes
+        }).eq('id', contractToUpdate.renewalRequest!.id);
+        
+        if (renewalUpdateError) console.error("Error updating renewal request for amendment:", renewalUpdateError);
+  
+        alert("Amendment process started. A new contract version has been created for your changes.");
+      } else {
+        alert("Cannot amend a contract with no versions.");
       }
-      
-      const contractToUpdate = contracts.find(c => c.renewalRequest?.id === renewalRequestId);
-      if (!contractToUpdate) return;
-      
+    } else if (mode === RenewalMode.TERMINATE) {
       const { error } = await supabase.from('renewal_requests').update({ 
-          mode, 
-          status: mode === RenewalMode.TERMINATE ? RenewalStatusEnum.CANCELLED : RenewalStatusEnum.IN_PROGRESS,
-          notes 
+        mode, 
+        status: RenewalStatusEnum.CANCELLED,
+        notes 
       }).eq('id', renewalRequestId);
       
       if (error) {
-          console.error("Error updating renewal decision:", error);
-          alert(`Failed to update renewal decision: ${error.message}`);
-          return;
+        console.error("Error updating renewal decision to terminate:", error);
+        alert(`Failed to update renewal decision: ${error.message}`);
+        return;
       }
-      
-      if (mode === RenewalMode.AMENDMENT) {
-          await handleContractTransition(contractToUpdate.id, ContractStatus.IN_REVIEW);
-      } else if (mode === RenewalMode.TERMINATE) {
-          await handleContractTransition(contractToUpdate.id, ContractStatus.TERMINATED);
-      } else {
-          await fetchAndMergeContract(contractToUpdate.id);
-      }
+      await handleContractTransition(contractToUpdate.id, ContractStatus.TERMINATED);
+    }
   };
   
   const handleStartRenegotiation = async (originalContract: Contract, notes?: string) => {
@@ -1061,35 +1131,105 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     }
   };
 
-  const handleRenewAsIs = async (contract: Contract, notes?: string) => {
-    if (!currentUser || !contract.renewalRequest) return;
-    
-    const termMonths = contract.renewalRequest.renewalTermMonths ?? contract.renewalTermMonths ?? 12;
-    const uplift = contract.renewalRequest.upliftPercent ?? contract.upliftPercent ?? 0;
-    
-    const newEndDate = new Date(contract.endDate);
-    newEndDate.setMonth(newEndDate.getMonth() + termMonths);
-    const newValue = contract.value * (1 + (uplift / 100));
+  const handleRenewAsIs = async (originalContract: Contract, notes?: string) => {
+    if (!currentUser?.companyId || !currentUser?.appId || !originalContract.renewalRequest) return;
 
-    const [contractUpdate, renewalUpdate] = await Promise.all([
-        supabase.from('contracts').update({
-            end_date: newEndDate.toISOString().split('T')[0],
-            value: newValue,
-        }).eq('id', contract.id),
-        supabase.from('renewal_requests').update({ 
-            status: RenewalStatusEnum.ACTIVATED,
-            mode: RenewalMode.RENEW_AS_IS,
-            notes: notes
-        }).eq('id', contract.renewalRequest.id)
-    ]);
+    // 1. Calculate new terms
+    const termMonths = originalContract.renewalRequest.renewalTermMonths ?? originalContract.renewalTermMonths ?? 12;
+    const uplift = originalContract.renewalRequest.upliftPercent ?? originalContract.upliftPercent ?? 0;
+    const noticePeriod = originalContract.renewalRequest.noticePeriodDays ?? originalContract.noticePeriodDays ?? 30;
     
-    if (contractUpdate.error || renewalUpdate.error) {
-        console.error("Error finalizing 'Renew As-Is':", contractUpdate.error, renewalUpdate.error);
-        alert("Failed to finalize renewal.");
-    } else {
-        alert("Contract renewed as-is successfully!");
-        await fetchAndMergeContract(contract.id);
+    const originalEndDate = new Date(originalContract.endDate + 'T00:00:00Z'); // Parse as UTC
+    const newStartDate = new Date(originalEndDate);
+    newStartDate.setUTCDate(newStartDate.getUTCDate() + 1);
+    
+    const newEndDate = new Date(newStartDate);
+    newEndDate.setUTCMonth(newEndDate.getUTCMonth() + termMonths);
+    newEndDate.setUTCDate(newEndDate.getUTCDate() - 1);
+    
+    const newValue = originalContract.value * (1 + (uplift / 100));
+
+    // 2. Create new contract record, fast-tracked to Fully Executed
+    const newContractRecord = {
+      type: originalContract.type,
+      risk_level: originalContract.riskLevel,
+      counterparty_id: originalContract.counterparty.id,
+      property_id: originalContract.property?.id,
+      owner_id: originalContract.owner.id,
+      frequency: originalContract.frequency,
+      seasonal_months: originalContract.seasonalMonths,
+      allocation: originalContract.allocation,
+      title: `[RENEWAL] ${originalContract.title}`,
+      status: ContractStatus.FULLY_EXECUTED, // Fast-track status
+      value: newValue,
+      effective_date: newStartDate.toISOString().split('T')[0],
+      end_date: newEndDate.toISOString().split('T')[0],
+      start_date: newStartDate.toISOString().split('T')[0],
+      parent_contract_id: originalContract.id,
+      company_id: currentUser.companyId,
+      app_id: currentUser.appId,
+      auto_renew: originalContract.autoRenew,
+      notice_period_days: noticePeriod,
+      renewal_term_months: termMonths,
+      uplift_percent: uplift,
+      executed_at: new Date().toISOString(), // Mark as executed now
+    };
+
+    const { data: insertedContract, error: contractError } = await supabase.from('contracts').insert([newContractRecord]).select().single();
+    if (contractError) {
+      console.error("Error creating 'Renew As-Is' contract:", contractError);
+      alert(`Failed to create renewal contract: ${contractError.message}`);
+      return;
     }
+
+    // 3. Create a new version for the new contract
+    const latestOldVersion = originalContract.versions.sort((a, b) => b.versionNumber - a.versionNumber)[0];
+    if (latestOldVersion) {
+        const newVersionRecord = {
+          contract_id: insertedContract.id,
+          version_number: 1,
+          author_id: currentUser.id,
+          content: latestOldVersion.content, // Re-use content from previous version
+          value: newValue,
+          effective_date: newContractRecord.effective_date,
+          end_date: newContractRecord.end_date,
+          frequency: newContractRecord.frequency,
+          seasonal_months: newContractRecord.seasonal_months,
+          property_id: newContractRecord.property_id,
+          company_id: currentUser.companyId,
+          app_id: currentUser.appId,
+        };
+        const { error: versionError } = await supabase.from('contract_versions').insert([newVersionRecord]);
+        if (versionError) console.error("Error creating version for renewed contract:", versionError);
+    }
+    
+    // 4. Copy allocations if they exist
+    if (originalContract.propertyAllocations && originalContract.propertyAllocations.length > 0) {
+        const newAllocationRecords = originalContract.propertyAllocations.map(alloc => ({
+            contract_id: insertedContract.id,
+            property_id: alloc.propertyId,
+            allocated_value: alloc.allocatedValue,
+            monthly_values: alloc.monthlyValues,
+            manual_edits: alloc.manualEdits,
+            company_id: currentUser.companyId,
+            app_id: currentUser.appId,
+        }));
+        const { error: allocationError } = await supabase.from('contract_property_allocations').insert(newAllocationRecords);
+        if (allocationError) console.error("Error copying property allocations:", allocationError);
+    }
+
+    // 5. Update original renewal request to ACTIVATED
+    const { error: renewalUpdateError } = await supabase.from('renewal_requests').update({
+        status: RenewalStatusEnum.ACTIVATED,
+        mode: RenewalMode.RENEW_AS_IS,
+        notes: notes,
+    }).eq('id', originalContract.renewalRequest.id);
+    if (renewalUpdateError) console.error("Error updating original renewal request:", renewalUpdateError);
+    
+    alert("Contract renewed as-is successfully! A new, fully executed contract has been created.");
+    // Fetch both contracts to update UI
+    await fetchAndMergeContract(originalContract.id);
+    await fetchAndMergeContract(insertedContract.id);
   };
 
   const handleCreateNewVersion = async (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => {
@@ -1300,7 +1440,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   };
 
   const handleGlobalSearch = useCallback(async (term: string) => {
-    if (!term.trim()) {
+    if (!term.trim() || !currentUser?.companyId) {
         setGlobalSearchResults([]);
         setGlobalSearchTerm('');
         return;
@@ -1313,41 +1453,19 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     setIsPerformingGlobalSearch(true);
     setGlobalSearchTerm(term);
 
-    // Mock search logic. In a real app, this would be an API call.
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    const results: SearchResult[] = [];
-    const lowerCaseTerm = term.toLowerCase();
-
-    contracts.forEach(contract => {
-      contract.versions.forEach(version => {
-        const content = version.content.toLowerCase();
-        let matchIndex = -1;
-        let lastIndex = 0;
-        // Find all matches to make snippet more relevant
-        while((matchIndex = content.indexOf(lowerCaseTerm, lastIndex)) !== -1) {
-          const snippetStart = Math.max(0, matchIndex - 80);
-          const snippetEnd = Math.min(version.content.length, matchIndex + lowerCaseTerm.length + 80);
-          const snippet = `${snippetStart > 0 ? '...' : ''}${version.content.substring(snippetStart, snippetEnd)}${snippetEnd < version.content.length ? '...' : ''}`;
-          
-          if (!results.some(r => r.versionId === version.id)) {
-            results.push({
-              contractId: contract.id,
-              contractTitle: contract.title,
-              counterpartyName: contract.counterparty.name,
-              versionId: version.id,
-              versionNumber: version.versionNumber,
-              snippet: snippet,
-            });
-          }
-          lastIndex = matchIndex + 1;
-        }
-      });
+    const { data, error } = await supabase.functions.invoke('global-search', {
+        body: { term, companyId: currentUser.companyId },
     });
 
-    setGlobalSearchResults(results);
+    if (error) {
+        console.error('Error performing global search:', error);
+        setGlobalSearchResults([]);
+    } else {
+        setGlobalSearchResults(data || []);
+    }
+
     setIsPerformingGlobalSearch(false);
-  }, [contracts]);
+  }, [currentUser]);
 
     const contextValue: AppContextType = {
         session, currentUser, company, isAuthenticated, authView, setAuthView, handleLogin, handleLogout,

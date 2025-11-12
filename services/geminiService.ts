@@ -171,14 +171,14 @@ export const draftInitialContract = async (contractDetails: {
   
   const { contractType, counterpartyName, effectiveDate, value } = contractDetails;
   
-  const prompt = `You are an expert contract lawyer. Your task is to draft a simple, standard contract based on the following details. The draft should be a complete document with common clauses appropriate for the contract type.
+  const prompt = `Draft a simple, standard contract based on the following details. The draft should be a complete document with common clauses appropriate for the contract type.
 
   - Contract Type: ${contractType}
   - Our Counterparty: ${counterpartyName}
   - Effective Date: ${effectiveDate}
   - Total Value: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)}
 
-  Please include standard clauses for:
+  Include standard clauses for:
   1.  Scope of Services/Products
   2.  Term and Termination
   3.  Payment Terms
@@ -192,6 +192,7 @@ export const draftInitialContract = async (contractDetails: {
       model: 'gemini-2.5-pro', // Good for drafting
       contents: prompt,
       config: {
+        systemInstruction: "You are an expert contract lawyer. Your task is to draft contracts. Do not include any conversational preamble, introduction, or any text other than the contract itself. Start directly with the contract title or first clause.",
         temperature: 0.5,
       },
     });

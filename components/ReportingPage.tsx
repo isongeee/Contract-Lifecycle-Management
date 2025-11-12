@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../contexts/AppContext';
 import { PREBUILT_REPORTS } from '../constants';
 import { ContractStatus, CounterpartyType } from '../types';
-import { BarChartIcon, DownloadIcon } from './icons';
+import { BarChartIcon, DownloadIcon, LoaderIcon } from './icons';
 import type { ReportConfiguration, Contract, UserProfile } from '../types';
+import { supabase } from '../lib/supabaseClient';
 
 // FIX: Changed component to React.FC to correctly handle props including the 'key' prop used in lists.
 const ReportCard: React.FC<{ report: ReportConfiguration; onSelect: () => void; isActive: boolean; }> = ({ report, onSelect, isActive }) => (
@@ -54,33 +55,35 @@ const ReportWrapper = ({ title, onExport, children, dataExists }: { title: strin
     </div>
 );
 
-const getQuarter = (date: Date) => {
-    const month = date.getMonth();
-    if (month < 3) return 'Q1';
-    if (month < 6) return 'Q2';
-    if (month < 9) return 'Q3';
-    return 'Q4';
-};
+const LoadingReport = () => (
+    <div className="flex flex-col items-center justify-center h-60 text-center">
+        <LoaderIcon className="w-8 h-8 text-primary" />
+        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Generating report...</p>
+    </div>
+);
 
 const ExpiringByQuarterReport = () => {
-    const { contracts } = useAppContext();
-    const data = useMemo(() => {
-        const reportData: { Owner: string; Quarter: string; Contract: string; 'End Date': string; }[] = [];
-        const activeContracts = contracts.filter(c => c.status === ContractStatus.ACTIVE);
+    const { currentUser } = useAppContext();
+    const [data, setData] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-        activeContracts.forEach(c => {
-            const endDate = new Date(c.endDate);
-            const quarter = `${endDate.getFullYear()} ${getQuarter(endDate)}`;
-            reportData.push({
-                'Owner': `${c.owner.firstName} ${c.owner.lastName}`,
-                'Quarter': quarter,
-                'Contract': c.title,
-                'End Date': c.endDate,
-            });
+    useEffect(() => {
+        if (!currentUser?.companyId) return;
+        setIsLoading(true);
+        supabase.functions.invoke('report-expiring-by-quarter', {
+            body: { companyId: currentUser.companyId }
+        }).then(({ data, error }) => {
+            if (error) {
+                console.error("Error fetching report data:", error);
+                setData([]);
+            } else {
+                setData(data || []);
+            }
+            setIsLoading(false);
         });
-        
-        return reportData.sort((a,b) => a.Quarter.localeCompare(b.Quarter) || a.Owner.localeCompare(b.Owner));
-    }, [contracts]);
+    }, [currentUser?.companyId]);
+
+    if (isLoading) return <ReportWrapper title="Contracts Expiring by Quarter" onExport={() => {}} dataExists={false}><LoadingReport /></ReportWrapper>;
     
     return (
         <ReportWrapper title="Contracts Expiring by Quarter" onExport={() => exportToCsv('expiring_by_quarter', data)} dataExists={data.length > 0}>
@@ -111,29 +114,28 @@ const ExpiringByQuarterReport = () => {
 };
 
 const ValueByCounterpartyReport = () => {
-    const { contracts } = useAppContext();
-    const data = useMemo(() => {
-        // FIX: The accumulator type for `reduce` was not correctly specified,
-        // causing TypeScript to infer an empty object type `{}` for the accumulator.
-        // By providing the correct type for the accumulator's initial value, the properties
-        // `totalValue` and `count` can be correctly accessed and updated.
-        const grouped = contracts.reduce((acc, contract) => {
-            const type = contract.counterparty.type;
-            if (!acc[type]) {
-                acc[type] = { totalValue: 0, count: 0 };
-            }
-            acc[type].totalValue += contract.value;
-            acc[type].count += 1;
-            return acc;
-        }, {} as Record<CounterpartyType, { totalValue: number; count: number }>);
+    const { currentUser } = useAppContext();
+    const [data, setData] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-        return Object.entries(grouped).map(([type, { totalValue, count }]) => ({
-            'Counterparty Type': type,
-            'Total Value': totalValue,
-            'Number of Contracts': count,
-        })).sort((a,b) => b['Total Value'] - a['Total Value']);
-    }, [contracts]);
+    useEffect(() => {
+        if (!currentUser?.companyId) return;
+        setIsLoading(true);
+        supabase.functions.invoke('report-value-by-counterparty', {
+            body: { companyId: currentUser.companyId }
+        }).then(({ data, error }) => {
+            if (error) {
+                console.error("Error fetching report data:", error);
+                setData([]);
+            } else {
+                setData(data || []);
+            }
+            setIsLoading(false);
+        });
+    }, [currentUser?.companyId]);
     
+    if (isLoading) return <ReportWrapper title="Total Value by Counterparty Type" onExport={() => {}} dataExists={false}><LoadingReport /></ReportWrapper>;
+
     return (
         <ReportWrapper title="Total Value by Counterparty Type" onExport={() => exportToCsv('value_by_counterparty', data)} dataExists={data.length > 0}>
              <div className="overflow-x-auto">
@@ -160,73 +162,29 @@ const ValueByCounterpartyReport = () => {
     );
 };
 
-const calculateDuration = (start: string | undefined, end: string | undefined) => {
-    if (!start || !end) return null;
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || endDate < startDate) return null;
-    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays === 0 ? 1 : diffDays; // Minimum 1 day
-};
-
 const LifecycleDurationReport = () => {
-    const { contracts } = useAppContext();
+    const { currentUser } = useAppContext();
+    const [data, setData] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const data = useMemo(() => {
-        const stageData: { [key: string]: { totalDays: number; count: number } } = {
-            'Draft': { totalDays: 0, count: 0 },
-            'In Review': { totalDays: 0, count: 0 },
-            'Pending Approval': { totalDays: 0, count: 0 },
-            'Signing': { totalDays: 0, count: 0 },
-            'Activation': { totalDays: 0, count: 0 },
-        };
-        
-        contracts.forEach(contract => {
-            const firstVersion = contract.versions[0];
-            if (!firstVersion) return;
-            const createdAt = firstVersion.createdAt;
-            let duration;
-
-            duration = calculateDuration(createdAt, contract.submittedAt);
-            if (duration !== null) {
-                stageData['Draft'].totalDays += duration;
-                stageData['Draft'].count++;
+    useEffect(() => {
+        if (!currentUser?.companyId) return;
+        setIsLoading(true);
+        supabase.functions.invoke('report-lifecycle-duration', {
+            body: { companyId: currentUser.companyId }
+        }).then(({ data, error }) => {
+            if (error) {
+                console.error("Error fetching report data:", error);
+                setData([]);
+            } else {
+                setData(data || []);
             }
-
-            duration = calculateDuration(contract.reviewStartedAt, contract.approvalStartedAt);
-            if (duration !== null) {
-                stageData['In Review'].totalDays += duration;
-                stageData['In Review'].count++;
-            }
-            
-            duration = calculateDuration(contract.approvalStartedAt, contract.approvalCompletedAt);
-            if (duration !== null) {
-                stageData['Pending Approval'].totalDays += duration;
-                stageData['Pending Approval'].count++;
-            }
-
-            duration = calculateDuration(contract.sentForSignatureAt, contract.executedAt);
-            if (duration !== null) {
-                stageData['Signing'].totalDays += duration;
-                stageData['Signing'].count++;
-            }
-
-            duration = calculateDuration(contract.executedAt, contract.activeAt);
-            if (duration !== null) {
-                stageData['Activation'].totalDays += duration;
-                stageData['Activation'].count++;
-            }
+            setIsLoading(false);
         });
-
-        return Object.entries(stageData).map(([stage, { totalDays, count }]) => ({
-            'Stage': stage,
-            'Average Duration (Days)': count > 0 ? (totalDays / count).toFixed(1) : 'N/A',
-            'Number of Contracts': count,
-        }));
-
-    }, [contracts]);
+    }, [currentUser?.companyId]);
     
+    if (isLoading) return <ReportWrapper title="Average Lifecycle Stage Duration" onExport={() => {}} dataExists={false}><LoadingReport /></ReportWrapper>;
+
     return (
         <ReportWrapper title="Average Lifecycle Stage Duration" onExport={() => exportToCsv('lifecycle_duration', data)} dataExists={data.some(d => d['Number of Contracts'] > 0)}>
             <div className="overflow-x-auto">

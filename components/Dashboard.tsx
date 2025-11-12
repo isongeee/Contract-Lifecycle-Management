@@ -21,11 +21,15 @@ const formatCurrency = (value: number) => {
 // A utility to calculate days between dates
 const daysUntil = (dateStr: string) => {
     if(!dateStr) return Infinity;
+    // Get today's date at midnight UTC to ensure consistent comparison
     const today = new Date();
-    today.setHours(0,0,0,0);
-    const endDate = new Date(dateStr);
-    endDate.setHours(0,0,0,0);
-    const diffTime = endDate.getTime() - today.getTime();
+    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    
+    // Parse the YYYY-MM-DD string as midnight UTC
+    const targetDate = new Date(dateStr + 'T00:00:00Z');
+    if (isNaN(targetDate.getTime())) return Infinity;
+    
+    const diffTime = targetDate.getTime() - todayUTC.getTime();
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
