@@ -210,12 +210,15 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
                     <FormField label="End Date">
                         <TextInput type="date" value={data.endDate} onChange={e => setData('endDate', e.target.value)} />
                     </FormField>
-                    <FormField label="Frequency" className="sm:col-span-3">
+                    <FormField label="Frequency" className="sm:col-span-2">
                         <SelectInput value={data.frequency} onChange={e => setData('frequency', e.target.value as ContractFrequency)}>
                             {Object.values(ContractFrequency).map(freq => <option key={freq} value={freq}>{freq}</option>)}
                         </SelectInput>
                     </FormField>
-                     <FormField label="Risk Level">
+                     <FormField label="Notice Period (days)" className="sm:col-span-2">
+                        <TextInput type="number" value={data.noticePeriodDays} onChange={e => setData('noticePeriodDays', Number(e.target.value))} />
+                    </FormField>
+                     <FormField label="Risk Level" className="sm:col-span-2">
                          <SelectInput value={data.riskLevel} onChange={e => setData('riskLevel', e.target.value as RiskLevel)}>
                             {Object.values(RiskLevel).map(level => <option key={level} value={level}>{level}</option>)}
                         </SelectInput>
@@ -696,6 +699,7 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
                 <SummaryItem label="Total Value" value={new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(data.value || 0)} />
                 <SummaryItem label="Effective Date" value={data.effectiveDate} />
                 <SummaryItem label="End Date" value={data.endDate} />
+                <SummaryItem label="Notice Period" value={`${data.noticePeriodDays || 0} days`} />
                 <SummaryItem label="Risk Level" value={data.riskLevel} />
                 <SummaryItem label="Frequency" value={frequencyDisplay} />
             </dl>
@@ -722,7 +726,8 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
       property: undefined,
       effectiveDate: '',
       endDate: '',
-      frequency: ContractFrequency.MONTHLY,
+      frequency: ContractFrequency.ANNUALLY,
+      noticePeriodDays: 30,
       seasonalMonths: [],
       propertyAllocations: [],
       fileName: '',

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { Contract, UserProfile } from '../types';
 import { RenewalStatus, RenewalMode } from '../types';
 import StatusTag from './StatusTag';
-import { SearchIcon, SlidersHorizontalIcon, ArrowUpIcon, ArrowDownIcon } from './icons';
+import { SearchIcon, SlidersHorizontalIcon, ArrowUpIcon, ArrowDownIcon, RefreshCwIcon } from './icons';
 
 interface RenewalsQueueProps {
   contracts: Contract[];
@@ -95,6 +95,8 @@ export default function RenewalsQueue({ contracts, users, onSelectContract, onNa
     });
   }, [filteredContracts, sortConfig]);
 
+  const hasFilters = searchTerm || statusFilter || ownerFilter || modeFilter;
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm">
       <div className="p-4 border-b border-gray-200 dark:border-gray-700 space-y-4">
@@ -157,10 +159,21 @@ export default function RenewalsQueue({ contracts, users, onSelectContract, onNa
         </table>
       </div>
       {sortedContracts.length === 0 && (
-        <div className="text-center py-12">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">No contracts match your criteria</h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Try adjusting your search or filter settings.</p>
-        </div>
+          hasFilters ? (
+            <div className="text-center py-12">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">No contracts match your criteria</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Try adjusting your search or filter settings.</p>
+            </div>
+          ) : (
+            <div className="text-center py-12">
+                <RefreshCwIcon className="mx-auto h-12 w-12 text-gray-400" />
+                <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-gray-100">Renewals Queue is Empty</h3>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xl mx-auto">
+                    Contracts nearing their expiration date will appear here once a renewal process has been initiated.
+                    You can start a renewal from the Contract Detail page for any active contract expiring within 90 days.
+                </p>
+            </div>
+          )
       )}
     </div>
   );

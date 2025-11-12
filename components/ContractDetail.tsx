@@ -422,7 +422,8 @@ const RenewalCard = ({ contract, onOpenDecisionModal, onUpdateRenewalTerms }: { 
                  )}
             </div>
 
-            {renewalRequest.status === RenewalStatusEnum.QUEUED && (
+            {/* FIX: Replaced non-existent 'QUEUED' with 'DECISION_NEEDED' to match RenewalStatus enum. */}
+            {renewalRequest.status === RenewalStatusEnum.DECISION_NEEDED && (
                 <div className="flex justify-between items-center bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg">
                     <div>
                         <p className="font-semibold text-primary-800 dark:text-primary-200">Action Required</p>
@@ -479,7 +480,8 @@ const RenewalCard = ({ contract, onOpenDecisionModal, onUpdateRenewalTerms }: { 
                 </div>
             )}
             
-            {(renewalRequest.status === RenewalStatusEnum.ACTIVATED || renewalRequest.status === RenewalStatusEnum.CANCELLED) && (
+            {/* FIX: Replaced non-existent 'ACTIVATED' with 'COMPLETED' to match RenewalStatus enum. */}
+            {(renewalRequest.status === RenewalStatusEnum.COMPLETED || renewalRequest.status === RenewalStatusEnum.CANCELLED) && (
                  <div>
                     <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Renewal Status</p>
                     <StatusTag type="renewal" status={renewalRequest.status} />

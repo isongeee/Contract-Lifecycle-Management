@@ -35,9 +35,9 @@ export enum SigningStatus {
 
 
 export enum RenewalStatus {
-    QUEUED = 'queued',
+    DECISION_NEEDED = 'decision_needed',
     IN_PROGRESS = 'in_progress',
-    ACTIVATED = 'activated',
+    COMPLETED = 'activated',
     CANCELLED = 'cancelled',
 }
 
@@ -48,6 +48,7 @@ export enum AutoRenewType {
 }
 
 export enum RenewalMode {
+    PENDING = 'pending',
     AUTO = 'auto',
     AMENDMENT = 'amendment',
     NEW_CONTRACT = 'new_contract',
@@ -212,6 +213,10 @@ export interface RenewalRequest {
     feedback?: RenewalFeedback[];
     renewalTermMonths?: number;
     noticePeriodDays?: number;
+    // Fields for new SQL function
+    path?: 'as_is' | 'amend' | 'renegotiate';
+    decision?: 'proceed' | 'non_renew';
+    reasonCode?: string;
 }
 
 export interface Contract {
