@@ -116,7 +116,7 @@ export interface AppContextType {
     handleGlobalSearch: (term: string) => Promise<void>;
 
     setNotificationSettings: React.Dispatch<React.SetStateAction<NotificationSetting[]>>;
-    setUserNotificationSettings: React.Dispatch<React.SetStateAction<UserNotificationSettings>>;
+    setUserNotificationSettings: (newSettingsOrUpdater: React.SetStateAction<UserNotificationSettings>) => Promise<void>;
     setUsers: React.Dispatch<React.SetStateAction<UserProfile[]>>;
 }
 
@@ -140,7 +140,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [notificationSettings, setNotificationSettings] = useState<NotificationSetting[]>(MOCK_NOTIFICATION_SETTINGS);
-  const [userNotificationSettings, setUserNotificationSettings] = useState<UserNotificationSettings>(MOCK_USER_NOTIFICATION_SETTINGS);
+  const [userNotificationSettings, setUserNotificationSettingsState] = useState<UserNotificationSettings>(MOCK_USER_NOTIFICATION_SETTINGS);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -173,6 +173,30 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   const [globalSearchTerm, setGlobalSearchTerm] = useState('');
 
   const unreadCount = useMemo(() => notifications.filter(n => !n.is_read).length, [notifications]);
+
+  const setUserNotificationSettings = useCallback(async (newSettingsOrUpdater: React.SetStateAction<UserNotificationSettings>) => {
+    const newSettings = typeof newSettingsOrUpdater === 'function' 
+        ? newSettingsOrUpdater(userNotificationSettings) 
+        : newSettingsOrUpdater;
+
+    // Optimistically update UI
+    setUserNotificationSettingsState(newSettings);
+
+    const { error } = await supabase
+        .from('user_notification_settings')
+        .update({
+            renewal_days_before: newSettings.renewalDaysBefore,
+            preferences: newSettings.preferences,
+        })
+        .eq('id', newSettings.id);
+
+    if (error) {
+        console.error("Error updating user notification settings:", error);
+        alert('Could not save your notification settings.');
+        // Revert on error
+        setUserNotificationSettingsState(userNotificationSettings);
+    }
+  }, [userNotificationSettings]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -286,6 +310,30 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
 
     const { data: templatesData } = await supabase.from('contract_templates').select('*').eq('company_id', companyId);
     setTemplates(templatesData as ContractTemplate[] || []);
+
+    // Fetch user notification settings, creating them if they don't exist
+    const { data: userSettingsData, error: settingsError } = await supabase
+        .from('user_notification_settings')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle(); // Use maybeSingle to gracefully handle 0 rows
+
+    if (userSettingsData) {
+        setUserNotificationSettingsState({
+            id: userSettingsData.id,
+            userId: userSettingsData.user_id,
+            renewalDaysBefore: userSettingsData.renewal_days_before,
+            preferences: userSettingsData.preferences as any,
+        });
+    } else if (settingsError) {
+        console.error("Error fetching user settings:", settingsError);
+    } else {
+        // Data is null and there was no error, meaning settings don't exist.
+        // We warn about this but do not attempt to create from the client-side
+        // to avoid RLS violations. Creation is handled by backend functions.
+        // Existing users without settings may need a manual data backfill.
+        console.warn(`No notification settings found for user ${user.id}. Using default settings as a fallback.`);
+    }
 
     const { data: contractsData } = await supabase.from('contracts').select('*').eq('company_id', companyId);
     const contractIds = (contractsData || []).map(c => c.id);
@@ -1456,133 +1504,209 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
         setUsers(mappedUsers);
     }
   };
+  
+  const handleAvatarUpload = useCallback(async (file: File) => {
+    if (!currentUser) return;
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${currentUser.id}.${fileExt}`;
+    const filePath = `avatars/${fileName}`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(filePath, file, { upsert: true });
 
+    if (uploadError) {
+      console.error('Error uploading avatar:', uploadError);
+      alert('Failed to upload avatar.');
+      return;
+    }
+
+    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+    const publicUrl = data.publicUrl;
+
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ avatar_url: `${publicUrl}?t=${new Date().getTime()}` }) // Add timestamp to bust cache
+      .eq('id', currentUser.id);
+
+    if (updateError) {
+      console.error('Error updating user avatar URL:', updateError);
+    } else {
+      setCurrentUser(prev => prev ? { ...prev, avatarUrl: `${publicUrl}?t=${new Date().getTime()}` } : null);
+    }
+  }, [currentUser]);
+
+  const handleChangePassword = useCallback(async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    return { error };
+  }, []);
+
+  const handleEnrollMFA = useCallback(async () => {
+    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
+    if (!error) {
+        const { data: mfaData } = await supabase.auth.mfa.listFactors();
+        if (mfaData) setMfaFactors(mfaData.all);
+    }
+    return { data, error };
+  }, []);
+
+  const handleVerifyMFA = useCallback(async (factorId: string, code: string) => {
+    const { data, error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
+     if (!error) {
+        const { data: mfaData } = await supabase.auth.mfa.listFactors();
+        if (mfaData) setMfaFactors(mfaData.all);
+    }
+    return { data, error };
+  }, []);
+
+  const handleUnenrollMFA = useCallback(async (factorId: string) => {
+    const { data, error } = await supabase.auth.mfa.unenroll({ factorId });
+    if (!error) {
+      setMfaFactors(prev => prev.filter(f => f.id !== factorId));
+    }
+    return { data, error };
+  }, []);
+  
   const handleGlobalSearch = useCallback(async (term: string) => {
     if (!term.trim() || !currentUser?.companyId) {
         setGlobalSearchResults([]);
         setGlobalSearchTerm('');
         return;
     }
+
+    setIsPerformingGlobalSearch(true);
+    setGlobalSearchTerm(term);
+    
+    // Navigate to search results view and clear other states
     setActiveView('search');
     setSelectedContract(null);
     setSelectedTemplate(null);
     setSelectedCounterparty(null);
     setSelectedProperty(null);
-    setIsPerformingGlobalSearch(true);
-    setGlobalSearchTerm(term);
+    setInitialFilters({});
 
-    const { data, error } = await supabase.functions.invoke('global-search', {
-        body: { term, companyId: currentUser.companyId },
-    });
+    try {
+        const { data, error } = await supabase.functions.invoke('global-search', {
+            body: { term, companyId: currentUser.companyId },
+        });
 
-    if (error) {
-        console.error('Error performing global search:', error);
+        if (error) {
+            throw error;
+        }
+
+        setGlobalSearchResults(data as SearchResult[]);
+    } catch (error) {
+        console.error("Error performing global search:", error);
+        alert(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         setGlobalSearchResults([]);
-    } else {
-        setGlobalSearchResults(data || []);
+    } finally {
+        setIsPerformingGlobalSearch(false);
     }
-
-    setIsPerformingGlobalSearch(false);
   }, [currentUser]);
 
-  const handleAvatarUpload = async (file: File) => {
-    if (!currentUser) return;
-
-    const filePath = `public/${currentUser.id}/${Date.now()}-${file.name}`;
-    const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file);
-
-    if (uploadError) {
-        console.error('Error uploading avatar:', uploadError);
-        alert('Failed to upload avatar.');
-        return;
-    }
-
-    const { data: urlData } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
-    
-    const newAvatarUrl = urlData.publicUrl;
-
-    const { error: updateError } = await supabase
-        .from('users')
-        .update({ avatar_url: newAvatarUrl })
-        .eq('id', currentUser.id);
-
-    if (updateError) {
-        console.error('Error updating avatar URL:', updateError);
-        alert('Failed to update profile picture.');
-        return;
-    }
-    
-    setCurrentUser(prev => prev ? { ...prev, avatarUrl: newAvatarUrl } : null);
-    setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, avatarUrl: newAvatarUrl } : u));
+  const contextValue: AppContextType = {
+    session,
+    currentUser,
+    company,
+    isAuthenticated,
+    authView,
+    setAuthView,
+    handleLogin,
+    handleLogout,
+    mfaFactors,
+    handleAvatarUpload,
+    handleChangePassword,
+    handleEnrollMFA,
+    handleVerifyMFA,
+    handleUnenrollMFA,
+    isLoading,
+    activeView,
+    theme,
+    handleThemeChange,
+    handleNavigate,
+    handleMetricNavigation,
+    contracts,
+    templates,
+    counterparties,
+    properties,
+    users,
+    roles,
+    notifications,
+    notificationSettings,
+    userNotificationSettings,
+    unreadCount,
+    selectedContract,
+    selectedTemplate,
+    selectedCounterparty,
+    selectedProperty,
+    initialFilters,
+    isCreatingContract,
+    initialCreateData,
+    isCreatingCounterparty,
+    isCreatingProperty,
+    editingCounterparty,
+    editingProperty,
+    isAddingUser,
+    setIsAddingUser,
+    handleStartCreate,
+    handleCancelCreate,
+    handleStartCreateCounterparty,
+    handleCancelCreateCounterparty,
+    handleStartEditCounterparty,
+    handleCancelEditCounterparty,
+    handleStartCreateProperty,
+    handleCancelCreateProperty,
+    handleStartEditProperty,
+    handleCancelEditProperty,
+    handleUseTemplate,
+    handleFinalizeCreate,
+    handleFinalizeCreateCounterparty,
+    handleFinalizeEditCounterparty,
+    handleFinalizeCreateProperty,
+    handleFinalizeEditProperty,
+    handleContractTransition,
+    handleSigningStatusUpdate,
+    handleMarkAsExecuted,
+    handleRenewalDecision,
+    handleStartRenegotiation,
+    handleCreateRenewalRequest,
+    handleUpdateRenewalTerms,
+    handleRenewAsIs,
+    handleCreateNewVersion,
+    handleUpdateRolePermissions,
+    handleCreateRole,
+    handleDeleteRole,
+    handleCreateComment,
+    handleResolveComment,
+    handleCreateRenewalFeedback,
+    handleMarkAllAsRead,
+    handleMarkOneAsRead,
+    handleNotificationClick,
+    handleCreateUser,
+    handleSelectContract,
+    handleBackToList,
+    handleSelectTemplate,
+    handleBackToTemplatesList,
+    handleSelectCounterparty,
+    handleBackToCounterpartiesList,
+    handleSelectProperty,
+    handleBackToPropertiesList,
+    isPerformingGlobalSearch,
+    globalSearchResults,
+    globalSearchTerm,
+    handleGlobalSearch,
+    setNotificationSettings,
+    setUserNotificationSettings,
+    setUsers,
   };
 
-  const handleChangePassword = async (newPassword: string) => {
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    return { error };
-  };
-
-  const refetchMfaFactors = async () => {
-    const { data } = await supabase.auth.mfa.listFactors();
-    if (data) {
-        setMfaFactors(data.all);
-    }
-  };
-
-  const handleEnrollMFA = async () => {
-    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
-    return { data, error };
-  };
-
-  const handleVerifyMFA = async (factorId: string, code: string) => {
-    const { data, error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
-    if (!error) {
-        await refetchMfaFactors();
-    }
-    return { data, error };
-  };
-
-  const handleUnenrollMFA = async (factorId: string) => {
-    const { data, error } = await supabase.auth.mfa.unenroll({ factorId });
-    if (!error) {
-        await refetchMfaFactors();
-    }
-    return { data, error };
-  };
-
-    const contextValue: AppContextType = {
-        session, currentUser, company, isAuthenticated, authView, setAuthView, handleLogin, handleLogout,
-        mfaFactors, handleAvatarUpload, handleChangePassword, handleEnrollMFA, handleVerifyMFA, handleUnenrollMFA,
-        isLoading, activeView, theme, handleThemeChange, handleNavigate, handleMetricNavigation,
-        contracts, templates, counterparties, properties, users, roles, notifications, notificationSettings, userNotificationSettings, unreadCount,
-        selectedContract, selectedTemplate, selectedCounterparty, selectedProperty, initialFilters,
-        isCreatingContract, initialCreateData, isCreatingCounterparty, isCreatingProperty, editingCounterparty, editingProperty, isAddingUser, setIsAddingUser,
-        handleStartCreate, handleCancelCreate, handleStartCreateCounterparty, handleCancelCreateCounterparty, handleStartEditCounterparty, handleCancelEditCounterparty,
-        handleStartCreateProperty, handleCancelCreateProperty, handleStartEditProperty, handleCancelEditProperty, handleUseTemplate,
-        handleFinalizeCreate, handleFinalizeCreateCounterparty, handleFinalizeEditCounterparty, handleFinalizeCreateProperty, handleFinalizeEditProperty,
-        handleContractTransition, handleSigningStatusUpdate, handleMarkAsExecuted, handleRenewalDecision, handleStartRenegotiation, handleCreateRenewalRequest,
-        handleUpdateRenewalTerms, handleRenewAsIs, handleCreateNewVersion, handleUpdateRolePermissions, handleCreateRole, handleDeleteRole,
-        handleCreateComment, handleResolveComment, handleCreateRenewalFeedback, handleMarkAllAsRead, handleMarkOneAsRead, handleNotificationClick, handleCreateUser,
-        handleSelectContract, handleBackToList, handleSelectTemplate, handleBackToTemplatesList, handleSelectCounterparty, handleBackToCounterpartiesList,
-        handleSelectProperty, handleBackToPropertiesList,
-        isPerformingGlobalSearch, globalSearchResults, globalSearchTerm, handleGlobalSearch,
-        setNotificationSettings, setUserNotificationSettings, setUsers
-    };
-
-    return (
-        <AppContext.Provider value={contextValue}>
-            {children}
-        </AppContext.Provider>
-    );
+  return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
 };
 
 export const useAppContext = () => {
-    const context = useContext(AppContext);
-    if (!context) {
-        throw new Error('useAppContext must be used within an AppProvider');
-    }
-    return context;
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useAppContext must be used within an AppProvider');
+  }
+  return context;
 };

@@ -58,6 +58,17 @@ serve(async (req) => {
       throw profileError;
     }
 
+    // 3. Create default user notification settings
+    const { error: settingsError } = await supabaseAdmin
+        .from('user_notification_settings')
+        .insert({ user_id: user.id });
+    
+    if (settingsError) {
+        // Cleanup auth user if settings creation fails. Profile will cascade delete.
+        await supabaseAdmin.auth.admin.deleteUser(user.id);
+        throw settingsError;
+    }
+
     return new Response(JSON.stringify(profile), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       status: 200,

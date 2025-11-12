@@ -122,6 +122,19 @@ serve(async (req) => {
       throw profileError;
     }
 
+    // 5. Create default user notification settings
+    const { error: settingsError } = await supabaseAdmin
+        .from('user_notification_settings')
+        .insert({ user_id: user.id });
+
+    if (settingsError) {
+        // Perform full cleanup if settings creation fails
+        await supabaseAdmin.auth.admin.deleteUser(user.id);
+        // Company deletion should cascade if set up, but explicit deletion is safer.
+        await supabaseAdmin.from('companies').delete().eq('id', company.id);
+        throw settingsError;
+    }
+
     return new Response(JSON.stringify({ success: true, userId: user.id }), {
       headers: { 
         'Content-Type': 'application/json',
