@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import type { UserProfile, UserNotificationSettings } from '../types';
-import { SunIcon, MoonIcon, MonitorIcon, UserIcon, SlidersHorizontalIcon, BellIcon, KeyRoundIcon, EditIcon } from './icons';
+import { SunIcon, MoonIcon, MonitorIcon, UserIcon, SlidersHorizontalIcon, BellIcon, KeyRoundIcon, EditIcon, XIcon, PlusIcon } from './icons';
 import ToggleSwitch from './ToggleSwitch';
 import { useAppContext } from '../contexts/AppContext';
 import ChangePasswordModal from './ChangePasswordModal';
@@ -13,7 +13,7 @@ interface ProfilePageProps {
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
   notificationSettings: UserNotificationSettings;
-  setNotificationSettings: React.Dispatch<React.SetStateAction<UserNotificationSettings>>;
+  setNotificationSettings: (newSettingsOrUpdater: React.SetStateAction<UserNotificationSettings>) => Promise<void>;
 }
 
 // FIX: Changed component to React.FC to correctly handle props including the 'key' prop.
@@ -107,8 +107,9 @@ const PreferencesTab = ({ theme, onThemeChange }: { theme: Theme, onThemeChange:
     </SectionCard>
 );
 
-const NotificationsTab = ({ settings, setSettings }: { settings: UserNotificationSettings, setSettings: React.Dispatch<React.SetStateAction<UserNotificationSettings>> }) => {
-    // FIX: Correctly handle nested state updates within the 'preferences' object.
+const NotificationsTab = ({ settings, setSettings }: { settings: UserNotificationSettings, setSettings: (updater: React.SetStateAction<UserNotificationSettings>) => Promise<void> }) => {
+    const [newDay, setNewDay] = useState('');
+
     const handleToggle = (type: keyof UserNotificationSettings['preferences'], method: 'email' | 'inApp', value: boolean) => {
         setSettings(prev => ({
             ...prev,
@@ -122,6 +123,20 @@ const NotificationsTab = ({ settings, setSettings }: { settings: UserNotificatio
         }));
     };
     
+    const handleAddDay = () => {
+        const day = parseInt(newDay, 10);
+        if (!isNaN(day) && day > 0 && !settings.renewalDaysBefore.includes(day)) {
+            const newDays = [...settings.renewalDaysBefore, day].sort((a, b) => b - a);
+            setSettings(prev => ({ ...prev, renewalDaysBefore: newDays }));
+            setNewDay('');
+        }
+    };
+
+    const handleRemoveDay = (dayToRemove: number) => {
+        const newDays = settings.renewalDaysBefore.filter(d => d !== dayToRemove);
+        setSettings(prev => ({ ...prev, renewalDaysBefore: newDays }));
+    };
+
     const notificationTypes = [
         { key: 'renewals', label: 'Contract Renewals' },
         { key: 'approvals', label: 'Approval Requests' },
@@ -138,18 +153,45 @@ const NotificationsTab = ({ settings, setSettings }: { settings: UserNotificatio
                         <div className="flex items-center space-x-6">
                              <div className="text-center">
                                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Email</label>
-                                {/* FIX: Access nested 'preferences' object for notification settings. */}
                                 <ToggleSwitch enabled={settings.preferences[notif.key].email} onChange={(val) => handleToggle(notif.key, 'email', val)} />
                             </div>
                             <div className="text-center">
                                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">In-App</label>
-                                {/* FIX: Access nested 'preferences' object for notification settings. */}
                                 <ToggleSwitch enabled={settings.preferences[notif.key].inApp} onChange={(val) => handleToggle(notif.key, 'inApp', val)} />
                             </div>
                         </div>
                     </li>
                 ))}
             </ul>
+             <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
+               <h4 className="text-md font-semibold text-gray-800 dark:text-gray-200">Renewal Reminder Schedule</h4>
+               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage the specific days before expiration you wish to be notified.</p>
+               <div className="mt-4">
+                    <div className="flex flex-wrap gap-2">
+                        {settings.renewalDaysBefore.map(day => (
+                            <div key={day} className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-full px-3 py-1 text-sm font-medium text-gray-800 dark:text-gray-200">
+                                {day} days
+                                <button onClick={() => handleRemoveDay(day)} className="ml-2 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400">
+                                    <XIcon className="w-3 h-3" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-4 flex items-center gap-2">
+                        <input
+                            type="number"
+                            value={newDay}
+                            onChange={e => setNewDay(e.target.value)}
+                            placeholder="e.g., 45"
+                            className="w-24 rounded-md border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700 text-sm"
+                        />
+                         <button onClick={handleAddDay} className="flex items-center px-3 py-1.5 text-sm font-semibold text-primary-900 bg-primary rounded-md hover:bg-primary-600">
+                            <PlusIcon className="w-4 h-4 mr-1" />
+                            Add
+                        </button>
+                    </div>
+                </div>
+           </div>
         </SectionCard>
     )
 };

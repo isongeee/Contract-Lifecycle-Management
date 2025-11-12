@@ -111,8 +111,6 @@ export default function App() {
         onSelectContract={handleSelectContract}
         onNavigateToWorkspace={handleNavigateToRenewalWorkspace}
         users={users}
-        notificationSettings={userNotificationSettings}
-        onUpdateNotificationSettings={setUserNotificationSettings}
       />;
       case 'renewal-workspace': return <RenewalWorkspace />;
       case 'reporting': return <ReportingPage />;

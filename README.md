@@ -474,5 +474,16 @@ This job runs daily to automatically transition contracts from `Active` to `Expi
 -   **Action:** Queries for all contracts where `status = 'Active'` and the `end_date` is in the past.
 -   **Result:** Updates the status of found contracts to `Expired` and sets the `expired_at` timestamp.
 
+### `send-renewal-reminders`
+
+This job runs daily to automatically create notifications for users about contracts that are nearing their expiration date, based on each user's personal notification settings.
+
+-   **Frequency:** Recommended to run once per day (e.g., at 1 AM UTC using the cron expression `0 1 * * *`).
+-   **Action:**
+    1.  Fetches all user notification settings from the `user_notification_settings` table.
+    2.  For each user, it identifies which active contracts are expiring on the specific days they've configured for reminders (e.g., 90, 60, 30 days before).
+    3.  Checks if the user has enabled in-app notifications for renewals in their preferences.
+-   **Result:** Inserts records into the `notifications` table for each user and matching contract. These notifications then appear in the user's in-app notification panel in real-time.
+
 ---
 This README provides a high-level overview of the application's functionality, architecture, and core processes as of the current version.
