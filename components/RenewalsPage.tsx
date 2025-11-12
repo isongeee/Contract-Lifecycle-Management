@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import type { Contract, UserProfile, UserNotificationSettings } from '../types';
 import { RefreshCwIcon, LayoutDashboardIcon, SettingsIcon, CalendarIcon } from './icons';
@@ -10,12 +9,13 @@ import RenewalsSettings from './RenewalsSettings';
 interface RenewalsPageProps {
   contracts: Contract[];
   onSelectContract: (contract: Contract) => void;
+  onNavigateToWorkspace: (contract: Contract) => void;
   users: UserProfile[];
   notificationSettings: UserNotificationSettings;
   onUpdateNotificationSettings: (settings: UserNotificationSettings) => void;
 }
 
-export default function RenewalsPage({ contracts, onSelectContract, users, notificationSettings, onUpdateNotificationSettings }: RenewalsPageProps) {
+export default function RenewalsPage({ contracts, onSelectContract, onNavigateToWorkspace, users, notificationSettings, onUpdateNotificationSettings }: RenewalsPageProps) {
   const [activeTab, setActiveTab] = useState('queue');
 
   const renewalContracts = contracts.filter(c => c.renewalRequest);
@@ -30,11 +30,20 @@ export default function RenewalsPage({ contracts, onSelectContract, users, notif
   const renderContent = () => {
     switch (activeTab) {
       case 'queue':
-        return <RenewalsQueue contracts={renewalContracts} onSelectContract={onSelectContract} />;
+        return <RenewalsQueue 
+                  contracts={renewalContracts} 
+                  users={users}
+                  onSelectContract={onSelectContract} 
+                  onNavigateToWorkspace={onNavigateToWorkspace} 
+                />;
       case 'overview':
         return <RenewalsOverview contracts={renewalContracts} />;
       case 'calendar':
-        return <RenewalsCalendar contracts={renewalContracts} />;
+        return <RenewalsCalendar 
+                  contracts={renewalContracts} 
+                  onSelectContract={onSelectContract} 
+                  onNavigateToWorkspace={onNavigateToWorkspace}
+                />;
       case 'settings':
         return <RenewalsSettings settings={notificationSettings} onUpdate={onUpdateNotificationSettings} />;
       default:

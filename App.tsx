@@ -1,7 +1,3 @@
-
-
-
-
 import React from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -30,6 +26,7 @@ import AddUserModal from './components/AddUserModal';
 import { useAppContext } from './contexts/AppContext';
 import SearchResultsPage from './components/SearchResultsPage';
 import ReportingPage from './components/ReportingPage';
+import RenewalWorkspace from './components/RenewalWorkspace';
 
 
 export default function App() {
@@ -84,6 +81,7 @@ export default function App() {
     handleStartEditCounterparty,
     // FIX: `handleUpdateSigningStatus` was destructured but does not exist. The correct name is `handleSigningStatusUpdate`. This is now correctly passed to ContractDetail.
     handleNavigate,
+    handleNavigateToRenewalWorkspace,
   } = useAppContext();
 
   const renderContent = () => {
@@ -111,10 +109,12 @@ export default function App() {
       case 'renewals': return <RenewalsPage 
         contracts={contracts}
         onSelectContract={handleSelectContract}
+        onNavigateToWorkspace={handleNavigateToRenewalWorkspace}
         users={users}
         notificationSettings={userNotificationSettings}
         onUpdateNotificationSettings={setUserNotificationSettings}
       />;
+      case 'renewal-workspace': return <RenewalWorkspace />;
       case 'reporting': return <ReportingPage />;
       case 'approvals': return <ApprovalsPage />;
       // FIX: Pass required props to SigningPage component.

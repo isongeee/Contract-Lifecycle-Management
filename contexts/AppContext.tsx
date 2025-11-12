@@ -31,6 +31,7 @@ export interface AppContextType {
     theme: 'light' | 'dark' | 'system';
     handleThemeChange: (newTheme: 'light' | 'dark' | 'system') => void;
     handleNavigate: (view: string) => void;
+    handleNavigateToRenewalWorkspace: (contract: Contract) => void;
     handleMetricNavigation: (metric: 'active' | 'pending' | 'high-risk' | 'my-contracts') => void;
 
     // Data State
@@ -709,6 +710,11 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     setSelectedProperty(null);
     setInitialFilters({});
   };
+
+  const handleNavigateToRenewalWorkspace = (contract: Contract) => {
+    setSelectedContract(contract);
+    setActiveView('renewal-workspace');
+  };
   
   const handleMetricNavigation = (metric: 'active' | 'pending' | 'high-risk' | 'my-contracts') => {
     if (!currentUser) return;
@@ -1198,104 +1204,52 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   };
 
   const handleRenewAsIs = async (originalContract: Contract, notes?: string) => {
-    if (!currentUser?.companyId || !currentUser?.appId || !originalContract.renewalRequest) return;
+    if (!currentUser || !originalContract.renewalRequest) return;
 
     // 1. Calculate new terms
     const termMonths = originalContract.renewalRequest.renewalTermMonths ?? originalContract.renewalTermMonths ?? 12;
-    const uplift = originalContract.renewalRequest.upliftPercent ?? originalContract.upliftPercent ?? 0;
-    const noticePeriod = originalContract.renewalRequest.noticePeriodDays ?? originalContract.noticePeriodDays ?? 30;
     
-    const originalEndDate = new Date(originalContract.endDate + 'T00:00:00Z'); // Parse as UTC
+    const originalEndDate = new Date(originalContract.endDate + 'T00:00:00Z'); // Parse as UTC to avoid timezone issues
     const newStartDate = new Date(originalEndDate);
     newStartDate.setUTCDate(newStartDate.getUTCDate() + 1);
     
     const newEndDate = new Date(newStartDate);
     newEndDate.setUTCMonth(newEndDate.getUTCMonth() + termMonths);
     newEndDate.setUTCDate(newEndDate.getUTCDate() - 1);
-    
-    const newValue = originalContract.value * (1 + (uplift / 100));
 
-    // 2. Create new contract record, fast-tracked to Fully Executed
-    const newContractRecord = {
-      type: originalContract.type,
-      risk_level: originalContract.riskLevel,
-      counterparty_id: originalContract.counterparty.id,
-      property_id: originalContract.property?.id,
-      owner_id: originalContract.owner.id,
-      frequency: originalContract.frequency,
-      seasonal_months: originalContract.seasonalMonths,
-      allocation: originalContract.allocation,
-      title: `[RENEWAL] ${originalContract.title}`,
-      status: ContractStatus.FULLY_EXECUTED, // Fast-track status
-      value: newValue,
-      effective_date: newStartDate.toISOString().split('T')[0],
-      end_date: newEndDate.toISOString().split('T')[0],
-      start_date: newStartDate.toISOString().split('T')[0],
-      parent_contract_id: originalContract.id,
-      company_id: currentUser.companyId,
-      app_id: currentUser.appId,
-      auto_renew: originalContract.autoRenew,
-      notice_period_days: noticePeriod,
-      renewal_term_months: termMonths,
-      uplift_percent: uplift,
-      executed_at: new Date().toISOString(), // Mark as executed now
-    };
+    // 2. Call the RPC function to handle the renewal atomically
+    const { error: rpcError } = await supabase.rpc('contract_transition', {
+      p_contract_id: originalContract.id,
+      p_action: 'RENEW_AS_IS',
+      p_payload: {
+        new_start_date: newStartDate.toISOString().split('T')[0],
+        new_end_date: newEndDate.toISOString().split('T')[0],
+      },
+    });
 
-    const { data: insertedContract, error: contractError } = await supabase.from('contracts').insert([newContractRecord]).select().single();
-    if (contractError) {
-      console.error("Error creating 'Renew As-Is' contract:", contractError);
-      alert(`Failed to create renewal contract: ${contractError.message}`);
+    if (rpcError) {
+      console.error("Error creating 'Renew As-Is' contract via RPC:", rpcError);
+      alert(`Failed to renew contract: ${rpcError.message}`);
       return;
     }
 
-    // 3. Create a new version for the new contract
-    const latestOldVersion = originalContract.versions.sort((a, b) => b.versionNumber - a.versionNumber)[0];
-    if (latestOldVersion) {
-        const newVersionRecord = {
-          contract_id: insertedContract.id,
-          version_number: 1,
-          author_id: currentUser.id,
-          content: latestOldVersion.content, // Re-use content from previous version
-          value: newValue,
-          effective_date: newContractRecord.effective_date,
-          end_date: newContractRecord.end_date,
-          frequency: newContractRecord.frequency,
-          seasonal_months: newContractRecord.seasonal_months,
-          property_id: newContractRecord.property_id,
-          company_id: currentUser.companyId,
-          app_id: currentUser.appId,
-        };
-        const { error: versionError } = await supabase.from('contract_versions').insert([newVersionRecord]);
-        if (versionError) console.error("Error creating version for renewed contract:", versionError);
-    }
-    
-    // 4. Copy allocations if they exist
-    if (originalContract.propertyAllocations && originalContract.propertyAllocations.length > 0) {
-        const newAllocationRecords = originalContract.propertyAllocations.map(alloc => ({
-            contract_id: insertedContract.id,
-            property_id: alloc.propertyId,
-            allocated_value: alloc.allocatedValue,
-            monthly_values: alloc.monthlyValues,
-            manual_edits: alloc.manualEdits,
-            company_id: currentUser.companyId,
-            app_id: currentUser.appId,
-        }));
-        const { error: allocationError } = await supabase.from('contract_property_allocations').insert(newAllocationRecords);
-        if (allocationError) console.error("Error copying property allocations:", allocationError);
-    }
-
-    // 5. Update original renewal request to ACTIVATED
+    // 3. Update original renewal request to ACTIVATED
     const { error: renewalUpdateError } = await supabase.from('renewal_requests').update({
         status: RenewalStatusEnum.ACTIVATED,
         mode: RenewalMode.RENEW_AS_IS,
         notes: notes,
     }).eq('id', originalContract.renewalRequest.id);
-    if (renewalUpdateError) console.error("Error updating original renewal request:", renewalUpdateError);
+
+    if (renewalUpdateError) {
+        // Log error but don't block user feedback since the main action succeeded
+        console.error("Error updating original renewal request status:", renewalUpdateError);
+    }
     
-    alert("Contract renewed as-is successfully! A new, fully executed contract has been created.");
-    // Fetch both contracts to update UI
+    alert("Contract renewed as-is successfully! The original contract has been superseded, and a new active contract has been created.");
+    
+    // 4. The websocket subscription will automatically pick up the changes. 
+    // We can trigger a manual fetch of the parent just to be sure the UI updates instantly.
     await fetchAndMergeContract(originalContract.id);
-    await fetchAndMergeContract(insertedContract.id);
   };
 
   const handleCreateNewVersion = async (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => {
@@ -1542,21 +1496,21 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   }, []);
 
   const handleEnrollMFA = useCallback(async () => {
-    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
-    if (!error) {
+    const { data, error: enrollError } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
+    if (!enrollError) {
         const { data: mfaData } = await supabase.auth.mfa.listFactors();
         if (mfaData) setMfaFactors(mfaData.all);
     }
-    return { data, error };
+    return { data, error: enrollError };
   }, []);
 
   const handleVerifyMFA = useCallback(async (factorId: string, code: string) => {
-    const { data, error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
-     if (!error) {
+    const { data, error: verifyError } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
+     if (!verifyError) {
         const { data: mfaData } = await supabase.auth.mfa.listFactors();
         if (mfaData) setMfaFactors(mfaData.all);
     }
-    return { data, error };
+    return { data, error: verifyError };
   }, []);
 
   const handleUnenrollMFA = useCallback(async (factorId: string) => {
@@ -1624,6 +1578,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     theme,
     handleThemeChange,
     handleNavigate,
+    handleNavigateToRenewalWorkspace,
     handleMetricNavigation,
     contracts,
     templates,

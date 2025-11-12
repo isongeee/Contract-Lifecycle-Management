@@ -1,6 +1,7 @@
-
 import React, { useMemo } from 'react';
 import type { Contract } from '../types';
+import { RENEWAL_STATUS_COLORS } from '../constants';
+import { RenewalStatus } from '../types';
 import { ClockIcon, AlertTriangleIcon } from './icons';
 
 interface RenewalsOverviewProps {
@@ -9,14 +10,10 @@ interface RenewalsOverviewProps {
 
 const daysUntil = (dateStr: string) => {
     if (!dateStr) return Infinity;
-    // Get today's date at midnight UTC to ensure consistent comparison
     const today = new Date();
     const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    
-    // Parse the YYYY-MM-DD string as midnight UTC
     const targetDate = new Date(dateStr + 'T00:00:00Z');
     if (isNaN(targetDate.getTime())) return Infinity;
-    
     const diffTime = targetDate.getTime() - todayUTC.getTime();
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
@@ -28,27 +25,106 @@ const MetricCard = ({ label, value }: { label: string; value: string | number })
     </div>
 );
 
-export default function RenewalsOverview({ contracts }: RenewalsOverviewProps) {
-    const metrics = useMemo(() => {
-        const next30 = contracts.filter(c => {
-            const days = daysUntil(c.endDate);
-            return days >= 0 && days <= 30;
-        }).length;
-        const next60 = contracts.filter(c => {
-            const days = daysUntil(c.endDate);
-            return days > 30 && days <= 60;
-        }).length;
-        const next90 = contracts.filter(c => {
-            const days = daysUntil(c.endDate);
-            return days > 60 && days <= 90;
-        }).length;
+const StatusPieChart = ({ data }: { data: { status: RenewalStatus, count: number }[]}) => {
+    const total = data.reduce((sum, item) => sum + item.count, 0);
+    if (total === 0) return null;
 
-        const atRisk = contracts.filter(c => {
-            const days = c.renewalRequest?.noticeDeadline ? daysUntil(c.renewalRequest.noticeDeadline) : Infinity;
-            return days >= 0 && days <= 7;
+    const conicGradient = useMemo(() => {
+        let gradient = 'conic-gradient(';
+        let currentPercentage = 0;
+        
+        const colorMap: Record<RenewalStatus, string> = {
+            [RenewalStatus.QUEUED]: '#E5E7EB',
+            [RenewalStatus.IN_PROGRESS]: '#93C5FD',
+            [RenewalStatus.ACTIVATED]: '#4ADE80',
+            [RenewalStatus.CANCELLED]: '#FCA5A5',
+        };
+
+        data.forEach(({ status, count }) => {
+            const percentage = (count / total) * 100;
+            gradient += `${colorMap[status]} ${currentPercentage}% ${currentPercentage + percentage}%, `;
+            currentPercentage += percentage;
+        });
+        return gradient.slice(0, -2) + ')';
+    }, [data, total]);
+    
+    return (
+        <div className="flex items-center gap-6">
+            <div className="relative w-32 h-32">
+                <div className="absolute inset-0 rounded-full" style={{ background: conicGradient }}></div>
+                <div className="absolute inset-2 bg-white dark:bg-gray-800 rounded-full"></div>
+            </div>
+            <div className="space-y-2">
+                {data.map(({ status, count }) => (
+                    <div key={status} className="flex items-center">
+                        <span className={`w-3 h-3 rounded-full mr-2 ${RENEWAL_STATUS_COLORS[status].split(' ')[0]}`}></span>
+                        <span className="text-sm text-gray-600 dark:text-gray-300 capitalize">{status}</span>
+                        <span className="ml-auto text-sm font-semibold text-gray-800 dark:text-gray-200">{count}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+};
+
+const ValueByMonthChart = ({ data }: { data: { month: string, value: number }[] }) => {
+    const maxValue = Math.max(...data.map(d => d.value), 0);
+    if (maxValue === 0) return <p className="text-sm text-center text-gray-500 py-8">No upcoming renewal values to display.</p>;
+    
+    return (
+        <div className="flex justify-between items-end space-x-4 h-48">
+            {data.map(({ month, value }) => (
+                <div key={month} className="flex-1 flex flex-col items-center">
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-t-md flex-grow flex items-end">
+                        <div 
+                            className="w-full bg-primary rounded-t-md" 
+                            style={{ height: `${(value / maxValue) * 100}%` }}
+                            title={`${month}: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)}`}
+                        ></div>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{month}</p>
+                </div>
+            ))}
+        </div>
+    );
+};
+
+
+export default function RenewalsOverview({ contracts }: RenewalsOverviewProps) {
+    const { metrics, pieChartData, barChartData } = useMemo(() => {
+        const next30 = contracts.filter(c => { const days = daysUntil(c.endDate); return days >= 0 && days <= 30; }).length;
+        const next60 = contracts.filter(c => { const days = daysUntil(c.endDate); return days > 30 && days <= 60; }).length;
+        const next90 = contracts.filter(c => { const days = daysUntil(c.endDate); return days > 60 && days <= 90; }).length;
+        const atRisk = contracts.filter(c => { const days = c.renewalRequest?.noticeDeadline ? daysUntil(c.renewalRequest.noticeDeadline) : Infinity; return days >= 0 && days <= 7; });
+        
+        const statusCounts = contracts.reduce((acc, c) => {
+            if (c.renewalRequest) {
+                acc[c.renewalRequest.status] = (acc[c.renewalRequest.status] || 0) + 1;
+            }
+            return acc;
+        }, {} as Record<RenewalStatus, number>);
+        
+        const pieChartData = Object.entries(statusCounts).map(([status, count]) => ({ status: status as RenewalStatus, count }));
+
+        const valueByMonth: { [key: string]: number } = {};
+        const today = new Date();
+        for (let i = 0; i < 6; i++) {
+            const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
+            const monthKey = date.toLocaleString('default', { month: 'short' });
+            valueByMonth[monthKey] = 0;
+        }
+
+        contracts.forEach(c => {
+            const endDate = new Date(c.endDate + 'T00:00:00Z');
+            const monthKey = endDate.toLocaleString('default', { month: 'short' });
+            if (monthKey in valueByMonth) {
+                valueByMonth[monthKey] += c.value;
+            }
         });
 
-        return { next30, next60, next90, atRisk };
+        const barChartData = Object.entries(valueByMonth).map(([month, value]) => ({ month, value }));
+        
+        return { metrics: { next30, next60, next90, atRisk }, pieChartData, barChartData };
     }, [contracts]);
 
     return (
@@ -57,6 +133,17 @@ export default function RenewalsOverview({ contracts }: RenewalsOverviewProps) {
                 <MetricCard label="Renewals in Next 30 Days" value={metrics.next30} />
                 <MetricCard label="Renewals in 31-60 Days" value={metrics.next60} />
                 <MetricCard label="Renewals in 61-90 Days" value={metrics.next90} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Renewals by Status</h3>
+                    <StatusPieChart data={pieChartData} />
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Total Value Renewing by Month</h3>
+                    <ValueByMonthChart data={barChartData} />
+                </div>
             </div>
             
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm">
