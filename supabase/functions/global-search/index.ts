@@ -12,6 +12,11 @@ const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 );
 
+// Helper to escape special characters for use in a regular expression.
+const escapeRegExp = (str: string) => {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: {
@@ -27,17 +32,17 @@ serve(async (req) => {
       throw new Error("Search term and company ID are required.");
     }
     
-    // Convert search term to a format suitable for tsquery
-    // 'word1 word2' becomes 'word1 & word2'
-    const query = term.trim().split(/\s+/).join(' & ');
+    // The search term is passed directly to textSearch, which uses websearch_to_tsquery.
+    // This handles multiple words correctly (e.g., 'word1 word2' becomes 'word1' & 'word2').
+    const query = term.trim();
 
-    // This RPC function assumes you have a text search vector on contract_versions.content
+    // This function assumes you have a text search vector ('fts') on contract_versions.content
+    // as recommended in README.md for performance.
     // Example migration:
     // ALTER TABLE contract_versions ADD COLUMN fts tsvector
     //   GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;
     // CREATE INDEX contract_versions_fts_idx ON contract_versions USING GIN (fts);
     
-    // We will use a direct query here, assuming the 'fts' column exists.
     const { data, error } = await supabaseAdmin
       .from('contract_versions')
       .select(`
@@ -51,34 +56,56 @@ serve(async (req) => {
         content
       `)
       .eq('company_id', companyId)
-      // The .textSearch() method handles ts_vector conversion internally
-      .textSearch('content', query, {
+      // Use the 'fts' column for performance, and pass the raw term to `websearch` type.
+      .textSearch('fts', query, {
           type: 'websearch',
           config: 'english'
       });
 
     if (error) throw error;
     
-    // Manually create snippets since ts_headline isn't directly available in the client lib
-    const results = data.map(v => {
-      const regex = new RegExp(term.trim().split(/\s+/).join('|'), 'gi');
-      const match = v.content.match(regex);
-      let snippet = '...no relevant snippet found...';
-      if (match && match.index) {
-          const start = Math.max(0, match.index - 50);
-          const end = Math.min(v.content.length, match.index + match[0].length + 50);
-          snippet = `${start > 0 ? '...' : ''}${v.content.substring(start, end)}${end < v.content.length ? '...' : ''}`;
-      }
-      
-      return {
-        contractId: v.contract.id,
-        contractTitle: v.contract.title,
-        counterpartyName: v.contract.counterparty.name,
-        versionId: v.id,
-        versionNumber: v.version_number,
-        snippet: snippet.replace(/\n/g, ' '),
-      };
-    });
+    // Manually create snippets since ts_headline isn't directly available in the client lib.
+    const results = data
+      .map(v => {
+        // Safely access nested data and content
+        if (!v.content || !v.contract || !v.contract.counterparty) {
+          return null;
+        }
+
+        // Create a safe regex to find the first occurrence of any search term for snippet context.
+        const searchTermRegex = new RegExp(
+          term
+            .trim()
+            .split(/\s+/)
+            .map(escapeRegExp) // Escape each word to prevent regex errors
+            .join('|'),
+          'i'
+        );
+        const match = v.content.match(searchTermRegex);
+        
+        let snippet = '...no relevant snippet found...';
+        
+        if (match && typeof match.index === 'number') {
+            const matchIndex = match.index;
+            const firstMatchLength = match[0].length;
+            const start = Math.max(0, matchIndex - 70);
+            const end = Math.min(v.content.length, matchIndex + firstMatchLength + 70);
+            snippet = `${start > 0 ? '...' : ''}${v.content.substring(start, end)}${end < v.content.length ? '...' : ''}`;
+        } else {
+            // Fallback snippet if regex doesn't match (e.g., due to stemming)
+            snippet = v.content.substring(0, 150) + (v.content.length > 150 ? '...' : '');
+        }
+        
+        return {
+          contractId: v.contract.id,
+          contractTitle: v.contract.title,
+          counterpartyName: v.contract.counterparty.name,
+          versionId: v.id,
+          versionNumber: v.version_number,
+          snippet: snippet.replace(/\n/g, ' '),
+        };
+      })
+      .filter((v): v is NonNullable<typeof v> => v !== null);
 
 
     return new Response(JSON.stringify(results), {
@@ -87,6 +114,8 @@ serve(async (req) => {
     });
 
   } catch (error) {
+    // Enhanced error logging for easier debugging in Supabase logs.
+    console.error("Error in global-search function:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       status: 500,

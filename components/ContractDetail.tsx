@@ -108,35 +108,75 @@ const DetailItem = ({ label, value }: { label: string; value: React.ReactNode })
     </div>
 );
 
-const ApprovalWidget = ({ steps }: { steps: Contract['approvalSteps']}) => (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Approval Workflow</h3>
-        {steps.length > 0 ? (
-            <ol className="relative border-l border-gray-200 dark:border-gray-700">
-                {steps.map((step, index) => (
-                    <li key={step.id} className="mb-6 ml-6">
-                        <span className={`absolute flex items-center justify-center w-6 h-6 rounded-full -left-3 ring-8 ring-white dark:ring-gray-800 ${APPROVAL_STATUS_COLORS[step.status]} text-xs`}>
-                           {index + 1}
-                        </span>
-                        <div className="ml-2">
-                             <h4 className="flex items-center mb-1 text-md font-semibold text-gray-900 dark:text-gray-100">{`${step.approver.firstName} ${step.approver.lastName}`}
-                                <span className={`ml-2 text-xs font-medium px-2 py-0.5 rounded-full ${APPROVAL_STATUS_COLORS[step.status]}`}>
-                                    {step.status}
-                                </span>
-                            </h4>
-                            <time className="block mb-2 text-sm font-normal leading-none text-gray-400">
-                                {step.status === ApprovalStatus.APPROVED ? `Approved on ${step.approvedAt}` : `Awaiting response`}
-                            </time>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">{step.approver.role}</p>
-                        </div>
-                    </li>
-                ))}
-            </ol>
-        ) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No approval steps have been initiated for this version.</p>
-        )}
-    </div>
-);
+const ApprovalWidget = ({ steps }: { steps: Contract['approvalSteps']}) => {
+    // Sort steps to show pending first, then by date for completed ones.
+    const sortedSteps = [...steps].sort((a, b) => {
+        if (a.status === ApprovalStatus.PENDING && b.status !== ApprovalStatus.PENDING) return -1;
+        if (a.status !== ApprovalStatus.PENDING && b.status === ApprovalStatus.PENDING) return 1;
+        // For non-pending, sort by approval date descending (most recent first)
+        if (a.approvedAt && b.approvedAt) return new Date(b.approvedAt).getTime() - new Date(a.approvedAt).getTime();
+        return 0;
+    });
+
+    const getStatusLine = (step: Contract['approvalSteps'][number]) => {
+        const actionDate = step.approvedAt ? new Date(step.approvedAt) : null;
+        const formattedDate = actionDate ? actionDate.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        
+        switch (step.status) {
+            case ApprovalStatus.APPROVED:
+                return actionDate ? `on ${formattedDate}` : 'Approved';
+            case ApprovalStatus.PENDING:
+                return 'Awaiting response';
+            case ApprovalStatus.REJECTED:
+                return actionDate ? `on ${formattedDate}` : 'Rejected';
+            case ApprovalStatus.REQUESTED_CHANGES:
+                return actionDate ? `on ${formattedDate}` : 'Changes requested';
+            default:
+                return 'Action pending';
+        }
+    };
+    
+    return (
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Approval Workflow</h3>
+            {sortedSteps.length > 0 ? (
+                <ol className="relative border-l border-gray-200 dark:border-gray-700">
+                    {sortedSteps.map((step) => (
+                        <li key={step.id} className="mb-6 ml-6">
+                            <span className={`absolute flex items-center justify-center w-6 h-6 rounded-full -left-3 ring-8 ring-white dark:ring-gray-800 ${APPROVAL_STATUS_COLORS[step.status]}`}>
+                               {step.status === ApprovalStatus.APPROVED && <CheckCircleIcon className="w-4 h-4 text-green-800 dark:text-green-200" />}
+                               {step.status === ApprovalStatus.REJECTED && <XCircleIcon className="w-4 h-4 text-red-800 dark:text-red-200" />}
+                               {step.status === ApprovalStatus.PENDING && <ClockIcon className="w-4 h-4 text-yellow-800 dark:text-yellow-200" />}
+                               {step.status === ApprovalStatus.REQUESTED_CHANGES && <EditIcon className="w-4 h-4 text-blue-800 dark:text-blue-200" />}
+                            </span>
+                            <div className="ml-2">
+                                 <h4 className="flex items-center mb-1 text-md font-semibold text-gray-900 dark:text-gray-100">
+                                    {`${step.approver.firstName} ${step.approver.lastName}`}
+                                    <span className="text-sm text-gray-500 dark:text-gray-400 font-normal ml-2">- {step.approver.role}</span>
+                                </h4>
+                                <div className="flex items-center space-x-2">
+                                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${APPROVAL_STATUS_COLORS[step.status]}`}>
+                                        {step.status}
+                                    </span>
+                                    <time className="block text-sm font-normal leading-none text-gray-400 dark:text-gray-500">
+                                        {getStatusLine(step)}
+                                    </time>
+                                </div>
+                                {step.comment && (
+                                    <p className="mt-2 text-sm bg-gray-100 dark:bg-gray-700 p-2 rounded-md text-gray-800 dark:text-gray-200 italic">
+                                        "{step.comment}"
+                                    </p>
+                                )}
+                            </div>
+                        </li>
+                    ))}
+                </ol>
+            ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400">No approval steps have been initiated for this version.</p>
+            )}
+        </div>
+    );
+};
 
 const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
