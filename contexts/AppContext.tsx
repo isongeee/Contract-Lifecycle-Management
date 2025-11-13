@@ -1040,7 +1040,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
       if (mode === RenewalMode.AMENDMENT) {
         alert("Amendment process started. A new contract version has been created for your changes. The contract is now in 'In Review' status.");
       }
-      // The websocket listener will handle the UI update.
+      await fetchAndMergeContract(contractToUpdate.id);
     }
   };
   
@@ -1056,7 +1056,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
         alert(`Failed to start renegotiation: ${error.message}`);
     } else {
         alert('New renewal contract draft created successfully. You will now be taken to the new draft.');
-        // The websocket subscription will create the new contract in the UI. We need to find it and navigate.
+        await fetchAndMergeContract(originalContract.id);
         const { data: newContract } = await supabase.from('contracts').select('id').eq('parent_contract_id', originalContract.id).order('created_at', { ascending: false }).limit(1).single();
         if (newContract) {
             const fullNewContract = await fetchAndMergeContract(newContract.id);
@@ -1074,8 +1074,9 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     if (error) {
         console.error("Error creating renewal request:", error);
         alert(`Failed to create renewal request: ${error.message}`);
+    } else {
+        await fetchAndMergeContract(contract.id);
     }
-    // Change will be picked up by websocket
   };
 
   const handleUpdateRenewalTerms = async (renewalRequestId: string, updatedTerms: { renewalTermMonths: number; noticePeriodDays: number; upliftPercent: number; }) => {
@@ -1130,7 +1131,11 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
       alert(`Failed to renew contract: ${error.message}`);
     } else {
        alert("Contract renewed as-is successfully! The original contract has been superseded, and a new active contract has been created.");
-       // Websocket will handle updates.
+       await fetchAndMergeContract(originalContract.id);
+       const { data: newContract } = await supabase.from('contracts').select('id').eq('parent_contract_id', originalContract.id).order('created_at', { ascending: false }).limit(1).single();
+       if (newContract?.id) {
+           await fetchAndMergeContract(newContract.id);
+       }
     }
   };
 
