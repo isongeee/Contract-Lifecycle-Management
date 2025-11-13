@@ -82,6 +82,7 @@ export default function App() {
     // FIX: `handleUpdateSigningStatus` was destructured but does not exist. The correct name is `handleSigningStatusUpdate`. This is now correctly passed to ContractDetail.
     handleNavigate,
     handleNavigateToRenewalWorkspace,
+    handleDownloadFile,
   } = useAppContext();
 
   const renderContent = () => {
@@ -175,6 +176,7 @@ export default function App() {
       onCreateRenewalFeedback={handleCreateRenewalFeedback}
       onUpdateRenewalTerms={handleUpdateRenewalTerms}
       onNavigate={handleNavigate}
+      onDownloadFile={handleDownloadFile}
     />;
     if (activeView === 'templates' && selectedTemplate) return <TemplateDetail />;
     if (activeView === 'counterparties' && selectedCounterparty) return <CounterpartyDetail />;

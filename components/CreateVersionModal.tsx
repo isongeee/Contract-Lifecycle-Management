@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import type { Contract, ContractVersion, Property } from '../types';
 import { ContractFrequency } from '../types';
@@ -8,7 +7,7 @@ interface CreateVersionModalProps {
   contract: Contract;
   properties: Property[];
   onClose: () => void;
-  onSave: (newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => void;
+  onSave: (newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'> & { file?: File | null }) => void;
 }
 
 const FormField = ({ label, children, className = 'sm:col-span-1' }: { label: string; children?: React.ReactNode; className?: string }) => (
@@ -26,6 +25,7 @@ export default function CreateVersionModal({ contract, properties, onClose, onSa
     const [formData, setFormData] = useState({
         content: latestVersion.content,
         fileName: '',
+        file: null as File | null,
         value: latestVersion.value,
         effectiveDate: latestVersion.effectiveDate,
         endDate: latestVersion.endDate,
@@ -40,14 +40,18 @@ export default function CreateVersionModal({ contract, properties, onClose, onSa
     
      const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
-            handleChange('fileName', e.target.files[0].name);
+            const file = e.target.files[0];
+            handleChange('fileName', file.name);
+            handleChange('file', file);
         }
     };
 
     const handleSave = () => {
+        const { file, ...restOfData } = formData;
         onSave({
-            ...formData,
+            ...restOfData,
             content: formData.content || `Content for Version ${latestVersion.versionNumber + 1}`,
+            file: file,
         });
     };
 

@@ -155,6 +155,7 @@ export interface ContractVersion {
   author: UserProfile;
   content: string;
   fileName?: string;
+  storagePath?: string;
   // Snapshot of commercial terms for this version
   value: number;
   effectiveDate: string;

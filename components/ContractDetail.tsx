@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type { Contract, Clause, Property, ContractStatus as ContractStatusType, ContractVersion, UserProfile, AuditLog, RenewalStatus, RenewalMode, SigningStatus, Comment } from '../types';
 import { ContractStatus, ApprovalStatus, ContractFrequency, RenewalStatus as RenewalStatusEnum, SigningStatus as SigningStatusEnum, RenewalMode as RenewalModeEnum } from '../types';
 import StatusTag from './StatusTag';
-import { ArrowLeftIcon, SparklesIcon, LoaderIcon, CopyIcon, FileTextIcon, ChevronDownIcon, ArchiveIcon, CheckCircleIcon, XCircleIcon, HomeIcon, ClockIcon, RefreshCwIcon, PenSquareIcon, GitCompareIcon, MessageSquareIcon, EditIcon } from './icons';
+import { ArrowLeftIcon, SparklesIcon, LoaderIcon, CopyIcon, FileTextIcon, ChevronDownIcon, ArchiveIcon, CheckCircleIcon, XCircleIcon, HomeIcon, ClockIcon, RefreshCwIcon, PenSquareIcon, GitCompareIcon, MessageSquareIcon, EditIcon, AlertTriangleIcon, DownloadIcon } from './icons';
 import { APPROVAL_STATUS_COLORS, RENEWAL_STATUS_COLORS } from '../constants';
 import { summarizeContractRisk, extractClauses } from '../services/geminiService';
 import CreateVersionModal from './CreateVersionModal';
@@ -13,6 +13,7 @@ import RenewalDecisionModal from './RenewalDecisionModal';
 import VersionComparisonView from './VersionComparisonView';
 import CommentsPanel from './CommentsPanel';
 import UpdateStatusModal from './UpdateStatusModal';
+import { jsPDF } from 'jspdf';
 
 type ContractAction = ContractStatus | 'APPROVE_STEP' | 'REJECT_STEP';
 
@@ -24,7 +25,7 @@ interface ContractDetailProps {
   currentUser: UserProfile;
   onBack: () => void;
   onTransition: (contractId: string, action: ContractAction, payload?: any) => void;
-  onCreateNewVersion: (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => void;
+  onCreateNewVersion: (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'> & { file?: File | null }) => void;
   onRenewalDecision: (renewalRequestId: string, mode: RenewalMode, notes?: string) => void;
   onCreateRenewalRequest: (contract: Contract) => void;
   onSelectContract: (contract: Contract) => void;
@@ -36,6 +37,7 @@ interface ContractDetailProps {
   onCreateRenewalFeedback: (renewalRequestId: string, feedbackText: string) => void;
   onUpdateRenewalTerms: (renewalRequestId: string, updatedTerms: { renewalTermMonths: number; noticePeriodDays: number; upliftPercent: number; }) => void;
   onNavigate: (view: string) => void;
+  onDownloadFile: (storagePath: string, fileName: string) => void;
 }
 
 const ContractActions = ({ contract, onRequestTransition, onOpenApprovalModal, onStartCreateNewVersion }: { contract: Contract, onRequestTransition: (action: ContractAction) => void, onOpenApprovalModal: () => void, onStartCreateNewVersion: () => void }) => {
@@ -180,7 +182,7 @@ const ApprovalWidget = ({ steps }: { steps: Contract['approvalSteps']}) => {
 
 const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
-const VersionHistory = ({ versions, selectedVersionId, onSelectVersion, onCompare, compareSelection, onToggleCompareSelection }: { versions: Contract['versions']; selectedVersionId: string | null; onSelectVersion: (id: string) => void; onCompare: () => void; compareSelection: string[]; onToggleCompareSelection: (id: string) => void; }) => (
+const VersionHistory = ({ versions, selectedVersionId, onSelectVersion, onCompare, compareSelection, onToggleCompareSelection, onDownloadFile }: { versions: Contract['versions']; selectedVersionId: string | null; onSelectVersion: (id: string) => void; onCompare: () => void; compareSelection: string[]; onToggleCompareSelection: (id: string) => void; onDownloadFile: (path: string, name: string) => void; }) => (
     <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
         <div className="flex justify-between items-center mb-2">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Version History</h3>
@@ -193,13 +195,20 @@ const VersionHistory = ({ versions, selectedVersionId, onSelectVersion, onCompar
                 <li key={v.id} className={`p-2 rounded-lg transition-colors ${v.id === selectedVersionId ? 'bg-primary-100 dark:bg-primary-900/20' : ''}`}>
                     <div className="flex items-start space-x-3">
                         <input type="checkbox" onChange={() => onToggleCompareSelection(v.id)} checked={compareSelection.includes(v.id)} className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <button onClick={() => onSelectVersion(v.id)} className="w-full text-left flex items-start space-x-2">
-                            <img className="h-8 w-8 rounded-full" src={v.author.avatarUrl} alt={`${v.author.firstName} ${v.author.lastName}`} />
-                            <div>
-                                <p className={`text-sm font-semibold ${v.id === selectedVersionId ? 'text-primary-800 dark:text-primary-100' : 'text-gray-800 dark:text-gray-200'}`}>Version {v.versionNumber}</p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">by {`${v.author.firstName}`} on {v.createdAt}</p>
-                            </div>
-                        </button>
+                        <div className="w-full text-left flex justify-between items-start">
+                            <button onClick={() => onSelectVersion(v.id)} className="flex items-start space-x-2">
+                                <img className="h-8 w-8 rounded-full" src={v.author.avatarUrl} alt={`${v.author.firstName} ${v.author.lastName}`} />
+                                <div>
+                                    <p className={`text-sm font-semibold ${v.id === selectedVersionId ? 'text-primary-800 dark:text-primary-100' : 'text-gray-800 dark:text-gray-200'}`}>Version {v.versionNumber}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">by {`${v.author.firstName}`} on {v.createdAt}</p>
+                                </div>
+                            </button>
+                            {v.storagePath && v.fileName && (
+                                <button onClick={() => onDownloadFile(v.storagePath!, v.fileName!)} title={`Download ${v.fileName}`} className="p-1 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600">
+                                <DownloadIcon className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </li>
             ))}
@@ -207,13 +216,14 @@ const VersionHistory = ({ versions, selectedVersionId, onSelectVersion, onCompar
     </div>
 );
 
-const AiAnalysis = ({ onSummary, onExtract, riskSummary, extractedClauses, isLoadingSummary, isLoadingClauses }: { 
+const AiAnalysis = ({ onSummary, onExtract, riskSummary, extractedClauses, isLoadingSummary, isLoadingClauses, aiError }: { 
     onSummary: () => void; 
     onExtract: () => void;
     riskSummary?: string;
     extractedClauses?: Clause[];
     isLoadingSummary: boolean;
     isLoadingClauses: boolean;
+    aiError: string | null;
 }) => {
     return (
         <div className="bg-primary-50 dark:bg-primary-900/10 border border-primary-200 dark:border-primary-900/30 p-6 rounded-lg shadow-sm">
@@ -234,6 +244,13 @@ const AiAnalysis = ({ onSummary, onExtract, riskSummary, extractedClauses, isLoa
                 </div>
             </div>
             
+            {aiError && (
+                <div className="mt-4 p-3 bg-red-100 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md text-sm text-red-800 dark:text-red-200">
+                    <p className="font-semibold flex items-center"><AlertTriangleIcon className="w-4 h-4 mr-2" /> AI Analysis Failed</p>
+                    <p className="mt-1">{aiError}</p>
+                </div>
+            )}
+
             {riskSummary && (
                 <div className="mt-4">
                     <h4 className="font-semibold text-gray-800 dark:text-gray-100">Risk Summary:</h4>
@@ -592,12 +609,13 @@ const daysUntil = (dateStr: string) => {
 };
 
 
-export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalDecision, onCreateRenewalRequest, onSelectContract, onRenewAsIs, onStartRenegotiation, onUpdateSigningStatus, onCreateComment, onResolveComment, onCreateRenewalFeedback, onUpdateRenewalTerms, onNavigate }: ContractDetailProps) {
+export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalDecision, onCreateRenewalRequest, onSelectContract, onRenewAsIs, onStartRenegotiation, onUpdateSigningStatus, onCreateComment, onResolveComment, onCreateRenewalFeedback, onUpdateRenewalTerms, onNavigate, onDownloadFile }: ContractDetailProps) {
   const [contract, setContract] = useState(initialContract);
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const [isRequestingApproval, setIsRequestingApproval] = useState(false);
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [isLoadingClauses, setIsLoadingClauses] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [isMakingDecision, setIsMakingDecision] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [confirmModalState, setConfirmModalState] = useState<{ isOpen: boolean; action: ContractAction | null; payload?: any; }>({ isOpen: false, action: null, payload: undefined });
@@ -646,7 +664,7 @@ export default function ContractDetail({ contract: initialContract, contracts, p
   }, [viewedVersion]);
 
 
-  const handleSaveNewVersion = (newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => {
+  const handleSaveNewVersion = (newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'> & { file?: File | null }) => {
     onCreateNewVersion(contract.id, newVersionData);
     setIsCreatingVersion(false);
   };
@@ -716,16 +734,32 @@ export default function ContractDetail({ contract: initialContract, contracts, p
 
   const handleSummarizeRisk = useCallback(async () => {
     setIsLoadingSummary(true);
-    const summary = await summarizeContractRisk(editedContent);
-    setContract(c => ({...c, riskSummary: summary, extractedClauses: undefined }));
-    setIsLoadingSummary(false);
+    setAiError(null);
+    try {
+        const summary = await summarizeContractRisk(editedContent);
+        setContract(c => ({...c, riskSummary: summary, extractedClauses: undefined }));
+    } catch (error) {
+        console.error("Error summarizing contract risk:", error);
+        setAiError(error instanceof Error ? error.message : "An unknown error occurred during risk analysis.");
+        setContract(c => ({...c, riskSummary: undefined }));
+    } finally {
+        setIsLoadingSummary(false);
+    }
   }, [editedContent]);
 
   const handleExtractClauses = useCallback(async () => {
     setIsLoadingClauses(true);
-    const clauses = await extractClauses(editedContent);
-    setContract(c => ({...c, extractedClauses: clauses, riskSummary: undefined }));
-    setIsLoadingClauses(false);
+    setAiError(null);
+    try {
+        const clauses = await extractClauses(editedContent);
+        setContract(c => ({...c, extractedClauses: clauses, riskSummary: undefined }));
+    } catch (error) {
+        console.error("Error extracting clauses:", error);
+        setAiError(error instanceof Error ? error.message : "An unknown error occurred during clause extraction.");
+        setContract(c => ({...c, extractedClauses: undefined }));
+    } finally {
+        setIsLoadingClauses(false);
+    }
   }, [editedContent]);
 
   const handleSelectVersion = (id: string) => {
@@ -761,6 +795,52 @@ export default function ContractDetail({ contract: initialContract, contracts, p
           }
       }
   };
+  
+  const handleGeneratePdf = () => {
+  if (!editedContent) return;
+
+  const doc = new jsPDF({
+    orientation: 'p',
+    unit: 'pt',
+    format: 'a4',
+  });
+
+  doc.setProperties({
+    title: `${contract.title} - v${viewedVersion.versionNumber}`,
+    author: `${currentUser.firstName} ${currentUser.lastName}`,
+  });
+
+  const margin = 40; // points
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const usableWidth = pageWidth - margin * 2;
+
+  // Base font + simple line height
+  doc.setFontSize(10);
+  const lineHeight = doc.getFontSize() * 1.2; // 20% extra spacing for readability
+
+  // Wrap the entire contract text to fit within the usable width
+  const textLines = doc.splitTextToSize(editedContent, usableWidth);
+
+  let y = margin;
+
+  for (const line of textLines) {
+    // If the next line doesn't fit on the current page, add a new page
+    if (y + lineHeight > pageHeight - margin) {
+      doc.addPage();
+      y = margin;
+    }
+
+    // Guard against any weird falsy values (just in case)
+    doc.text(line || '', margin, y);
+    y += lineHeight;
+  }
+
+  doc.save(
+    `${contract.title.replace(/\s+/g, '_')}_v${viewedVersion.versionNumber}.pdf`
+  );
+};
+
 
   return (
     <div>
@@ -876,10 +956,16 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                     </div>
                  ) : (
                     <>
-                        <AiAnalysis onSummary={handleSummarizeRisk} onExtract={handleExtractClauses} riskSummary={contract.riskSummary} extractedClauses={contract.extractedClauses} isLoadingSummary={isLoadingSummary} isLoadingClauses={isLoadingClauses} />
+                        <AiAnalysis onSummary={handleSummarizeRisk} onExtract={handleExtractClauses} riskSummary={contract.riskSummary} extractedClauses={contract.extractedClauses} isLoadingSummary={isLoadingSummary} isLoadingClauses={isLoadingClauses} aiError={aiError} />
                         <FinancialsAndAllocationCard contract={contract} viewedVersion={viewedVersion} properties={properties} />
                         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Contract Document (Version {viewedVersion.versionNumber})</h3>
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Contract Document (Version {viewedVersion.versionNumber})</h3>
+                                <button onClick={handleGeneratePdf} className="flex items-center px-3 py-1.5 text-xs font-semibold text-primary-800 dark:text-primary-200 bg-white dark:bg-gray-700 border border-primary-300 dark:border-primary-700 rounded-md hover:bg-primary-100 dark:hover:bg-gray-600">
+                                    <DownloadIcon className="w-4 h-4 mr-1.5" />
+                                    Generate PDF
+                                </button>
+                            </div>
                             <div className="prose prose-sm max-w-none">
                                <textarea
                                     value={editedContent}
@@ -905,7 +991,7 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                  <ApprovalWidget steps={contract.approvalSteps} />
             </div>
             <div className="xl:col-span-4 space-y-6">
-                <VersionHistory versions={contract.versions} selectedVersionId={viewedVersionId} onSelectVersion={handleSelectVersion} onCompare={handleCompare} compareSelection={compareSelection} onToggleCompareSelection={handleToggleCompareSelection}/>
+                <VersionHistory versions={contract.versions} selectedVersionId={viewedVersionId} onSelectVersion={handleSelectVersion} onCompare={handleCompare} compareSelection={compareSelection} onToggleCompareSelection={handleToggleCompareSelection} onDownloadFile={onDownloadFile}/>
                 <CommentsPanel comments={viewedVersion.comments || []} users={users} currentUser={currentUser} versionId={viewedVersion.id} contractContent={editedContent} onCreateComment={onCreateComment} onResolveComment={onResolveComment} />
             </div>
         </div>

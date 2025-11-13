@@ -115,6 +115,8 @@ export interface AppContextType {
     globalSearchResults: SearchResult[];
     globalSearchTerm: string;
     handleGlobalSearch: (term: string) => Promise<void>;
+    // FIX: Add missing handleDownloadFile property to the context type.
+    handleDownloadFile: (storagePath: string, fileName: string) => Promise<void>;
 
     setNotificationSettings: React.Dispatch<React.SetStateAction<NotificationSetting[]>>;
     setUserNotificationSettings: (newSettingsOrUpdater: React.SetStateAction<UserNotificationSettings>) => Promise<void>;
@@ -403,7 +405,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     for (const version of (versionsRes.data || [])) {
         const contract = contractsById.get(version.contract_id);
         const comments = commentsByVersionId.get(version.id) || [];
-        if (contract) contract.versions.push({ ...version, versionNumber: version.version_number, createdAt: version.created_at, fileName: version.file_name, effectiveDate: version.effective_date, endDate: version.end_date, seasonalMonths: version.seasonal_months, author: usersMap.get(version.author_id)!, property: propertiesMap.get(version.property_id), comments });
+        if (contract) contract.versions.push({ ...version, versionNumber: version.version_number, createdAt: version.created_at, fileName: version.file_name, storagePath: version.storage_path, effectiveDate: version.effective_date, endDate: version.end_date, seasonalMonths: version.seasonal_months, author: usersMap.get(version.author_id)!, property: propertiesMap.get(version.property_id), comments });
     }
     for (const approval of (approvalsRes.data || [])) {
         const contract = contractsById.get(approval.contract_id);
@@ -512,7 +514,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
         seasonalMonths: contractData.seasonal_months, owner: usersMap.get(contractData.owner_id)!,
         counterparty: counterpartiesMap.get(contractData.counterparty_id)!,
         property: propertiesMap.get(contractData.property_id),
-        versions: (versionsRes.data || []).map(v => ({...v, versionNumber: v.version_number, createdAt: v.created_at, fileName: v.file_name, effectiveDate: v.effective_date, endDate: v.end_date, seasonalMonths: v.seasonal_months, author: usersMap.get(v.author_id)!, property: propertiesMap.get(v.property_id), comments: commentsByVersionId.get(v.id) || []})).sort((a,b) => a.versionNumber - b.versionNumber),
+        versions: (versionsRes.data || []).map(v => ({...v, versionNumber: v.version_number, createdAt: v.created_at, fileName: v.file_name, storagePath: v.storage_path, effectiveDate: v.effective_date, endDate: v.end_date, seasonalMonths: v.seasonal_months, author: usersMap.get(v.author_id)!, property: propertiesMap.get(v.property_id), comments: commentsByVersionId.get(v.id) || []})).sort((a,b) => a.versionNumber - b.versionNumber),
         approvalSteps: (approvalsRes.data || []).map(a => ({...a, approvedAt: a.approved_at, approver: usersMap.get(a.approver_id)!})),
         propertyAllocations: (allocationsRes.data || []).map(a => ({...a, propertyId: a.property_id, allocatedValue: a.allocated_value, monthlyValues: a.monthly_values, manualEdits: a.manual_edits})),
         renewalRequest: (renewalsRes.data && renewalsRes.data[0]) ? { ...renewalsRes.data[0], renewalOwner: usersMap.get(renewalsRes.data[0].renewal_owner_id), contractId: renewalsRes.data[0].contract_id, companyId: renewalsRes.data[0].company_id, feedback: feedbackByRenewalId.get(renewalsRes.data[0].id) || [] } : undefined,
@@ -1425,6 +1427,30 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     }
   }, [currentUser]);
 
+  // FIX: Implement the handleDownloadFile function.
+  const handleDownloadFile = useCallback(async (storagePath: string, fileName: string) => {
+    // This assumes contract documents are stored in a bucket named 'contract-documents'.
+    // Ensure this bucket exists in your Supabase project with appropriate RLS policies.
+    const { data, error } = await supabase.storage.from('contract_documents').download(storagePath);
+
+    if (error) {
+      console.error('Error downloading file:', error);
+      alert(`Failed to download file: ${error.message}`);
+      return;
+    }
+    
+    // Create a temporary link to trigger the browser's download functionality.
+    const blob = new Blob([data]);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    a.remove();
+  }, []);
+
   const contextValue: AppContextType = {
     session,
     currentUser,
@@ -1517,6 +1543,8 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     globalSearchResults,
     globalSearchTerm,
     handleGlobalSearch,
+    // FIX: Add the implemented handleDownloadFile function to the context value.
+    handleDownloadFile,
     setNotificationSettings,
     setUserNotificationSettings,
     setUsers,

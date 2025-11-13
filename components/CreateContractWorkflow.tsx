@@ -9,7 +9,7 @@ interface CreateContractWorkflowProps {
   counterparties: Counterparty[];
   users: UserProfile[];
   onCancel: () => void;
-  onFinish: (newContractData: Partial<Contract> & { propertyAllocations?: any[] }) => void;
+  onFinish: (newContractData: Partial<Contract> & { propertyAllocations?: any[], file?: File | null }) => void;
   currentUser: UserProfile;
   initialData?: Partial<Contract> & { content?: string } | null;
 }
@@ -149,14 +149,21 @@ const Stage2_Information = ({ data, setData, onBack, onNext, onToggleMonth, coun
             return;
         }
         setIsDrafting(true);
-        const draft = await draftInitialContract({
-            contractType: data.type,
-            counterpartyName: data.counterparty.name,
-            effectiveDate: data.effectiveDate || new Date().toISOString().split('T')[0],
-            value: data.value || 0,
-        });
-        setData('content', draft);
-        setIsDrafting(false);
+        try {
+            const draft = await draftInitialContract({
+                contractType: data.type,
+                counterpartyName: data.counterparty.name,
+                effectiveDate: data.effectiveDate || new Date().toISOString().split('T')[0],
+                value: data.value || 0,
+            });
+            setData('content', draft);
+        } catch (error) {
+            console.error("Error drafting with AI:", error);
+            alert(`AI draft failed: ${error instanceof Error ? error.message : "An unknown error occurred."}`);
+            setData('content', data.content || "AI drafting failed. Please enter contract text manually.");
+        } finally {
+            setIsDrafting(false);
+        }
     };
 
     const isFormValid = useMemo(() => {
@@ -709,7 +716,7 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
 
 export default function CreateContractWorkflow({ onCancel, onFinish, properties, counterparties, users, currentUser, initialData }: CreateContractWorkflowProps) {
   const [currentStep, setCurrentStep] = useState(1);
-  const [newContractData, setNewContractData] = useState<Partial<Contract> & { propertyAllocations?: any[], fileName?: string, content?: string }>({
+  const [newContractData, setNewContractData] = useState<Partial<Contract> & { propertyAllocations?: any[], fileName?: string, content?: string, file?: File | null }>({
       title: initialData?.title || '',
       type: initialData?.type || ContractType.MSA,
       content: initialData?.content || '',
@@ -726,6 +733,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
       seasonalMonths: [],
       propertyAllocations: [],
       fileName: '',
+      file: null,
   });
 
   useEffect(() => {
@@ -807,7 +815,10 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
   };
 
   const handleFileSelect = (file: File | null) => {
-    updateData('fileName', file ? file.name : '');
+    updateData({
+      fileName: file ? file.name : '',
+      file: file,
+    });
   };
 
   const handleToggleMonth = (monthYearKey: string) => {
