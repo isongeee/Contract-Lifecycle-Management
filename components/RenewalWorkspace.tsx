@@ -30,8 +30,9 @@ export default function RenewalWorkspace() {
         contracts, 
         handleNavigate, 
         handleSelectContract,
-        onUpdateRenewalTerms,
-        onCreateRenewalFeedback,
+        // FIX: Destructure the correct function names from the context.
+        handleUpdateRenewalTerms,
+        handleCreateRenewalFeedback,
         currentUser,
         users,
     } = useAppContext();
@@ -69,7 +70,8 @@ export default function RenewalWorkspace() {
     
     const handleSave = () => {
         if (!renewalRequest) return;
-        onUpdateRenewalTerms(renewalRequest.id, terms);
+        // FIX: Call the correct function name.
+        handleUpdateRenewalTerms(renewalRequest.id, terms);
         setIsEditing(false);
     };
 
@@ -88,7 +90,8 @@ export default function RenewalWorkspace() {
 
     const handleAddFeedback = () => {
         if (newFeedback.trim() && renewalRequest) {
-            onCreateRenewalFeedback(renewalRequest.id, newFeedback);
+            // FIX: Call the correct function name.
+            handleCreateRenewalFeedback(renewalRequest.id, newFeedback);
             setNewFeedback('');
         }
     };

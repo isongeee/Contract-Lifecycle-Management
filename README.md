@@ -121,6 +121,7 @@ DECLARE
   v_reason_code text := nullif(p_payload->>'reason_code','');
   v_title_prefix text := coalesce(nullif(p_payload->>'title_prefix',''), '[RENEWAL] ');
   v_parent_id uuid;
+  v_end_date date;
 
   -- locals
   v_action text := btrim(p_action);  -- normalize incoming action text
@@ -133,8 +134,8 @@ BEGIN
   PERFORM pg_advisory_xact_lock(hashtext(p_contract_id::text));
 
   -- Lock row to avoid races + fetch basic attrs
-  SELECT c.status::text, c.company_id, c.app_id, c.owner_id, c.parent_contract_id
-    INTO v_current_status_text, v_company_id, v_app_id, v_contract_owner_id, v_parent_id
+  SELECT c.status::text, c.company_id, c.app_id, c.owner_id, c.parent_contract_id, c.end_date
+    INTO v_current_status_text, v_company_id, v_app_id, v_contract_owner_id, v_parent_id, v_end_date
   FROM public.contracts c
   WHERE c.id = p_contract_id
   FOR UPDATE;
@@ -184,7 +185,7 @@ BEGIN
              reason_code = COALESCE(reason_code, v_reason_code),
              updated_at = now()
        WHERE contract_id = p_contract_id
-         AND status IN ('queued','decision_needed','in_progress');
+         AND status IN ('decision_needed','in_progress');
     EXCEPTION WHEN undefined_table THEN NULL;
             WHEN undefined_column THEN NULL;
     END;
@@ -338,7 +339,7 @@ BEGIN
         UPDATE public.renewal_requests
            SET status = 'activated', path = COALESCE(path,'as_is'), decision = 'proceed', updated_at = now()
          WHERE contract_id = p_contract_id
-           AND status IN ('queued','decision_needed','in_progress');
+           AND status IN ('decision_needed','in_progress');
       EXCEPTION WHEN undefined_table THEN NULL;
               WHEN undefined_column THEN NULL;
       END;
@@ -348,7 +349,7 @@ BEGIN
         UPDATE public.renewal_requests
            SET status = 'in_progress', path = COALESCE(path,'as_is'), decision = 'proceed', updated_at = now()
          WHERE contract_id = p_contract_id
-           AND status IN ('queued','decision_needed');
+           AND status IN ('decision_needed');
       EXCEPTION WHEN undefined_table THEN NULL;
               WHEN undefined_column THEN NULL;
       END;
@@ -431,7 +432,7 @@ BEGIN
       UPDATE public.renewal_requests
          SET status = 'in_progress', path = 'amend', decision = 'proceed', updated_at = now()
        WHERE contract_id = p_contract_id
-         AND status IN ('queued','decision_needed');
+         AND status IN ('decision_needed');
     EXCEPTION WHEN undefined_table THEN NULL;
             WHEN undefined_column THEN NULL;
     END;
@@ -514,7 +515,7 @@ BEGIN
       UPDATE public.renewal_requests
          SET status = 'in_progress', path = 'renegotiate', decision = 'proceed', updated_at = now()
        WHERE contract_id = p_contract_id
-         AND status IN ('queued','decision_needed');
+         AND status IN ('decision_needed');
     EXCEPTION WHEN undefined_table THEN NULL;
             WHEN undefined_column THEN NULL;
     END;
@@ -698,42 +699,51 @@ BEGIN
       IF v_current_status_text <> 'Fully Executed' THEN
         RAISE EXCEPTION 'Invalid transition from % to Active', v_current_status_text;
       END IF;
-
-      UPDATE public.contracts
-      SET status = 'Active'::contract_status,
-          active_at = now(),
-          updated_at = now()
-      WHERE id = p_contract_id;
-
-      -- If this contract has a parent (As-Is with re-exec OR Renegotiate), supersede parent and complete its request
-      PERFORM 1;
-      SELECT parent_contract_id INTO v_parent_id FROM public.contracts WHERE id = p_contract_id;
-      IF v_parent_id IS NOT NULL THEN
+      
+      -- Check if the contract is already past its end date.
+      IF v_end_date < current_date THEN
+        -- If end date is in the past, expire it immediately instead of activating.
         UPDATE public.contracts
-           SET status = 'Superseded'::contract_status,
-               superseded_at = COALESCE(superseded_at, now()),
-               updated_at = now()
-         WHERE id = v_parent_id
-           AND status <> 'Superseded';
-
-        BEGIN
-          UPDATE public.renewal_requests
-             SET status = 'activated', updated_at = now()
-           WHERE contract_id = v_parent_id
-             AND status IN ('queued','decision_needed','in_progress');
-        EXCEPTION WHEN undefined_table THEN NULL;
-                WHEN undefined_column THEN NULL;
-        END;
+        SET status = 'Expired'::contract_status,
+            expired_at = now(),
+            updated_at = now()
+        WHERE id = p_contract_id;
       ELSE
-        -- Amendment path finishes on same contract
-        BEGIN
-          UPDATE public.renewal_requests
-             SET status = 'activated', updated_at = now()
-           WHERE contract_id = p_contract_id
-             AND status IN ('in_progress');
-        EXCEPTION WHEN undefined_table THEN NULL;
-                WHEN undefined_column THEN NULL;
-        END;
+        -- Otherwise, proceed with activation.
+        UPDATE public.contracts
+        SET status = 'Active'::contract_status,
+            active_at = now(),
+            updated_at = now()
+        WHERE id = p_contract_id;
+
+        -- If this contract has a parent (As-Is with re-exec OR Renegotiate), supersede parent and complete its request
+        IF v_parent_id IS NOT NULL THEN
+          UPDATE public.contracts
+             SET status = 'Superseded'::contract_status,
+                 superseded_at = COALESCE(superseded_at, now()),
+                 updated_at = now()
+           WHERE id = v_parent_id
+             AND status <> 'Superseded';
+
+          BEGIN
+            UPDATE public.renewal_requests
+               SET status = 'activated', updated_at = now()
+             WHERE contract_id = v_parent_id
+               AND status IN ('decision_needed','in_progress');
+          EXCEPTION WHEN undefined_table THEN NULL;
+                  WHEN undefined_column THEN NULL;
+          END;
+        ELSE
+          -- Amendment path finishes on same contract
+          BEGIN
+            UPDATE public.renewal_requests
+               SET status = 'activated', updated_at = now()
+             WHERE contract_id = p_contract_id
+               AND status IN ('in_progress');
+          EXCEPTION WHEN undefined_table THEN NULL;
+                  WHEN undefined_column THEN NULL;
+          END;
+        END IF;
       END IF;
 
     WHEN 'Expired' THEN
@@ -765,6 +775,91 @@ BEGIN
   END CASE;
 END;
 $$;
+```
+
+### `report_value_by_counterparty`
+
+This function aggregates contract values by counterparty type for reporting purposes.
+
+```sql
+CREATE OR REPLACE FUNCTION report_value_by_counterparty(p_company_id uuid)
+RETURNS TABLE ("counterparty_type" text, "total_value" numeric, "contract_count" bigint) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    cp.type,
+    SUM(c.value) as total_value,
+    COUNT(c.id) as contract_count
+  FROM
+    contracts c
+  JOIN
+    counterparties cp ON c.counterparty_id = cp.id
+  WHERE
+    c.company_id = p_company_id
+  GROUP BY
+    cp.type
+  ORDER BY
+    total_value DESC;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### `report_lifecycle_duration`
+
+This function calculates the average time contracts spend in each lifecycle stage.
+
+```sql
+CREATE OR REPLACE FUNCTION report_lifecycle_duration(p_company_id uuid)
+RETURNS TABLE ("stage" text, "avg_duration_days" numeric, "contract_count" bigint) AS $$
+BEGIN
+  RETURN QUERY
+  WITH durations AS (
+    SELECT
+      'Draft -> Review' as stage,
+      EXTRACT(EPOCH FROM (review_started_at - submitted_at)) / 86400 AS duration
+    FROM contracts
+    WHERE company_id = p_company_id AND submitted_at IS NOT NULL AND review_started_at IS NOT NULL
+    
+    UNION ALL
+    
+    SELECT
+      'Review -> Approval' as stage,
+      EXTRACT(EPOCH FROM (approval_started_at - review_started_at)) / 86400 AS duration
+    FROM contracts
+    WHERE company_id = p_company_id AND review_started_at IS NOT NULL AND approval_started_at IS NOT NULL
+
+    UNION ALL
+
+    SELECT
+      'Approval -> Signature' as stage,
+      EXTRACT(EPOCH FROM (sent_for_signature_at - approval_completed_at)) / 86400 AS duration
+    FROM contracts
+    WHERE company_id = p_company_id AND approval_completed_at IS NOT NULL AND sent_for_signature_at IS NOT NULL
+
+    UNION ALL
+
+    SELECT
+      'Signature -> Executed' as stage,
+      EXTRACT(EPOCH FROM (executed_at - sent_for_signature_at)) / 86400 AS duration
+    FROM contracts
+    WHERE company_id = p_company_id AND sent_for_signature_at IS NOT NULL AND executed_at IS NOT NULL
+  )
+  SELECT
+    d.stage,
+    COALESCE(AVG(d.duration), 0) as avg_duration_days,
+    COUNT(d.duration) as contract_count
+  FROM durations d
+  GROUP BY d.stage
+  ORDER BY 
+    CASE d.stage
+      WHEN 'Draft -> Review' THEN 1
+      WHEN 'Review -> Approval' THEN 2
+      WHEN 'Approval -> Signature' THEN 3
+      WHEN 'Signature -> Executed' THEN 4
+      ELSE 5
+    END;
+END;
+$$ LANGUAGE plpgsql;
 ```
 
 ## 💾 Database Schema Migrations

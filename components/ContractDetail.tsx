@@ -345,7 +345,7 @@ const FinancialsAndAllocationCard = ({ contract, viewedVersion, properties }: { 
             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
                 <DetailItem label="Total Contract Value" value={formatCurrency(totalValue)} />
                 <DetailItem label="Allocation Type" value={
-                    <span className="font-semibold">{contract.allocation.charAt(0).toUpperCase() + contract.allocation.slice(1)}</span>
+                    <span className="font-semibold capitalize">{contract.allocation.charAt(0).toUpperCase() + contract.allocation.slice(1)}</span>
                 } />
             </dl>
             {renderAllocationDetails()}
