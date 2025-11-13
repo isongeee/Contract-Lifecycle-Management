@@ -538,92 +538,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
 }, [currentUser, usersMap, counterpartiesMap, propertiesMap]);
 
   useEffect(() => {
-      if (!currentUser?.companyId) return;
-
-      const handleDbChange = async (payload: any) => {
-          let contractId: string | null = payload.new?.contract_id || payload.old?.contract_id || null;
-
-          if (!contractId) {
-             if (['contracts', 'renewal_requests', 'audit_logs'].includes(payload.table)) {
-                contractId = payload.new?.id || payload.old?.id || payload.new?.related_entity_id || payload.old?.related_entity_id;
-             }
-          }
-          
-          if (payload.table === 'comments') {
-              const versionId = payload.new?.version_id || payload.old?.version_id;
-              if (versionId) {
-                  const { data: version } = await supabase.from('contract_versions').select('contract_id').eq('id', versionId).single();
-                  if (version) contractId = version.contract_id;
-              }
-          } else if (payload.table === 'renewal_feedback') {
-              const renewalRequestId = payload.new?.renewal_request_id || payload.old?.renewal_request_id;
-              if (renewalRequestId) {
-                  const { data: request } = await supabase.from('renewal_requests').select('contract_id').eq('id', renewalRequestId).single();
-                  if (request) contractId = request.contract_id;
-              }
-          }
-          
-          if (payload.table === 'comments' && payload.eventType === 'INSERT' && contractId) {
-              const newCommentRecord = payload.new;
-              setContracts(prevContracts => {
-                  return prevContracts.map(c => {
-                      if (c.id === contractId) {
-                          const newVersions = c.versions.map(v => {
-                              if (v.id === newCommentRecord.version_id) {
-                                  const author = usersMap.get(newCommentRecord.author_id);
-                                  if (!author) return v;
-
-                                  const newComment: Comment = {
-                                      id: newCommentRecord.id,
-                                      createdAt: newCommentRecord.created_at,
-                                      content: newCommentRecord.content,
-                                      author: author,
-                                      resolvedAt: newCommentRecord.resolved_at,
-                                      versionId: newCommentRecord.version_id,
-                                  };
-                                  
-                                  if (v.comments?.some(existing => existing.id === newComment.id)) {
-                                      return v;
-                                  }
-                                  
-                                  const updatedComments = [...(v.comments || []), newComment];
-                                  return { ...v, comments: updatedComments };
-                              }
-                              return v;
-                          });
-                          return { ...c, versions: newVersions };
-                      }
-                      return c;
-                  });
-              });
-              return;
-          }
-
-          if (contractId) {
-              if (payload.table === 'contracts' && payload.eventType === 'DELETE') {
-                  setContracts(prev => prev.filter(c => c.id !== contractId));
-              } else {
-                  await fetchAndMergeContract(contractId);
-              }
-          }
-      };
-
-      const companyFilter = `company_id=eq.${currentUser.companyId}`;
-      const subscriptions = [
-          supabase.channel('contracts').on('postgres_changes', { event: '*', schema: 'public', table: 'contracts', filter: companyFilter }, handleDbChange).subscribe(),
-          supabase.channel('contract_versions').on('postgres_changes', { event: '*', schema: 'public', table: 'contract_versions', filter: companyFilter }, handleDbChange).subscribe(),
-          supabase.channel('approval_steps').on('postgres_changes', { event: '*', schema: 'public', table: 'approval_steps', filter: companyFilter }, handleDbChange).subscribe(),
-          supabase.channel('renewal_requests').on('postgres_changes', { event: '*', schema: 'public', table: 'renewal_requests', filter: companyFilter }, handleDbChange).subscribe(),
-          supabase.channel('comments').on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: companyFilter }, handleDbChange).subscribe(),
-          supabase.channel('renewal_feedback').on('postgres_changes', { event: '*', schema: 'public', table: 'renewal_feedback', filter: companyFilter }, handleDbChange).subscribe(),
-      ];
-
-      return () => {
-          subscriptions.forEach(sub => sub.unsubscribe());
-      };
-  }, [currentUser, fetchAndMergeContract, usersMap]);
-
-  useEffect(() => {
     if (selectedContract) {
       const updatedContractInList = contracts.find(c => c.id === selectedContract.id);
       if (updatedContractInList) {
@@ -635,11 +549,28 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
       }
     }
   }, [contracts, selectedContract]);
-  
-  useEffect(() => {
-    if (!currentUser) return;
 
-    const channel = supabase
+  // Consolidated real-time subscriptions
+  useEffect(() => {
+    if (!currentUser || !currentUser.companyId) return;
+
+    // --- Subscription for user-specific notifications ---
+    const fetchNotifications = async () => {
+      const { data: notificationsData, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error("Error re-syncing notifications:", error);
+      } else {
+        setNotifications((notificationsData as Notification[]) || []);
+      }
+    };
+
+    const notificationsChannel = supabase
       .channel(`notifications:${currentUser.id}`)
       .on<Notification>(
         'postgres_changes',
@@ -650,18 +581,102 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
           filter: `user_id=eq.${currentUser.id}`,
         },
         (payload) => {
-          setNotifications((currentNotifications) =>
-            [payload.new as Notification, ...currentNotifications].sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-          );
+          setNotifications((currentNotifications) => [payload.new as Notification, ...currentNotifications]);
         }
       )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          fetchNotifications();
+        }
+      });
+      
+    // --- Subscription for all other company-wide DB changes ---
+    const handleDbChange = async (payload: any) => {
+      let contractId: string | null = payload.new?.contract_id || payload.old?.contract_id || null;
+
+      if (!contractId) {
+         if (['contracts', 'renewal_requests', 'audit_logs'].includes(payload.table)) {
+            contractId = payload.new?.id || payload.old?.id || payload.new?.related_entity_id || payload.old?.related_entity_id;
+         }
+      }
+      
+      if (payload.table === 'comments') {
+          const versionId = payload.new?.version_id || payload.old?.version_id;
+          if (versionId) {
+              const { data: version } = await supabase.from('contract_versions').select('contract_id').eq('id', versionId).single();
+              if (version) contractId = version.contract_id;
+          }
+      } else if (payload.table === 'renewal_feedback') {
+          const renewalRequestId = payload.new?.renewal_request_id || payload.old?.renewal_request_id;
+          if (renewalRequestId) {
+              const { data: request } = await supabase.from('renewal_requests').select('contract_id').eq('id', renewalRequestId).single();
+              if (request) contractId = request.contract_id;
+          }
+      }
+      
+      if (payload.table === 'comments' && payload.eventType === 'INSERT' && contractId) {
+          const newCommentRecord = payload.new;
+          setContracts(prevContracts => {
+              return prevContracts.map(c => {
+                  if (c.id === contractId) {
+                      const newVersions = c.versions.map(v => {
+                          if (v.id === newCommentRecord.version_id) {
+                              const author = usersMap.get(newCommentRecord.author_id);
+                              if (!author) return v;
+
+                              const newComment: Comment = {
+                                  id: newCommentRecord.id,
+                                  createdAt: newCommentRecord.created_at,
+                                  content: newCommentRecord.content,
+                                  author: author,
+                                  resolvedAt: newCommentRecord.resolved_at,
+                                  versionId: newCommentRecord.version_id,
+                              };
+                              
+                              if (v.comments?.some(existing => existing.id === newComment.id)) {
+                                  return v;
+                              }
+                              
+                              const updatedComments = [...(v.comments || []), newComment];
+                              return { ...v, comments: updatedComments };
+                          }
+                          return v;
+                      });
+                      return { ...c, versions: newVersions };
+                  }
+                  return c;
+              });
+          });
+          return;
+      }
+
+      if (contractId) {
+          if (payload.table === 'contracts' && payload.eventType === 'DELETE') {
+              setContracts(prev => prev.filter(c => c.id !== contractId));
+          } else {
+              await fetchAndMergeContract(contractId);
+          }
+      }
+    };
+
+    const companyFilter = `company_id=eq.${currentUser.companyId}`;
+    const companyDbChannel = supabase.channel(`company-db-changes:${currentUser.companyId}`);
+    
+    companyDbChannel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contracts', filter: companyFilter }, handleDbChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contract_versions', filter: companyFilter }, handleDbChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'approval_steps', filter: companyFilter }, handleDbChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'renewal_requests', filter: companyFilter }, handleDbChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: companyFilter }, handleDbChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'renewal_feedback', filter: companyFilter }, handleDbChange)
       .subscribe();
 
+    // --- Cleanup ---
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(notificationsChannel);
+      supabase.removeChannel(companyDbChannel);
     };
-  }, [currentUser]);
-
+  }, [currentUser, fetchAndMergeContract, usersMap]);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -1056,6 +1071,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
         alert(`Failed to start renegotiation: ${error.message}`);
     } else {
         alert('New renewal contract draft created successfully. You will now be taken to the new draft.');
+        // The subscription will handle the UI update, but we can optimistically fetch
         await fetchAndMergeContract(originalContract.id);
         const { data: newContract } = await supabase.from('contracts').select('id').eq('parent_contract_id', originalContract.id).order('created_at', { ascending: false }).limit(1).single();
         if (newContract) {
@@ -1131,6 +1147,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
       alert(`Failed to renew contract: ${error.message}`);
     } else {
        alert("Contract renewed as-is successfully! The original contract has been superseded, and a new active contract has been created.");
+       // Fetch both the original (now superseded) and the new contract
        await fetchAndMergeContract(originalContract.id);
        const { data: newContract } = await supabase.from('contracts').select('id').eq('parent_contract_id', originalContract.id).order('created_at', { ascending: false }).limit(1).single();
        if (newContract?.id) {
