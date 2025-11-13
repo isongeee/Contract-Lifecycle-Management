@@ -227,12 +227,6 @@ const formatPropertyAddress = (property: Property) => {
     ].filter(Boolean).join(', ');
 };
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const formatMonthYear = (monthYear: string) => {
-    const [year, monthNum] = monthYear.split('-');
-    return `${MONTHS[parseInt(monthNum, 10) - 1]} ${year}`;
-};
-
 const AssociatedPropertiesCard = ({ contract, properties }: { contract: Contract, properties: Property[] }) => {
     if (contract.allocation === 'portfolio') {
         return (
@@ -274,6 +268,12 @@ const FinancialsAndAllocationCard = ({ contract, viewedVersion, properties }: { 
     const getPropertyName = (propertyId?: string) => {
         if (!propertyId || propertyId === 'portfolio') return 'Portfolio-wide';
         return properties.find(p => p.id === propertyId)?.name || 'Unknown Property';
+    };
+
+    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const formatMonthYear = (monthYear: string) => {
+        const [year, monthNum] = monthYear.split('-');
+        return `${MONTHS[parseInt(monthNum, 10) - 1]} ${year}`;
     };
 
     const renderAllocationDetails = () => {
@@ -331,7 +331,10 @@ const FinancialsAndAllocationCard = ({ contract, viewedVersion, properties }: { 
         
         return null;
     };
-
+    
+    if (!isSeasonal && !hasMultiAllocations) {
+        return null;
+    }
 
     return (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
@@ -834,6 +837,7 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                  ) : (
                     <>
                         <AiAnalysis onSummary={handleSummarizeRisk} onExtract={handleExtractClauses} riskSummary={contract.riskSummary} extractedClauses={contract.extractedClauses} isLoadingSummary={isLoadingSummary} isLoadingClauses={isLoadingClauses} />
+                        <FinancialsAndAllocationCard contract={contract} viewedVersion={viewedVersion} properties={properties} />
                         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
                             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Contract Document (Version {viewedVersion.versionNumber})</h3>
                             <div className="prose prose-sm max-w-none">
