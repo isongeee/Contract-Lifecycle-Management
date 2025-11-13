@@ -50,14 +50,8 @@ const ContractActions = ({ contract, onRequestTransition, onOpenApprovalModal, o
             case ContractStatus.APPROVED:
                 return <button onClick={() => onRequestTransition(ContractStatus.SENT_FOR_SIGNATURE)} className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700">Send for Signature</button>;
             case ContractStatus.SENT_FOR_SIGNATURE:
-                const isSigningComplete = contract.signingStatus === SigningStatusEnum.SIGNED_BY_COUNTERPARTY;
-                 return <button
-                            onClick={() => onRequestTransition(ContractStatus.FULLY_EXECUTED)}
-                            disabled={!isSigningComplete}
-                            title={!isSigningComplete ? "Signing process is not yet complete." : "Mark contract as fully executed"}
-                            className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                            Mark as Executed
-                        </button>;
+                // This action is now handled by the SigningProgressWidget for better UX.
+                return null;
             case ContractStatus.FULLY_EXECUTED:
                 const effectiveDate = new Date(contract.effectiveDate);
                 if (effectiveDate <= new Date()) {
@@ -422,7 +416,6 @@ const RenewalCard = ({ contract, onOpenDecisionModal, onUpdateRenewalTerms }: { 
                  )}
             </div>
 
-            {/* FIX: Replaced non-existent 'QUEUED' with 'DECISION_NEEDED' to match RenewalStatus enum. */}
             {renewalRequest.status === RenewalStatusEnum.DECISION_NEEDED && (
                 <div className="flex justify-between items-center bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg">
                     <div>
@@ -480,7 +473,6 @@ const RenewalCard = ({ contract, onOpenDecisionModal, onUpdateRenewalTerms }: { 
                 </div>
             )}
             
-            {/* FIX: Replaced non-existent 'ACTIVATED' with 'COMPLETED' to match RenewalStatus enum. */}
             {(renewalRequest.status === RenewalStatusEnum.COMPLETED || renewalRequest.status === RenewalStatusEnum.CANCELLED) && (
                  <div>
                     <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Renewal Status</p>

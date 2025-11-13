@@ -124,7 +124,6 @@ export interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
-// FIX: Made children optional to resolve typing issue where the component is used with implicit children.
 export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   /*
    * DEVELOPER NOTE: Monolithic Context
@@ -614,42 +613,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
           }
       }
       
-      if (payload.table === 'comments' && payload.eventType === 'INSERT' && contractId) {
-          const newCommentRecord = payload.new;
-          setContracts(prevContracts => {
-              return prevContracts.map(c => {
-                  if (c.id === contractId) {
-                      const newVersions = c.versions.map(v => {
-                          if (v.id === newCommentRecord.version_id) {
-                              const author = usersMap.get(newCommentRecord.author_id);
-                              if (!author) return v;
-
-                              const newComment: Comment = {
-                                  id: newCommentRecord.id,
-                                  createdAt: newCommentRecord.created_at,
-                                  content: newCommentRecord.content,
-                                  author: author,
-                                  resolvedAt: newCommentRecord.resolved_at,
-                                  versionId: newCommentRecord.version_id,
-                              };
-                              
-                              if (v.comments?.some(existing => existing.id === newComment.id)) {
-                                  return v;
-                              }
-                              
-                              const updatedComments = [...(v.comments || []), newComment];
-                              return { ...v, comments: updatedComments };
-                          }
-                          return v;
-                      });
-                      return { ...c, versions: newVersions };
-                  }
-                  return c;
-              });
-          });
-          return;
-      }
-
       if (contractId) {
           if (payload.table === 'contracts' && payload.eventType === 'DELETE') {
               setContracts(prev => prev.filter(c => c.id !== contractId));

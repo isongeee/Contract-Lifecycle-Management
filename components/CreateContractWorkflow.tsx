@@ -371,7 +371,6 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
         if (allocationType === 'single') {
             updates.property = properties.find((p: Property) => p.id === singlePropertyId);
             if (isSeasonal) {
-                // FIX: Add a unique 'id' to each allocation object to satisfy the ContractPropertyAllocation type.
                 updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }, index) => ({
                     id: `alloc-${Date.now()}-${index}`,
                     ...rest,
@@ -384,15 +383,12 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
         } else if (allocationType === 'multi') {
             updates.property = properties.find((p: Property) => p.id === (isSeasonal ? seasonalAllocations[0]?.propertyId : multiAllocations[0]?.propertyId));
             if (isSeasonal) {
-                // FIX: Add a unique 'id' to each allocation object to satisfy the ContractPropertyAllocation type.
                 updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }, index) => ({
                     id: `alloc-${Date.now()}-${index}`,
                     ...rest,
                     allocatedValue: (Object.values(rest.monthlyValues) as number[]).reduce((sum, v) => sum + (v || 0), 0)
                 }));
             } else {
-                 // FIX: Add a unique 'id' to each allocation object to satisfy the ContractPropertyAllocation type.
-                 // FIX: Destructure manualEdits to remove it from the final object for non-seasonal allocations, resolving a type conflict.
                  updates.propertyAllocations = multiAllocations.map(({ id, manualEdits, ...rest }: MultiPropertyAllocation, index) => ({
                     id: `alloc-${Date.now()}-${index}`,
                     ...rest,
@@ -401,7 +397,6 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
         } else { // portfolio
             updates.property = undefined;
             if (isSeasonal) {
-                // FIX: Add a unique 'id' to each allocation object to satisfy the ContractPropertyAllocation type.
                 updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }, index) => ({
                     id: `alloc-${Date.now()}-${index}`,
                     ...rest,

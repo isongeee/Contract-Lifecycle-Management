@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-// FIX: Import RenewalMode as a value to use its members.
 import { RenewalMode } from '../types';
 import type { Contract, UserProfile } from '../types';
 import { XIcon, RefreshCwIcon, FileTextIcon, EditIcon, XCircleIcon, SparklesIcon, LoaderIcon, UserIcon } from './icons';
@@ -108,7 +107,6 @@ export default function RenewalDecisionModal({ contract, contracts, currentUser,
                         </p>
                         <div className="mt-4 flex space-x-4">
                             <button onClick={() => setStep('changes')} className="flex-1 text-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700">Yes, Proceed with Renewal</button>
-                            {/* FIX: Use RenewalMode enum member for type safety. */}
                             <button onClick={() => onConfirm(RenewalMode.TERMINATE, justification)} className="flex-1 text-center px-6 py-3 border border-gray-300 dark:border-gray-600 text-base font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700">No, Terminate Contract</button>
                         </div>
                     </div>
@@ -153,7 +151,6 @@ export default function RenewalDecisionModal({ contract, contracts, currentUser,
                                 description="Best for minor changes. This will create a new version of the current contract and return it to the 'In Review' stage for you to edit."
                                 icon={<EditIcon className="h-6 w-6 text-indigo-600" />}
                                 color="indigo"
-                                // FIX: Use RenewalMode enum member for type safety.
                                 onClick={() => onConfirm(RenewalMode.AMENDMENT, justification)}
                             />
                             <BigButton 

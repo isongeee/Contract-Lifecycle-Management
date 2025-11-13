@@ -33,8 +33,6 @@ const StatusPieChart = ({ data }: { data: { status: RenewalStatus, count: number
         let gradient = 'conic-gradient(';
         let currentPercentage = 0;
         
-        // FIX: Corrected the colorMap to use valid RenewalStatus enum members and align with theme colors.
-        // This resolves missing properties 'decision_needed' and 'completed', and removes invalid properties 'QUEUED' and 'ACTIVATED'.
         const colorMap: Record<RenewalStatus, string> = {
             [RenewalStatus.DECISION_NEEDED]: '#FBBF24',
             [RenewalStatus.IN_PROGRESS]: '#93C5FD',
