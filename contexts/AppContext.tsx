@@ -75,7 +75,7 @@ export interface AppContextType {
     handleUseTemplate: (template: ContractTemplate) => void;
 
     // Data Mutation Handlers
-    handleFinalizeCreate: (newContractData: Partial<Contract> & { propertyAllocations?: any[] }) => Promise<void>;
+    handleFinalizeCreate: (newContractData: Partial<Contract> & { propertyAllocations?: any[]; file?: File | null; fileName?: string; }) => Promise<void>;
     handleFinalizeCreateCounterparty: (newCounterpartyData: Omit<Counterparty, "id">) => Promise<void>;
     handleFinalizeEditCounterparty: (data: Partial<Counterparty>) => Promise<void>;
     handleFinalizeCreateProperty: (newPropertyData: Omit<Property, "id">) => Promise<void>;
@@ -88,7 +88,7 @@ export interface AppContextType {
     handleCreateRenewalRequest: (contract: Contract) => Promise<void>;
     handleUpdateRenewalTerms: (renewalRequestId: string, updatedTerms: { renewalTermMonths: number; noticePeriodDays: number; upliftPercent: number; }) => Promise<void>;
     handleRenewAsIs: (contract: Contract, notes?: string) => Promise<void>;
-    handleCreateNewVersion: (contractId: string, newVersionData: Omit<ContractVersion, "id" | "versionNumber" | "createdAt" | "author">) => Promise<void>;
+    handleCreateNewVersion: (contractId: string,newVersionData: Omit<ContractVersion, "id" | "versionNumber" | "createdAt" | "author"> & {file?: File | null;fileName?: string;}) => Promise<void>;
     handleUpdateRolePermissions: (roleId: string, newPermissions: PermissionSet) => Promise<void>;
     handleCreateRole: (name: string, description: string) => Promise<void>;
     handleDeleteRole: (roleId: string) => Promise<void>;
@@ -750,50 +750,169 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     });
   };
 
-  const handleFinalizeCreate = async (newContractData: Partial<Contract> & { propertyAllocations?: any[] }) => {
+  const handleFinalizeCreate = useCallback(
+  async (
+    newContractData: Partial<Contract> & {
+      propertyAllocations?: any[];
+      file?: File | null;
+      fileName?: string;
+    }
+  ) => {
     if (!currentUser?.companyId || !currentUser?.appId) return;
 
+    // 1. Insert the contract row
     const contractRecord = {
-      title: newContractData.title, type: newContractData.type, status: ContractStatus.DRAFT,
-      risk_level: newContractData.riskLevel, counterparty_id: newContractData.counterparty?.id,
-      property_id: newContractData.property?.id, owner_id: newContractData.owner?.id,
-      effective_date: newContractData.effectiveDate, end_date: newContractData.endDate,
-      value: newContractData.value, frequency: newContractData.frequency,
-      seasonal_months: newContractData.seasonalMonths, allocation: newContractData.allocation,
-      company_id: currentUser.companyId, app_id: currentUser.appId,
-      notice_period_days: newContractData.noticePeriodDays,
+      title: newContractData.title,
+      type: newContractData.type,
+      status: newContractData.status || ContractStatus.DRAFT,
+      risk_level: newContractData.riskLevel,
+      counterparty_id: newContractData.counterparty?.id,
+      property_id: newContractData.property?.id ?? null,
+      owner_id: newContractData.owner?.id ?? currentUser.id,
+      effective_date: newContractData.effectiveDate,
+      end_date: newContractData.endDate,
+      renewal_date: newContractData.endDate, // or your own logic
+      value: newContractData.value,
+      frequency: newContractData.frequency,
+      seasonal_months: newContractData.seasonalMonths || [],
+      allocation: newContractData.allocation || 'single',
+      company_id: currentUser.companyId,
+      app_id: currentUser.appId,
+      submitted_at: null,
+      review_started_at: null,
+      approval_started_at: null,
+      approval_completed_at: null,
+      sent_for_signature_at: null,
+      executed_at: null,
+      active_at: null,
+      expired_at: null,
+      archived_at: null,
+      signature_provider: null,
+      signature_envelope_id: null,
+      signature_status: null,
+      executed_file_url: null,
+      updated_at: new Date().toISOString(),
+      draft_version_id: null,
+      start_date: newContractData.effectiveDate,
+      auto_renew: newContractData.autoRenew || 'none',
+      notice_period_days: newContractData.noticePeriodDays ?? null,
+      renewal_term_months: newContractData.renewalTermMonths ?? null,
+      uplift_percent: newContractData.upliftPercent ?? null,
+      parent_contract_id: newContractData.parentContractId ?? null,
+      signing_status: null,
+      signing_status_updated_at: null,
+      superseded_at: null,
     };
-    
-    const { data: insertedContract, error: contractError } = await supabase.from('contracts').insert([contractRecord]).select().single();
-    if (contractError || !insertedContract) { console.error("Error creating contract:", contractError); return; }
 
-    const versionData = newContractData.versions![0];
-    const versionRecord = {
-      contract_id: insertedContract.id, version_number: 1, author_id: versionData.author.id,
-      content: versionData.content, file_name: versionData.fileName, value: versionData.value,
-      effective_date: versionData.effectiveDate, end_date: versionData.endDate,
-      frequency: versionData.frequency, seasonal_months: versionData.seasonalMonths,
-      property_id: versionData.property?.id, company_id: currentUser.companyId, app_id: currentUser.appId,
-    };
-    const { data: insertedVersion, error: versionError } = await supabase.from('contract_versions').insert([versionRecord]).select().single();
-    if (versionError || !insertedVersion) { console.error("Error creating version:", versionError); return; }
+    const { data: insertedContract, error: contractError } = await supabase
+      .from('contracts')
+      .insert(contractRecord)
+      .select()
+      .single();
 
-    const { error: updateError } = await supabase.from('contracts').update({ draft_version_id: insertedVersion.id }).eq('id', insertedContract.id);
-    if (updateError) { console.error("Error linking draft version:", updateError); return; }
-    
-    if (newContractData.propertyAllocations && newContractData.propertyAllocations.length > 0) {
-      const allocationRecords = newContractData.propertyAllocations.map(alloc => ({
-        contract_id: insertedContract.id, property_id: alloc.propertyId === 'portfolio' ? null : alloc.propertyId,
-        monthly_values: alloc.monthlyValues, manual_edits: alloc.manualEdits,
-        allocated_value: alloc.allocatedValue, company_id: currentUser.companyId, app_id: currentUser.appId,
-      }));
-      const { error: allocationError } = await supabase.from('contract_property_allocations').insert(allocationRecords);
-      if (allocationError) { console.error("Error creating allocations:", allocationError); return; }
+    if (contractError || !insertedContract) {
+      console.error('Error creating contract:', contractError);
+      alert('Failed to create contract.');
+      return;
     }
-    
-    await fetchAndMergeContract(insertedContract.id);
+
+    // 2. If a file was uploaded, send it to Supabase Storage
+    const file = newContractData.file ?? null;
+    let storagePath: string | null = null;
+    let fileNameToStore: string | null = null;
+
+    if (file) {
+      const originalFileName =
+        newContractData.fileName || file.name || 'contract_document';
+      // Sanitize for path safety
+      const safeFileName = originalFileName.replace(/[^\w.\-]/g, '_');
+
+      // Path pattern: companyId/contractId/originalFileName
+      storagePath = `${currentUser.companyId}/${insertedContract.id}/${safeFileName}`;
+      fileNameToStore = originalFileName;
+
+      const { error: uploadError } = await supabase.storage
+        .from('contract_documents')
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: file.type || 'application/octet-stream',
+        });
+
+      if (uploadError) {
+        console.error('Error uploading contract file:', uploadError);
+        alert(`Failed to upload file: ${uploadError.message}`);
+        // Either bail out here or continue without storage_path
+        // For now, bail so user knows file isn't attached:
+        return;
+      }
+    }
+
+    // 3. Create the initial contract version
+    const firstVersion = (newContractData as any).versions?.[0] || {};
+
+    const versionRecord = {
+      contract_id: insertedContract.id,
+      version_number: 1,
+      author_id: currentUser.id,
+      content: firstVersion.content ?? newContractData.content ?? '',
+      file_name: fileNameToStore ?? firstVersion.fileName ?? null,
+      storage_path: storagePath,
+      value: firstVersion.value ?? newContractData.value ?? 0,
+      effective_date:
+        firstVersion.effectiveDate ?? newContractData.effectiveDate,
+      end_date: firstVersion.endDate ?? newContractData.endDate,
+      renewal_date: firstVersion.endDate ?? newContractData.endDate,
+      frequency: firstVersion.frequency ?? newContractData.frequency,
+      seasonal_months:
+        firstVersion.seasonalMonths ?? newContractData.seasonalMonths ?? [],
+      property_id: firstVersion.property?.id ?? newContractData.property?.id,
+      company_id: currentUser.companyId,
+      app_id: currentUser.appId,
+      status: 'Draft',
+      terms_snapshot: null,
+      party_snapshot: null,
+      property_snapshot: null,
+      file_manifest: null,
+      executed_at: null,
+      storage_path: storagePath,
+    };
+
+    const { data: insertedVersion, error: versionError } = await supabase
+      .from('contract_versions')
+      .insert(versionRecord)
+      .select()
+      .single();
+
+    if (versionError || !insertedVersion) {
+      console.error('Error creating contract version:', versionError);
+      alert('Failed to create initial contract version.');
+      return;
+    }
+
+    // 4. Update contract.draft_version_id so the UI knows the draft
+    const { error: updateContractError } = await supabase
+      .from('contracts')
+      .update({ draft_version_id: insertedVersion.id })
+      .eq('id', insertedContract.id);
+
+    if (updateContractError) {
+      console.error(
+        'Error updating contract with draft_version_id:',
+        updateContractError
+      );
+    }
+
+    // 5. (Keep your existing propertyAllocations and audit log logic here)
+
+    // 6. Refresh local state / close modal
+    await fetchData(currentUser);
     setIsCreatingContract(false);
-  };
+    setInitialCreateData(null);
+  },
+  [currentUser, fetchData, setIsCreatingContract, setInitialCreateData]
+);
+
 
   const handleStartCreateCounterparty = () => setIsCreatingCounterparty(true);
   const handleCancelCreateCounterparty = () => setIsCreatingCounterparty(false);
@@ -1121,52 +1240,85 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     }
   };
 
-  const handleCreateNewVersion = async (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'>) => {
-      if (!currentUser?.companyId || !currentUser?.appId) return;
-      let contractToUpdate = contracts.find(c => c.id === contractId);
-      if (!contractToUpdate) return;
-      
-      const latestVersionNumber = contractToUpdate.versions.length > 0 ? Math.max(...contractToUpdate.versions.map(v => v.versionNumber)) : 0;
-      
-      const { data: insertedVersion, error: versionError } = await supabase.from('contract_versions').insert([{
-          contract_id: contractId, version_number: latestVersionNumber + 1, author_id: currentUser.id,
-          content: newVersionData.content, file_name: newVersionData.fileName, value: newVersionData.value,
-          effective_date: newVersionData.effectiveDate, end_date: newVersionData.endDate,
-          frequency: newVersionData.frequency, seasonal_months: newVersionData.seasonalMonths,
-          property_id: newVersionData.property?.id, company_id: currentUser.companyId, app_id: currentUser.appId,
-      }]).select().single();
-      if (versionError || !insertedVersion) { console.error("Error creating new version:", versionError); return; }
+  const handleCreateNewVersion = useCallback(
+  async (
+    contractId: string,
+    newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'> & {
+      file?: File | null;
+      fileName?: string;
+    }
+  ) => {
+    if (!currentUser?.companyId || !currentUser?.appId) return;
 
-      const { error: contractUpdateError } = await supabase.from('contracts').update({
-          value: newVersionData.value, effective_date: newVersionData.effectiveDate,
-          end_date: newVersionData.endDate, frequency: newVersionData.frequency,
-          seasonal_months: newVersionData.seasonalMonths, property_id: newVersionData.property?.id,
-          status: ContractStatus.IN_REVIEW, approval_completed_at: null, approval_started_at: null,
-          draft_version_id: insertedVersion.id,
-      }).eq('id', contractId);
-      if (contractUpdateError) { console.error("Error updating contract:", contractUpdateError); return; }
+    const contract = contracts.find(c => c.id === contractId);
+    if (!contract) return;
 
-      const { error: approvalError } = await supabase.from('approval_steps').delete().eq('contract_id', contractId);
-      if (approvalError) { console.error("Error clearing old approvals:", approvalError); }
+    const latestVersionNumber =
+      contract.versions.length > 0
+        ? Math.max(...contract.versions.map(v => v.versionNumber))
+        : 0;
 
-      if (contractToUpdate.owner.id !== currentUser.id) {
-        const notificationRecord = {
-            user_id: contractToUpdate.owner.id,
-            type: 'NEW_VERSION' as const,
-            message: `${currentUser.firstName} ${currentUser.lastName} created a new version for "${contractToUpdate.title}".`,
-            related_entity_type: 'contract' as const,
-            related_entity_id: contractId,
-            company_id: currentUser.companyId,
-            app_id: currentUser.appId,
-        };
-        const { error: notificationError } = await supabase.from('notifications').insert([notificationRecord]);
-        if (notificationError) {
-            console.error("Error creating new version notification:", notificationError);
-        }
+    const file = newVersionData.file ?? null;
+    let storagePath: string | null = null;
+    let fileNameToStore: string | null = null;
+
+    if (file) {
+      const originalFileName =
+        newVersionData.fileName || file.name || 'contract_document';
+      const safeFileName = originalFileName.replace(/[^\w.\-]/g, '_');
+
+      storagePath = `${currentUser.companyId}/${contractId}/v${
+        latestVersionNumber + 1
+      }_${safeFileName}`;
+      fileNameToStore = originalFileName;
+
+      const { error: uploadError } = await supabase.storage
+        .from('contract_documents')
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: file.type || 'application/octet-stream',
+        });
+
+      if (uploadError) {
+        console.error('Error uploading new version file:', uploadError);
+        alert(`Failed to upload file for new version: ${uploadError.message}`);
+        return;
+      }
     }
 
-      await fetchAndMergeContract(contractId);
-  };
+    const { data: insertedVersion, error: versionError } = await supabase
+      .from('contract_versions')
+      .insert({
+        contract_id: contractId,
+        version_number: latestVersionNumber + 1,
+        author_id: currentUser.id,
+        content: newVersionData.content,
+        file_name: fileNameToStore ?? newVersionData.fileName ?? null,
+        storage_path: storagePath,
+        value: newVersionData.value,
+        effective_date: newVersionData.effectiveDate,
+        end_date: newVersionData.endDate,
+        frequency: newVersionData.frequency,
+        seasonal_months: newVersionData.seasonalMonths,
+        property_id: newVersionData.property?.id ?? null,
+        company_id: currentUser.companyId,
+        app_id: currentUser.appId,
+      })
+      .select()
+      .single();
+
+    if (versionError || !insertedVersion) {
+      console.error('Error creating new version:', versionError);
+      alert('Failed to create new contract version.');
+      return;
+    }
+
+    await fetchData(currentUser);
+  },
+  [contracts, currentUser, fetchData]
+);
+
 
   const handleUpdateRolePermissions = async (roleId: string, newPermissions: PermissionSet) => {
     const { error } = await supabase.from('roles').update({ permissions: newPermissions }).eq('id', roleId);
