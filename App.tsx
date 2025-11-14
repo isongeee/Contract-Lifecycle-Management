@@ -31,9 +31,8 @@ import RenewalWorkspace from './components/RenewalWorkspace';
 
 export default function App() {
   const {
-    // FIX: Destructure all necessary values from useAppContext to pass as props to child components.
     isLoading, isAuthenticated, currentUser, handleLogout, activeView,
-    authView, setAuthView,
+    authView,
     isCreatingContract, isCreatingCounterparty, editingCounterparty,
     isCreatingProperty, editingProperty, isAddingUser,
     contracts,
@@ -54,6 +53,7 @@ export default function App() {
     handleDeleteRole,
     setNotificationSettings,
     setIsAddingUser,
+    // FIX: Use selectedContract object from context instead of non-existent selectedContractId
     selectedContract,
     properties,
     handleBackToList,
@@ -79,7 +79,6 @@ export default function App() {
     handleBackToTemplatesList,
     handleBackToCounterpartiesList,
     handleStartEditCounterparty,
-    // FIX: `handleUpdateSigningStatus` was destructured but does not exist. The correct name is `handleSigningStatusUpdate`. This is now correctly passed to ContractDetail.
     handleNavigate,
     handleNavigateToRenewalWorkspace,
     handleDownloadFile,
@@ -106,19 +105,20 @@ export default function App() {
     switch(activeView) {
       case 'dashboard': return <Dashboard />;
       case 'contracts': return <ContractsList />;
-      // FIX: Pass required props to RenewalsPage component.
       case 'renewals': return <RenewalsPage 
         contracts={contracts}
+        // FIX: Pass the handleSelectContract function directly, as it expects the full contract object.
         onSelectContract={handleSelectContract}
+        // FIX: Pass the handleNavigateToRenewalWorkspace function directly.
         onNavigateToWorkspace={handleNavigateToRenewalWorkspace}
         users={users}
       />;
       case 'renewal-workspace': return <RenewalWorkspace />;
       case 'reporting': return <ReportingPage />;
       case 'approvals': return <ApprovalsPage />;
-      // FIX: Pass required props to SigningPage component.
       case 'signing': return <SigningPage
         contracts={contracts}
+        // FIX: Pass the handleSelectContract function directly.
         onSelectContract={handleSelectContract}
         onUpdateSigningStatus={handleSigningStatusUpdate}
         onMarkAsExecuted={handleMarkAsExecuted}
@@ -127,7 +127,6 @@ export default function App() {
       case 'counterparties': return <CounterpartiesList />;
       case 'properties': return <PropertiesList />;
       case 'search': return <SearchResultsPage />;
-      // FIX: Pass required props to ProfilePage component.
       case 'profile': return <ProfilePage 
         currentUser={currentUser!}
         theme={theme}
@@ -135,7 +134,6 @@ export default function App() {
         notificationSettings={userNotificationSettings}
         setNotificationSettings={setUserNotificationSettings}
       />;
-      // FIX: Pass required props to CompanySettingsPage component.
       case 'company-settings': return <CompanySettingsPage
         users={users}
         roles={roles}
@@ -154,7 +152,7 @@ export default function App() {
   };
 
   const renderActiveView = () => {
-    // FIX: Pass required props to ContractDetail component.
+    // FIX: Use the selectedContract object and pass it as the 'contract' prop. Also pass the 'contracts' array as expected by ContractDetail.
     if (activeView === 'contracts' && selectedContract) return <ContractDetail
       contract={selectedContract}
       contracts={contracts}
@@ -169,7 +167,6 @@ export default function App() {
       onSelectContract={handleSelectContract}
       onRenewAsIs={handleRenewAsIs}
       onStartRenegotiation={handleStartRenegotiation}
-      // FIX: Pass the correctly named `handleSigningStatusUpdate` function from the context to the `onUpdateSigningStatus` prop.
       onUpdateSigningStatus={handleSigningStatusUpdate}
       onCreateComment={handleCreateComment}
       onResolveComment={handleResolveComment}
@@ -180,7 +177,6 @@ export default function App() {
     />;
     if (activeView === 'templates' && selectedTemplate) return <TemplateDetail />;
     if (activeView === 'counterparties' && selectedCounterparty) return <CounterpartyDetail />;
-    // FIX: Pass required props to PropertyDetail component.
     if (activeView === 'properties' && selectedProperty) return <PropertyDetail
       property={selectedProperty}
       contracts={contracts.filter(c => 
@@ -188,6 +184,7 @@ export default function App() {
         (c.propertyAllocations || []).some(a => a.propertyId === selectedProperty.id)
       )}
       onBack={handleBackToPropertiesList}
+      // FIX: Pass the handleSelectContract function directly.
       onSelectContract={handleSelectContract}
       onStartEdit={handleStartEditProperty}
       currentUser={currentUser!}
@@ -217,7 +214,6 @@ export default function App() {
           {renderActiveView()}
         </main>
       </div>
-      {/* FIX: Pass required props to CreateContractWorkflow component. */}
       {isCreatingContract && <CreateContractWorkflow
         properties={properties}
         counterparties={counterparties}

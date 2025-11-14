@@ -75,7 +75,8 @@ export interface AppContextType {
     handleUseTemplate: (template: ContractTemplate) => void;
 
     // Data Mutation Handlers
-    handleFinalizeCreate: (newContractData: Partial<Contract> & { propertyAllocations?: any[]; file?: File | null; fileName?: string; }) => Promise<void>;
+    // FIX: Add 'content' to the type definition for newContractData to match the data passed from the creation workflow.
+    handleFinalizeCreate: (newContractData: Partial<Contract> & { propertyAllocations?: any[]; file?: File | null; fileName?: string; content?: string; }) => Promise<void>;
     handleFinalizeCreateCounterparty: (newCounterpartyData: Omit<Counterparty, "id">) => Promise<void>;
     handleFinalizeEditCounterparty: (data: Partial<Counterparty>) => Promise<void>;
     handleFinalizeCreateProperty: (newPropertyData: Omit<Property, "id">) => Promise<void>;
@@ -99,6 +100,7 @@ export interface AppContextType {
     handleMarkOneAsRead: (notificationId: string) => Promise<void>;
     handleNotificationClick: (notification: Notification) => void;
     handleCreateUser: (userData: any) => Promise<void>;
+    handleUpdateUserProfile: (userId: string, updates: Partial<UserProfile>) => Promise<boolean>;
     
     // Selection Handlers
     handleSelectContract: (contract: Contract) => void;
@@ -115,7 +117,6 @@ export interface AppContextType {
     globalSearchResults: SearchResult[];
     globalSearchTerm: string;
     handleGlobalSearch: (term: string) => Promise<void>;
-    // FIX: Add missing handleDownloadFile property to the context type.
     handleDownloadFile: (storagePath: string, fileName: string) => Promise<void>;
 
     setNotificationSettings: React.Dispatch<React.SetStateAction<NotificationSetting[]>>;
@@ -756,6 +757,8 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
       propertyAllocations?: any[];
       file?: File | null;
       fileName?: string;
+      // FIX: Add 'content' to the function signature to resolve the type error.
+      content?: string;
     }
   ) => {
     if (!currentUser?.companyId || !currentUser?.appId) return;
@@ -875,7 +878,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
       property_snapshot: null,
       file_manifest: null,
       executed_at: null,
-      storage_path: storagePath,
     };
 
     const { data: insertedVersion, error: versionError } = await supabase
@@ -1511,6 +1513,30 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     }
   }, [currentUser]);
 
+  const handleUpdateUserProfile = useCallback(async (userId: string, updates: Partial<UserProfile>): Promise<boolean> => {
+    const dbUpdates = {
+        first_name: updates.firstName,
+        last_name: updates.lastName,
+        phone: updates.phone,
+        job_title: updates.jobTitle,
+    };
+
+    const { error } = await supabase.from('users').update(dbUpdates).eq('id', userId);
+    if (error) {
+        console.error("Error updating user profile:", error);
+        alert(`Failed to update profile: ${error.message}`);
+        return false;
+    }
+    
+    // Optimistically update local state
+    const updater = (user: UserProfile) => user.id === userId ? { ...user, ...updates } : user;
+    setUsers(prev => prev.map(updater));
+    if(currentUser?.id === userId) {
+        setCurrentUser(prev => prev ? { ...prev, ...updates } : null);
+    }
+    return true;
+  }, [currentUser?.id]);
+
   const handleChangePassword = useCallback(async (newPassword: string) => {
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     return { error };
@@ -1579,10 +1605,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     }
   }, [currentUser]);
 
-  // FIX: Implement the handleDownloadFile function.
   const handleDownloadFile = useCallback(async (storagePath: string, fileName: string) => {
-    // This assumes contract documents are stored in a bucket named 'contract-documents'.
-    // Ensure this bucket exists in your Supabase project with appropriate RLS policies.
     const { data, error } = await supabase.storage.from('contract_documents').download(storagePath);
 
     if (error) {
@@ -1591,7 +1614,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
       return;
     }
     
-    // Create a temporary link to trigger the browser's download functionality.
     const blob = new Blob([data]);
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1683,6 +1705,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     handleMarkOneAsRead,
     handleNotificationClick,
     handleCreateUser,
+    handleUpdateUserProfile,
     handleSelectContract,
     handleBackToList,
     handleSelectTemplate,
@@ -1695,7 +1718,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     globalSearchResults,
     globalSearchTerm,
     handleGlobalSearch,
-    // FIX: Add the implemented handleDownloadFile function to the context value.
     handleDownloadFile,
     setNotificationSettings,
     setUserNotificationSettings,

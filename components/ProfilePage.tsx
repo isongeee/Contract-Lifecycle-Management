@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import type { UserProfile, UserNotificationSettings } from '../types';
-import { SunIcon, MoonIcon, MonitorIcon, UserIcon, SlidersHorizontalIcon, BellIcon, KeyRoundIcon, EditIcon, XIcon, PlusIcon } from './icons';
+import { SunIcon, MoonIcon, MonitorIcon, UserIcon, SlidersHorizontalIcon, BellIcon, KeyRoundIcon, EditIcon, XIcon, PlusIcon, LoaderIcon, CheckCircleIcon } from './icons';
 import ToggleSwitch from './ToggleSwitch';
 import { useAppContext } from '../contexts/AppContext';
 import ChangePasswordModal from './ChangePasswordModal';
@@ -16,7 +16,6 @@ interface ProfilePageProps {
   setNotificationSettings: (newSettingsOrUpdater: React.SetStateAction<UserNotificationSettings>) => Promise<void>;
 }
 
-// FIX: Changed component to React.FC to correctly handle props including the 'key' prop.
 const TabButton: React.FC<{ label: string; icon: React.ReactNode; isActive: boolean; onClick: () => void; }> = ({ label, icon, isActive, onClick }) => (
     <button
         onClick={onClick}
@@ -48,43 +47,101 @@ const ThemeOption = ({ label, value, icon, current, onClick }: { label: string; 
   );
 };
 
-// FIX: Made children prop optional to satisfy type checker.
-const SectionCard = ({ title, description, children }: { title: string; description: string; children?: React.ReactNode; }) => (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm">
+const SectionCard = ({ title, description, children, footer }: { title: string; description: string; children?: React.ReactNode; footer?: React.ReactNode }) => (
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm flex flex-col">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
             <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{title}</h3>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{description}</p>
         </div>
-        <div className="p-6">
+        <div className="p-6 flex-grow">
             {children}
         </div>
+        {footer && (
+            <div className="p-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700 rounded-b-xl">
+                {footer}
+            </div>
+        )}
     </div>
 );
 
 const PersonalInfoTab = ({ user }: { user: UserProfile }) => {
-    // In a real app, you'd manage form state here
+    const { handleUpdateUserProfile } = useAppContext();
+    const [formData, setFormData] = useState({
+        firstName: user.firstName,
+        lastName: user.lastName,
+        phone: user.phone || '',
+        jobTitle: user.jobTitle || '',
+    });
+    const [isDirty, setIsDirty] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
+
+    const handleChange = (field: keyof typeof formData, value: string) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+        setIsDirty(true);
+    };
+
+    const handleCancel = () => {
+        setFormData({
+            firstName: user.firstName,
+            lastName: user.lastName,
+            phone: user.phone || '',
+            jobTitle: user.jobTitle || '',
+        });
+        setIsDirty(false);
+    };
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        const success = await handleUpdateUserProfile(user.id, {
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            phone: formData.phone,
+            jobTitle: formData.jobTitle,
+        });
+        setIsSaving(false);
+        if (success) {
+            setIsDirty(false);
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 3000);
+        }
+    };
+    
     return (
-        <SectionCard title="Personal Information" description="Update your personal details.">
+        <SectionCard 
+            title="Personal Information" 
+            description="Update your personal details."
+            footer={isDirty && (
+                <div className="flex justify-end items-center space-x-3">
+                    {saveSuccess && <p className="text-sm text-green-600 flex items-center"><CheckCircleIcon className="w-4 h-4 mr-1" /> Profile saved!</p>}
+                    <button onClick={handleCancel} className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                    <button onClick={handleSave} disabled={isSaving} className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center">
+                        {isSaving && <LoaderIcon className="w-4 h-4 mr-2" />}
+                        Save Changes
+                    </button>
+                </div>
+            )}
+        >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">First Name</label>
-                    <input type="text" defaultValue={user.firstName} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700"/>
+                    <input type="text" value={formData.firstName} onChange={e => handleChange('firstName', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700"/>
                 </div>
                  <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Last Name</label>
-                    <input type="text" defaultValue={user.lastName} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700"/>
+                    <input type="text" value={formData.lastName} onChange={e => handleChange('lastName', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700"/>
                 </div>
                  <div className="sm:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email Address</label>
-                    <input type="email" defaultValue={user.email} readOnly className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm bg-gray-100 dark:bg-gray-900/50 cursor-not-allowed"/>
+                    <input type="email" value={user.email} readOnly className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm bg-gray-100 dark:bg-gray-900/50 cursor-not-allowed"/>
                 </div>
                  <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Phone Number</label>
-                    <input type="tel" defaultValue={user.phone} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700"/>
+                    <input type="tel" value={formData.phone} onChange={e => handleChange('phone', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700"/>
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Job Title</label>
-                    <input type="text" defaultValue={user.jobTitle} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700"/>
+                    <input type="text" value={formData.jobTitle} onChange={e => handleChange('jobTitle', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700"/>
                 </div>
             </div>
         </SectionCard>
@@ -236,7 +293,7 @@ const SecurityTab = ({ onOpenChangePassword, onOpen2faModal }: { onOpenChangePas
 };
 
 export default function ProfilePage(props: ProfilePageProps) {
-  const { handleAvatarUpload } = useAppContext();
+  const { handleAvatarUpload, handleUpdateUserProfile } = useAppContext();
   const [activeTab, setActiveTab] = useState('personal');
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [is2faModalOpen, setIs2faModalOpen] = useState(false);
@@ -281,7 +338,7 @@ export default function ProfilePage(props: ProfilePageProps) {
         </div>
         <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{props.currentUser.firstName} {props.currentUser.lastName}</h1>
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{props.currentUser.role} at ACME Corp</p>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{props.currentUser.jobTitle || props.currentUser.role}</p>
         </div>
       </div>
 

@@ -9,7 +9,8 @@ interface CreateContractWorkflowProps {
   counterparties: Counterparty[];
   users: UserProfile[];
   onCancel: () => void;
-  onFinish: (newContractData: Partial<Contract> & { propertyAllocations?: any[], file?: File | null }) => void;
+  // FIX: Update the onFinish prop type to include fileName and content to match the data being passed.
+  onFinish: (newContractData: Partial<Contract> & { propertyAllocations?: any[], file?: File | null, fileName?: string, content?: string }) => void;
   currentUser: UserProfile;
   initialData?: Partial<Contract> & { content?: string } | null;
 }
