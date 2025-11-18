@@ -391,8 +391,9 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
         } else if (allocationType === 'multi') {
             updates.property = properties.find((p: Property) => p.id === (isSeasonal ? seasonalAllocations[0]?.propertyId : multiAllocations[0]?.propertyId));
             if (isSeasonal) {
-                updates.propertyAllocations = seasonalAllocations.map(({ id, ...rest }, index) => ({
+                updates.propertyAllocations = seasonalAllocations.map(({ id, propertyId, ...rest }, index) => ({
                     id: `alloc-${Date.now()}-${index}`,
+                    propertyId, // Fix: Explicitly include propertyId
                     ...rest,
                     allocatedValue: (Object.values(rest.monthlyValues) as number[]).reduce((sum, v) => sum + (v || 0), 0)
                 }));
