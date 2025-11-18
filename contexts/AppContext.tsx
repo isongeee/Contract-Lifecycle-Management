@@ -76,7 +76,7 @@ export interface AppContextType {
 
     // Data Mutation Handlers
     // FIX: Add 'content' to the type definition for newContractData to match the data passed from the creation workflow.
-    handleFinalizeCreate: (newContractData: Partial<Contract> & { propertyAllocations?: any[]; file?: File | null; fileName?: string; content?: string; }) => Promise<void>;
+    handleFinalizeCreate: (newContractData: Partial<Contract> & { propertyAllocations?: any[], file?: File | null, fileName?: string, content?: string; }) => Promise<void>;
     handleFinalizeCreateCounterparty: (newCounterpartyData: Omit<Counterparty, "id">) => Promise<void>;
     handleFinalizeEditCounterparty: (data: Partial<Counterparty>) => Promise<void>;
     handleFinalizeCreateProperty: (newPropertyData: Omit<Property, "id">) => Promise<void>;
@@ -757,61 +757,24 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
       propertyAllocations?: any[];
       file?: File | null;
       fileName?: string;
-      // FIX: Add 'content' to the function signature to resolve the type error.
       content?: string;
     }
   ) => {
     if (!currentUser?.companyId || !currentUser?.appId) return;
 
-    // 1. Insert the contract row
     const contractRecord = {
-      title: newContractData.title,
-      type: newContractData.type,
-      status: newContractData.status || ContractStatus.DRAFT,
-      risk_level: newContractData.riskLevel,
-      counterparty_id: newContractData.counterparty?.id,
-      property_id: newContractData.property?.id ?? null,
-      owner_id: newContractData.owner?.id ?? currentUser.id,
-      effective_date: newContractData.effectiveDate,
-      end_date: newContractData.endDate,
-      renewal_date: newContractData.endDate, // or your own logic
-      value: newContractData.value,
-      frequency: newContractData.frequency,
-      seasonal_months: newContractData.seasonalMonths || [],
-      allocation: newContractData.allocation || 'single',
-      company_id: currentUser.companyId,
-      app_id: currentUser.appId,
-      submitted_at: null,
-      review_started_at: null,
-      approval_started_at: null,
-      approval_completed_at: null,
-      sent_for_signature_at: null,
-      executed_at: null,
-      active_at: null,
-      expired_at: null,
-      archived_at: null,
-      signature_provider: null,
-      signature_envelope_id: null,
-      signature_status: null,
-      executed_file_url: null,
-      updated_at: new Date().toISOString(),
-      draft_version_id: null,
-      start_date: newContractData.effectiveDate,
-      auto_renew: newContractData.autoRenew || 'none',
+      title: newContractData.title, type: newContractData.type, status: newContractData.status || ContractStatus.DRAFT,
+      risk_level: newContractData.riskLevel, counterparty_id: newContractData.counterparty?.id,
+      property_id: newContractData.property?.id ?? null, owner_id: newContractData.owner?.id ?? currentUser.id,
+      effective_date: newContractData.effectiveDate, end_date: newContractData.endDate,
+      renewal_date: newContractData.endDate, value: newContractData.value, frequency: newContractData.frequency,
+      seasonal_months: newContractData.seasonalMonths || [], allocation: newContractData.allocation || 'single',
+      company_id: currentUser.companyId, app_id: currentUser.appId,
       notice_period_days: newContractData.noticePeriodDays ?? null,
-      renewal_term_months: newContractData.renewalTermMonths ?? null,
-      uplift_percent: newContractData.upliftPercent ?? null,
-      parent_contract_id: newContractData.parentContractId ?? null,
-      signing_status: null,
-      signing_status_updated_at: null,
-      superseded_at: null,
     };
 
     const { data: insertedContract, error: contractError } = await supabase
-      .from('contracts')
-      .insert(contractRecord)
-      .select()
-      .single();
+      .from('contracts').insert(contractRecord).select().single();
 
     if (contractError || !insertedContract) {
       console.error('Error creating contract:', contractError);
@@ -819,72 +782,41 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
       return;
     }
 
-    // 2. If a file was uploaded, send it to Supabase Storage
     const file = newContractData.file ?? null;
     let storagePath: string | null = null;
     let fileNameToStore: string | null = null;
 
     if (file) {
-      const originalFileName =
-        newContractData.fileName || file.name || 'contract_document';
-      // Sanitize for path safety
+      const originalFileName = newContractData.fileName || file.name || 'contract_document';
       const safeFileName = originalFileName.replace(/[^\w.\-]/g, '_');
-
-      // Path pattern: companyId/contractId/originalFileName
       storagePath = `${currentUser.companyId}/${insertedContract.id}/${safeFileName}`;
       fileNameToStore = originalFileName;
 
-      const { error: uploadError } = await supabase.storage
-        .from('contract_documents')
-        .upload(storagePath, file, {
-          cacheControl: '3600',
-          upsert: true,
-          contentType: file.type || 'application/octet-stream',
-        });
+      const { error: uploadError } = await supabase.storage.from('contract_documents').upload(storagePath, file, { upsert: true });
 
       if (uploadError) {
         console.error('Error uploading contract file:', uploadError);
         alert(`Failed to upload file: ${uploadError.message}`);
-        // Either bail out here or continue without storage_path
-        // For now, bail so user knows file isn't attached:
         return;
       }
     }
 
-    // 3. Create the initial contract version
     const firstVersion = (newContractData as any).versions?.[0] || {};
-
     const versionRecord = {
-      contract_id: insertedContract.id,
-      version_number: 1,
-      author_id: currentUser.id,
+      contract_id: insertedContract.id, version_number: 1, author_id: currentUser.id,
       content: firstVersion.content ?? newContractData.content ?? '',
       file_name: fileNameToStore ?? firstVersion.fileName ?? null,
       storage_path: storagePath,
       value: firstVersion.value ?? newContractData.value ?? 0,
-      effective_date:
-        firstVersion.effectiveDate ?? newContractData.effectiveDate,
+      effective_date: firstVersion.effectiveDate ?? newContractData.effectiveDate,
       end_date: firstVersion.endDate ?? newContractData.endDate,
-      renewal_date: firstVersion.endDate ?? newContractData.endDate,
       frequency: firstVersion.frequency ?? newContractData.frequency,
-      seasonal_months:
-        firstVersion.seasonalMonths ?? newContractData.seasonalMonths ?? [],
+      seasonal_months: firstVersion.seasonalMonths ?? newContractData.seasonalMonths ?? [],
       property_id: firstVersion.property?.id ?? newContractData.property?.id,
-      company_id: currentUser.companyId,
-      app_id: currentUser.appId,
-      status: 'Draft',
-      terms_snapshot: null,
-      party_snapshot: null,
-      property_snapshot: null,
-      file_manifest: null,
-      executed_at: null,
+      company_id: currentUser.companyId, app_id: currentUser.appId,
     };
 
-    const { data: insertedVersion, error: versionError } = await supabase
-      .from('contract_versions')
-      .insert(versionRecord)
-      .select()
-      .single();
+    const { data: insertedVersion, error: versionError } = await supabase.from('contract_versions').insert(versionRecord).select().single();
 
     if (versionError || !insertedVersion) {
       console.error('Error creating contract version:', versionError);
@@ -892,23 +824,33 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
       return;
     }
 
-    // 4. Update contract.draft_version_id so the UI knows the draft
-    const { error: updateContractError } = await supabase
-      .from('contracts')
-      .update({ draft_version_id: insertedVersion.id })
-      .eq('id', insertedContract.id);
+    const { error: updateContractError } = await supabase.from('contracts').update({ draft_version_id: insertedVersion.id }).eq('id', insertedContract.id);
 
     if (updateContractError) {
-      console.error(
-        'Error updating contract with draft_version_id:',
-        updateContractError
-      );
+      console.error('Error updating contract with draft_version_id:', updateContractError);
     }
 
-    // 5. (Keep your existing propertyAllocations and audit log logic here)
+    if (newContractData.propertyAllocations && newContractData.propertyAllocations.length > 0) {
+      const allocationRecords = newContractData.propertyAllocations.map((alloc: any) => ({
+        contract_id: insertedContract.id,
+        property_id: alloc.propertyId === 'portfolio' ? null : alloc.propertyId,
+        allocated_value: alloc.allocatedValue,
+        monthly_values: alloc.monthlyValues,
+        manual_edits: alloc.manualEdits,
+        company_id: currentUser.companyId,
+        app_id: currentUser.appId,
+      }));
+      
+      const { error: allocationError } = await supabase.from('contract_property_allocations').insert(allocationRecords);
+      
+      if (allocationError) {
+        console.error('Error creating property allocations:', allocationError);
+        alert('Contract was created, but failed to save property allocation details.');
+      }
+    }
 
-    // 6. Refresh local state / close modal
     await fetchData(currentUser);
+    alert('Contract created successfully!');
     setIsCreatingContract(false);
     setInitialCreateData(null);
   },
@@ -1201,11 +1143,11 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     }
   };
 
-  const handleRenewAsIs = async (originalContract: Contract, notes?: string) => {
-    if (!currentUser || !originalContract.renewalRequest) return;
+  const handleRenewAsIs = async (contract: Contract, notes?: string) => {
+    if (!currentUser || !contract.renewalRequest) return;
 
-    const termMonths = originalContract.renewalRequest.renewalTermMonths ?? originalContract.renewalTermMonths ?? 12;
-    const originalEndDate = new Date(originalContract.endDate + 'T00:00:00Z');
+    const termMonths = contract.renewalRequest.renewalTermMonths ?? contract.renewalTermMonths ?? 12;
+    const originalEndDate = new Date(contract.endDate + 'T00:00:00Z');
     const newStartDate = new Date(originalEndDate);
     newStartDate.setUTCDate(newStartDate.getUTCDate() + 1);
     
@@ -1213,11 +1155,11 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     newEndDate.setUTCMonth(newEndDate.getUTCMonth() + termMonths);
     newEndDate.setUTCDate(newEndDate.getUTCDate() - 1);
     
-    const upliftPercent = originalContract.renewalRequest?.upliftPercent ?? originalContract.upliftPercent ?? 0;
-    const newValue = originalContract.value * (1 + (upliftPercent / 100));
+    const upliftPercent = contract.renewalRequest?.upliftPercent ?? contract.upliftPercent ?? 0;
+    const newValue = contract.value * (1 + (upliftPercent / 100));
 
     const { error } = await supabase.rpc('contract_transition', {
-      p_contract_id: originalContract.id,
+      p_contract_id: contract.id,
       p_action: 'RENEW_AS_IS',
       p_payload: {
         new_start_date: newStartDate.toISOString().split('T')[0],
@@ -1234,8 +1176,8 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     } else {
        alert("Contract renewed as-is successfully! The original contract has been superseded, and a new active contract has been created.");
        // Fetch both the original (now superseded) and the new contract
-       await fetchAndMergeContract(originalContract.id);
-       const { data: newContract } = await supabase.from('contracts').select('id').eq('parent_contract_id', originalContract.id).order('created_at', { ascending: false }).limit(1).single();
+       await fetchAndMergeContract(contract.id);
+       const { data: newContract } = await supabase.from('contracts').select('id').eq('parent_contract_id', contract.id).order('created_at', { ascending: false }).limit(1).single();
        if (newContract?.id) {
            await fetchAndMergeContract(newContract.id);
        }
