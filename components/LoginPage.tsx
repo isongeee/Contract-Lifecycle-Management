@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { FileTextIcon, LoaderIcon } from './icons';
 import { signIn, resetPassword } from '../lib/auth';
-import { useAppContext } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
-  const { handleLogin, setAuthView } = useAppContext();
+  const { handleLogin, setAuthView } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');

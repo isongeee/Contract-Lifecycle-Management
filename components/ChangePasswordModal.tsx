@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { XIcon, LoaderIcon, CheckCircleIcon } from './icons';
-import { useAppContext } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ChangePasswordModalProps {
   onClose: () => void;
 }
 
 export default function ChangePasswordModal({ onClose }: ChangePasswordModalProps) {
-  const { handleChangePassword } = useAppContext();
+  const { handleChangePassword } = useAuth();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');

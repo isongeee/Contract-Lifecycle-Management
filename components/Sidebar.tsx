@@ -1,6 +1,7 @@
 import React from 'react';
 import { LayoutDashboardIcon, FileTextIcon, UsersIcon, BookTextIcon, CheckCircleIcon, SettingsIcon, HomeIcon, BuildingOfficeIcon, UserIcon, RefreshCwIcon, PenSquareIcon, BarChartIcon } from './icons';
 import { useAppContext } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const NavItem: React.FC<{ icon: React.ReactNode; label: string; active?: boolean; onClick: () => void; }> = ({ icon, label, active = false, onClick }) => (
   <button
@@ -29,7 +30,8 @@ const navItems = [
 ];
 
 export default function Sidebar() {
-  const { activeView, handleNavigate, currentUser } = useAppContext();
+  const { activeView, handleNavigate } = useAppContext();
+  const { currentUser } = useAuth();
 
   if (!currentUser) {
       return (

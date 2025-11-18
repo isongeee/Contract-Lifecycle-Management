@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { Role } from '../types';
 import { XIcon, RefreshCwIcon } from './icons';
 import { useAppContext } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const generatePassword = () => {
     const length = 12;
@@ -14,7 +15,8 @@ const generatePassword = () => {
 };
 
 export default function AddUserModal() {
-  const { roles, setIsAddingUser, handleCreateUser } = useAppContext();
+  const { roles, setIsAddingUser } = useAppContext();
+  const { handleCreateUser } = useAuth();
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -22,12 +24,13 @@ export default function AddUserModal() {
   const [password, setPassword] = useState(generatePassword());
   const [roleId, setRoleId] = useState<string>(roles.find(r => r.name === 'Requestor')?.id || roles[0]?.id || '');
 
-  const handleSave = () => {
+  const handleSave = async () => {
       if (!firstName || !lastName || !email || !password || !roleId) {
           alert("Please fill in all fields.");
           return;
       }
-      handleCreateUser({ firstName, lastName, email, password, roleId });
+      await handleCreateUser({ firstName, lastName, email, password, roleId });
+      setIsAddingUser(false);
   };
 
   return (

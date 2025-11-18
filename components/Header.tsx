@@ -3,18 +3,19 @@ import { ChevronDownIcon, UserIcon, SettingsIcon, LogOutIcon, HelpCircleIcon, Bu
 import type { Notification } from '../types';
 import NotificationPanel from './NotificationPanel';
 import { useAppContext } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 import GlobalSearchInput from './GlobalSearchInput';
 
 export default function Header() {
   const { 
-    handleLogout, 
     handleNavigate, 
-    currentUser, 
     unreadCount, 
     notifications, 
     handleNotificationClick, 
     handleMarkAllAsRead 
   } = useAppContext();
+
+  const { currentUser, handleLogout } = useAuth();
 
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
@@ -46,6 +47,17 @@ export default function Header() {
     setIsProfileMenuOpen(false);
   }
 
+  const onNotificationClickSafe = (n: Notification) => {
+    // Close the panel immediately
+    setIsNotificationPanelOpen(false);
+    
+    // Defer the navigation/selection to the next tick to ensure the click event 
+    // completes and the component unmounts cleanly before the heavy App re-render.
+    setTimeout(() => {
+      handleNotificationClick(n);
+    }, 0);
+  };
+
   if (!currentUser) {
     return (
       <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 flex items-center justify-end px-6">
@@ -72,10 +84,7 @@ export default function Header() {
             {isNotificationPanelOpen && (
                 <NotificationPanel 
                     notifications={notifications}
-                    onNotificationClick={(n) => {
-                      handleNotificationClick(n);
-                      setIsNotificationPanelOpen(false);
-                    }}
+                    onNotificationClick={onNotificationClickSafe}
                     onMarkAllAsRead={handleMarkAllAsRead}
                 />
             )}

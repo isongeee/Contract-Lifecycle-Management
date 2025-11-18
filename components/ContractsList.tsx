@@ -2,9 +2,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { Contract } from '../types';
 import { ContractStatus, ContractType, RiskLevel, ContractFrequency } from '../types';
 import StatusTag from './StatusTag';
-import { SearchIcon, ChevronDownIcon, PlusIcon, ArrowUpIcon, ArrowDownIcon } from './icons';
+import { SearchIcon, ChevronDownIcon, PlusIcon, ArrowUpIcon, ArrowDownIcon, LoaderIcon } from './icons';
 import { useAppContext } from '../contexts/AppContext';
 import Pagination from './Pagination';
+import { fetchContractsPage, ContractsPage } from '../lib/contractsApi';
 
 interface FilterOption {
   value: string;
@@ -30,7 +31,6 @@ const FilterDropdown = ({ label, options, selected, onChange }: { label: string;
 );
 
 const typeOptions = Object.values(ContractType).map(t => ({ value: t, label: t }));
-const statusOptions = Object.values(ContractStatus).map(s => ({ value: s, label: s }));
 const riskOptions = Object.values(RiskLevel).map(r => ({ value: r, label: r }));
 const frequencyOptions = Object.values(ContractFrequency).map(f => ({ value: f, label: f }));
 
@@ -99,15 +99,20 @@ const StatusFilterDropdown = ({ selected, onChange }: { selected: Set<ContractSt
 
 
 export default function ContractsList() {
-  const { contracts, handleSelectContract, handleStartCreate, initialFilters, currentUser } = useAppContext();
+  const { handleSelectContract, handleStartCreate, initialFilters, currentUser, lastUpdated } = useAppContext();
+  
+  const [contracts, setContracts] = useState<Partial<Contract>[]>([]);
+  const [total, setTotal] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [visibleStatuses, setVisibleStatuses] = useState<Set<ContractStatus>>(new Set(defaultVisibleStatuses));
   const [typeFilter, setTypeFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
   const [frequencyFilter, setFrequencyFilter] = useState('');
   const [ownerFilter, setOwnerFilter] = useState(initialFilters.ownerId || '');
-  const [sortKey, setSortKey] = useState('endDate');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'endDate', direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -129,81 +134,41 @@ export default function ContractsList() {
     setFrequencyFilter('');
   }, [initialFilters]);
   
-  // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, visibleStatuses, typeFilter, riskFilter, frequencyFilter, ownerFilter]);
 
+  useEffect(() => {
+    if (!currentUser?.companyId) return;
 
-  const filteredContracts = useMemo(() => contracts.filter(contract => {
-    const riskMatch = () => {
-        if (riskFilter === '') return true;
-        if (riskFilter === 'HighAndCritical') {
-            return contract.riskLevel === RiskLevel.HIGH || contract.riskLevel === RiskLevel.CRITICAL;
-        }
-        return contract.riskLevel === riskFilter;
-    };
+    setIsLoading(true);
+    setError(null);
     
-    return (
-      (contract.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-       contract.counterparty.name.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (visibleStatuses.has(contract.status)) &&
-      (typeFilter === '' || contract.type === typeFilter) &&
-      (ownerFilter === '' || contract.owner.id === ownerFilter) &&
-      (frequencyFilter === '' || contract.frequency === frequencyFilter) &&
-      riskMatch()
-    );
-  }), [contracts, searchTerm, visibleStatuses, typeFilter, riskFilter, frequencyFilter, ownerFilter]);
+    const filters = {
+        search: searchTerm,
+        status: visibleStatuses,
+        type: typeFilter,
+        risk: riskFilter,
+        frequency: frequencyFilter,
+        ownerId: ownerFilter,
+    };
 
-  const sortedContracts = useMemo(() => {
-    return [...filteredContracts].sort((a, b) => {
-        let valA: string | number, valB: string | number;
-        switch (sortKey) {
-            case 'title':
-                valA = a.title.toLowerCase();
-                valB = b.title.toLowerCase();
-                break;
-            case 'counterparty':
-                valA = a.counterparty.name.toLowerCase();
-                valB = b.counterparty.name.toLowerCase();
-                break;
-            case 'status':
-                valA = a.status.toLowerCase();
-                valB = b.status.toLowerCase();
-                break;
-            case 'value':
-                valA = a.value;
-                valB = b.value;
-                break;
-            case 'endDate':
-            case 'updatedAt':
-                valA = new Date(a[sortKey as 'endDate' | 'updatedAt'] || 0).getTime();
-                valB = new Date(b[sortKey as 'endDate' | 'updatedAt'] || 0).getTime();
-                break;
-            default:
-                return 0;
-        }
+    fetchContractsPage(currentUser.companyId, currentPage, ITEMS_PER_PAGE, filters, sortConfig)
+      .then(res => {
+        setContracts(res.items);
+        setTotal(res.total);
+      })
+      .catch(err => setError(err.message ?? 'Failed to load contracts'))
+      .finally(() => setIsLoading(false));
 
-        if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-        if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-        return 0;
-    });
-  }, [filteredContracts, sortKey, sortDirection]);
+  }, [currentUser?.companyId, currentPage, searchTerm, visibleStatuses, typeFilter, riskFilter, frequencyFilter, ownerFilter, sortConfig, lastUpdated]);
 
-  const paginatedContracts = useMemo(() => {
-    return sortedContracts.slice(
-      (currentPage - 1) * ITEMS_PER_PAGE,
-      currentPage * ITEMS_PER_PAGE
-    );
-  }, [sortedContracts, currentPage]);
   
   const handleSort = (key: string) => {
-    if (sortKey === key) {
-        setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
-    } else {
-        setSortKey(key);
-        setSortDirection('asc');
-    }
+    setSortConfig(prev => ({
+        key,
+        direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
   };
 
   const handleClearFilters = () => {
@@ -221,14 +186,14 @@ export default function ContractsList() {
   ];
 
   const SortableHeader = ({ label, columnKey }: { label: React.ReactNode; columnKey: string }) => {
-    const isActive = sortKey === columnKey;
+    const isActive = sortConfig.key === columnKey;
     return (
         <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
             <button onClick={() => handleSort(columnKey)} className="flex items-center space-x-1 group">
                 <span>{label}</span>
                 <span className={`transition-opacity ${isActive ? 'opacity-100' : 'opacity-20 group-hover:opacity-100'}`}>
-                    {isActive && sortDirection === 'asc' && <ArrowUpIcon className="h-4 w-4" />}
-                    {isActive && sortDirection === 'desc' && <ArrowDownIcon className="h-4 w-4" />}
+                    {isActive && sortConfig.direction === 'asc' && <ArrowUpIcon className="h-4 w-4" />}
+                    {isActive && sortConfig.direction === 'desc' && <ArrowDownIcon className="h-4 w-4" />}
                     {!isActive && <ArrowUpIcon className="h-4 w-4" />}
                 </span>
             </button>
@@ -294,18 +259,22 @@ export default function ContractsList() {
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-            {paginatedContracts.map((contract) => (
-              <tr key={contract.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => handleSelectContract(contract)}>
+            {isLoading ? (
+                <tr><td colSpan={5} className="text-center py-10"><LoaderIcon className="w-8 h-8 mx-auto text-primary" /></td></tr>
+            ) : error ? (
+                <tr><td colSpan={5} className="text-center py-10 text-red-500">{error}</td></tr>
+            ) : contracts.map((contract) => (
+              <tr key={contract.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => handleSelectContract(contract as Contract)}>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{contract.title}</div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">{contract.type}</div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{contract.counterparty.name}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{contract.counterparty!.name}</td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <StatusTag type="contract" status={contract.status} />
+                  <StatusTag type="contract" status={contract.status!} />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
-                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(contract.value)}
+                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(contract.value!)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{contract.endDate}</td>
               </tr>
@@ -313,7 +282,7 @@ export default function ContractsList() {
           </tbody>
         </table>
       </div>
-       {sortedContracts.length === 0 && (
+       {!isLoading && !error && contracts.length === 0 && (
           <div className="text-center py-12">
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">No contracts found</h3>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Try adjusting your search or filter criteria.</p>
@@ -321,9 +290,9 @@ export default function ContractsList() {
         )}
       <Pagination
         currentPage={currentPage}
-        totalPages={Math.ceil(sortedContracts.length / ITEMS_PER_PAGE)}
+        totalPages={Math.ceil(total / ITEMS_PER_PAGE)}
         onPageChange={setCurrentPage}
-        totalItems={sortedContracts.length}
+        totalItems={total}
         itemsPerPage={ITEMS_PER_PAGE}
       />
     </div>

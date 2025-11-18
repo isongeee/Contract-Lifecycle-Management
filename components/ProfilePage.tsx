@@ -3,6 +3,7 @@ import type { UserProfile, UserNotificationSettings } from '../types';
 import { SunIcon, MoonIcon, MonitorIcon, UserIcon, SlidersHorizontalIcon, BellIcon, KeyRoundIcon, EditIcon, XIcon, PlusIcon, LoaderIcon, CheckCircleIcon } from './icons';
 import ToggleSwitch from './ToggleSwitch';
 import { useAppContext } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 import ChangePasswordModal from './ChangePasswordModal';
 import TwoFactorAuthModal from './TwoFactorAuthModal';
 
@@ -65,7 +66,7 @@ const SectionCard = ({ title, description, children, footer }: { title: string; 
 );
 
 const PersonalInfoTab = ({ user }: { user: UserProfile }) => {
-    const { handleUpdateUserProfile } = useAppContext();
+    const { handleUpdateUserProfile } = useAuth();
     const [formData, setFormData] = useState({
         firstName: user.firstName,
         lastName: user.lastName,
@@ -254,7 +255,7 @@ const NotificationsTab = ({ settings, setSettings }: { settings: UserNotificatio
 };
 
 const SecurityTab = ({ onOpenChangePassword, onOpen2faModal }: { onOpenChangePassword: () => void; onOpen2faModal: () => void; }) => {
-    const { mfaFactors, handleUnenrollMFA } = useAppContext();
+    const { mfaFactors, handleUnenrollMFA } = useAuth();
     const is2faEnabled = mfaFactors.some(f => f.status === 'verified');
 
     const handle2faToggle = async () => {
@@ -293,7 +294,7 @@ const SecurityTab = ({ onOpenChangePassword, onOpen2faModal }: { onOpenChangePas
 };
 
 export default function ProfilePage(props: ProfilePageProps) {
-  const { handleAvatarUpload, handleUpdateUserProfile } = useAppContext();
+  const { handleAvatarUpload } = useAuth();
   const [activeTab, setActiveTab] = useState('personal');
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [is2faModalOpen, setIs2faModalOpen] = useState(false);

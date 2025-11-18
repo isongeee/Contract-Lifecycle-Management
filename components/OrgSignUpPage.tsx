@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { FileTextIcon, LoaderIcon, EyeIcon, EyeOffIcon, SparklesIcon, RefreshCwIcon, ShieldCheckIcon } from './icons';
 import { orgSignUp } from '../lib/auth';
-import { useAppContext } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const checkPasswordStrength = (password: string) => {
     let score = 0;
@@ -45,7 +45,7 @@ const FeatureHighlight = ({ icon, title, description }: { icon: React.ReactNode,
 
 
 export default function OrgSignUpPage() {
-  const { setAuthView } = useAppContext();
+  const { setAuthView } = useAuth();
   const [orgName, setOrgName] = useState('');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');

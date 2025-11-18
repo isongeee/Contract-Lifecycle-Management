@@ -14,12 +14,12 @@ import VersionComparisonView from './VersionComparisonView';
 import CommentsPanel from './CommentsPanel';
 import UpdateStatusModal from './UpdateStatusModal';
 import { jsPDF } from 'jspdf';
+import { useAppContext } from '../contexts/AppContext';
 
 type ContractAction = ContractStatus | 'APPROVE_STEP' | 'REJECT_STEP';
 
 interface ContractDetailProps {
-  contract: Contract;
-  contracts: Contract[];
+  contractId: string;
   properties: Property[];
   users: UserProfile[];
   currentUser: UserProfile;
@@ -27,10 +27,10 @@ interface ContractDetailProps {
   onTransition: (contractId: string, action: ContractAction, payload?: any) => void;
   onCreateNewVersion: (contractId: string, newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'> & { file?: File | null }) => void;
   onRenewalDecision: (renewalRequestId: string, mode: RenewalMode, notes?: string) => void;
-  onCreateRenewalRequest: (contract: Contract) => void;
-  onSelectContract: (contract: Contract) => void;
-  onRenewAsIs: (contract: Contract, notes?: string) => void;
-  onStartRenegotiation: (originalContract: Contract, notes?: string) => void;
+  onCreateRenewalRequest: (contractId: string) => void;
+  onSelectContract: (contractId: string) => void;
+  onRenewAsIs: (contractId: string, notes?: string) => void;
+  onStartRenegotiation: (originalContractId: string, notes?: string) => void;
   onUpdateSigningStatus: (contractId: string, status: SigningStatus) => void;
   onCreateComment: (versionId: string, content: string) => void;
   onResolveComment: (commentId: string, isResolved: boolean) => void;
@@ -609,8 +609,14 @@ const daysUntil = (dateStr: string) => {
 };
 
 
-export default function ContractDetail({ contract: initialContract, contracts, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalDecision, onCreateRenewalRequest, onSelectContract, onRenewAsIs, onStartRenegotiation, onUpdateSigningStatus, onCreateComment, onResolveComment, onCreateRenewalFeedback, onUpdateRenewalTerms, onNavigate, onDownloadFile }: ContractDetailProps) {
-  const [contract, setContract] = useState(initialContract);
+export default function ContractDetail({ contractId, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalDecision, onCreateRenewalRequest, onSelectContract, onRenewAsIs, onStartRenegotiation, onUpdateSigningStatus, onCreateComment, onResolveComment, onCreateRenewalFeedback, onUpdateRenewalTerms, onNavigate, onDownloadFile }: ContractDetailProps) {
+  const { contracts, isLoading: isContextLoading } = useAppContext();
+  
+  // Get contract from context for real-time updates
+  const contract = useMemo(() => contracts.find(c => c.id === contractId) || null, [contracts, contractId]);
+
+  const [error, setError] = useState<string | null>(null);
+
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const [isRequestingApproval, setIsRequestingApproval] = useState(false);
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
@@ -621,40 +627,54 @@ export default function ContractDetail({ contract: initialContract, contracts, p
   const [confirmModalState, setConfirmModalState] = useState<{ isOpen: boolean; action: ContractAction | null; payload?: any; }>({ isOpen: false, action: null, payload: undefined });
   const [compareSelection, setCompareSelection] = useState<string[]>([]);
   const [comparingVersions, setComparingVersions] = useState<{v1: ContractVersion, v2: ContractVersion} | null>(null);
+  
+  // Local state for AI analysis results (ephemeral)
+  const [riskSummary, setRiskSummary] = useState<string | undefined>();
+  const [extractedClauses, setExtractedClauses] = useState<Clause[] | undefined>();
 
-  const [viewedVersionId, setViewedVersionId] = useState<string | null>(
-    initialContract.versions.length > 0 ? initialContract.versions[initialContract.versions.length - 1].id : null
-  );
+  const [viewedVersionId, setViewedVersionId] = useState<string | null>(null);
+  
+  // Initialize viewed version on contract load or change
+  useEffect(() => {
+    if (contract && !viewedVersionId) {
+         const newLatestVersion = contract.versions.length > 0 ? contract.versions[contract.versions.length - 1] : null;
+         setViewedVersionId(newLatestVersion?.id || null);
+    }
+  }, [contract, viewedVersionId]);
+
+  // Reset analysis when contract changes significantly (e.g. navigated away and back)
+  useEffect(() => {
+      setRiskSummary(undefined);
+      setExtractedClauses(undefined);
+  }, [contractId]);
   
   const latestVersion = useMemo(() => 
-    contract.versions.length > 0 ? contract.versions[contract.versions.length - 1] : null
-  , [contract.versions]);
+    contract?.versions.length ? contract.versions[contract.versions.length - 1] : null
+  , [contract?.versions]);
     
   const viewedVersion = useMemo(() => 
-    contract.versions.find(v => v.id === viewedVersionId) || latestVersion
-  , [contract.versions, viewedVersionId, latestVersion]);
+    contract?.versions.find(v => v.id === viewedVersionId) || latestVersion
+  , [contract?.versions, viewedVersionId, latestVersion]);
 
-  const [editedContent, setEditedContent] = useState(viewedVersion?.content || '');
+  const [editedContent, setEditedContent] = useState('');
   const [isDirty, setIsDirty] = useState(false);
+  const [parentContractTitle, setParentContractTitle] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (contract?.parentContractId) {
+        supabase.from('contracts').select('title').eq('id', contract.parentContractId).single().then(({ data }) => {
+            if (data) setParentContractTitle(data.title);
+        });
+    } else {
+        setParentContractTitle(null);
+    }
+  }, [contract?.parentContractId]);
 
   const canInitiateRenewal = (
-    (contract.status === ContractStatus.EXPIRED || 
+    contract && (contract.status === ContractStatus.EXPIRED || 
     (contract.status === ContractStatus.ACTIVE && daysUntil(contract.endDate) <= 90)) 
     && !contract.renewalRequest
   );
-
-  const parentContract = useMemo(() => {
-    if (!contract.parentContractId) return null;
-    return contracts.find(c => c.id === contract.parentContractId);
-  }, [contract.parentContractId, contracts]);
-
-  useEffect(() => {
-    setContract(initialContract);
-    const newLatestVersion = initialContract.versions.length > 0 ? initialContract.versions[initialContract.versions.length - 1] : null;
-    setViewedVersionId(newLatestVersion?.id || null);
-    setComparingVersions(null);
-    setCompareSelection([]);
-  }, [initialContract]);
 
   useEffect(() => {
     if (viewedVersion) {
@@ -663,11 +683,18 @@ export default function ContractDetail({ contract: initialContract, contracts, p
     }
   }, [viewedVersion]);
 
-
   const handleSaveNewVersion = (newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'> & { file?: File | null }) => {
-    onCreateNewVersion(contract.id, newVersionData);
+    onCreateNewVersion(contractId, newVersionData);
     setIsCreatingVersion(false);
   };
+
+  if (isContextLoading) {
+    return <div className="flex items-center justify-center h-full"><LoaderIcon className="w-12 h-12 text-primary" /></div>;
+  }
+
+  if (!contract) {
+    return <div className="text-center py-10 text-red-500">{error || "Contract not found or access denied."}</div>;
+  }
 
   if (!viewedVersion) {
     return (
@@ -707,12 +734,11 @@ export default function ContractDetail({ contract: initialContract, contracts, p
   const handleSaveChanges = () => {
     if (!isDirty || !canEditContent) return;
     
-    // Destructure to get a clean base object, excluding fields that should be regenerated.
     const { id, versionNumber, createdAt, author, comments, ...baseVersionData } = viewedVersion;
     
     const newVersionData = {
       ...baseVersionData,
-      content: editedContent, // Use the edited content
+      content: editedContent,
     };
 
     onCreateNewVersion(contract.id, newVersionData);
@@ -737,11 +763,12 @@ export default function ContractDetail({ contract: initialContract, contracts, p
     setAiError(null);
     try {
         const summary = await summarizeContractRisk(editedContent);
-        setContract(c => ({...c, riskSummary: summary, extractedClauses: undefined }));
+        setRiskSummary(summary);
+        setExtractedClauses(undefined);
     } catch (error) {
         console.error("Error summarizing contract risk:", error);
         setAiError(error instanceof Error ? error.message : "An unknown error occurred during risk analysis.");
-        setContract(c => ({...c, riskSummary: undefined }));
+        setRiskSummary(undefined);
     } finally {
         setIsLoadingSummary(false);
     }
@@ -752,11 +779,12 @@ export default function ContractDetail({ contract: initialContract, contracts, p
     setAiError(null);
     try {
         const clauses = await extractClauses(editedContent);
-        setContract(c => ({...c, extractedClauses: clauses, riskSummary: undefined }));
+        setExtractedClauses(clauses);
+        setRiskSummary(undefined);
     } catch (error) {
         console.error("Error extracting clauses:", error);
         setAiError(error instanceof Error ? error.message : "An unknown error occurred during clause extraction.");
-        setContract(c => ({...c, extractedClauses: undefined }));
+        setExtractedClauses(undefined);
     } finally {
         setIsLoadingClauses(false);
     }
@@ -769,7 +797,8 @@ export default function ContractDetail({ contract: initialContract, contracts, p
         }
     }
     setViewedVersionId(id);
-    setContract(c => ({ ...c, riskSummary: undefined, extractedClauses: undefined }));
+    setRiskSummary(undefined);
+    setExtractedClauses(undefined);
   };
   
   const handleRequestApproval = (approvers: UserProfile[], versionId: string) => {
@@ -790,56 +819,55 @@ export default function ContractDetail({ contract: initialContract, contracts, p
           const v1 = contract.versions.find(v => v.id === compareSelection[0]);
           const v2 = contract.versions.find(v => v.id === compareSelection[1]);
           if (v1 && v2) {
-              // Ensure v1 is the older version
               setComparingVersions(v1.versionNumber < v2.versionNumber ? { v1, v2 } : { v1: v2, v2: v1 });
           }
       }
   };
   
   const handleGeneratePdf = () => {
-  if (!editedContent) return;
-
-  const doc = new jsPDF({
-    orientation: 'p',
-    unit: 'pt',
-    format: 'a4',
-  });
-
-  doc.setProperties({
-    title: `${contract.title} - v${viewedVersion.versionNumber}`,
-    author: `${currentUser.firstName} ${currentUser.lastName}`,
-  });
-
-  const margin = 40; // points
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const usableWidth = pageWidth - margin * 2;
-
-  // Base font + simple line height
-  doc.setFontSize(10);
-  const lineHeight = doc.getFontSize() * 1.2; // 20% extra spacing for readability
-
-  // Wrap the entire contract text to fit within the usable width
-  const textLines = doc.splitTextToSize(editedContent, usableWidth);
-
-  let y = margin;
-
-  for (const line of textLines) {
-    // If the next line doesn't fit on the current page, add a new page
-    if (y + lineHeight > pageHeight - margin) {
-      doc.addPage();
-      y = margin;
+    if (!editedContent) return;
+  
+    const doc = new jsPDF({
+      orientation: 'p',
+      unit: 'pt',
+      format: 'a4',
+    });
+  
+    doc.setProperties({
+      title: `${contract?.title || 'Contract'} - v${viewedVersion.versionNumber}`,
+      author: `${currentUser.firstName} ${currentUser.lastName}`,
+    });
+  
+    const margin = 40; // points
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const usableWidth = pageWidth - margin * 2;
+  
+    // Base font + simple line height
+    doc.setFontSize(10);
+    const lineHeight = doc.getFontSize() * 1.2; // 20% extra spacing for readability
+  
+    // Wrap the entire contract text to fit within the usable width
+    const textLines = doc.splitTextToSize(editedContent, usableWidth);
+  
+    let y = margin;
+  
+    for (const line of textLines) {
+      // If the next line doesn't fit on the current page, add a new page
+      if (y + lineHeight > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+  
+      // Guard against any weird falsy values (just in case)
+      doc.text(line || '', margin, y);
+      y += lineHeight;
     }
-
-    // Guard against any weird falsy values (just in case)
-    doc.text(line || '', margin, y);
-    y += lineHeight;
-  }
-
-  doc.save(
-    `${contract.title.replace(/\s+/g, '_')}_v${viewedVersion.versionNumber}.pdf`
-  );
-};
+  
+    doc.save(
+      `${(contract?.title || 'contract').replace(/\s+/g, '_')}_v${viewedVersion.versionNumber}.pdf`
+    );
+  };
 
 
   return (
@@ -888,15 +916,15 @@ export default function ContractDetail({ contract: initialContract, contracts, p
             <div className="flex justify-between items-start">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{contract.title}</h1>
-                    {parentContract && (
+                    {parentContractTitle && (
                         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 flex items-center">
                             <RefreshCwIcon className="w-4 h-4 mr-1.5 text-gray-400" />
                             Renewed from:{' '}
                             <button 
-                                onClick={() => onSelectContract(parentContract)} 
+                                onClick={() => onSelectContract(contract.parentContractId!)} 
                                 className="ml-1 font-semibold text-primary hover:underline focus:outline-none"
                             >
-                                {parentContract.title}
+                                {parentContractTitle}
                             </button>
                         </p>
                     )}
@@ -921,7 +949,7 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                 <div className="flex items-center space-x-3">
                      {canInitiateRenewal && (
                         <button 
-                            onClick={() => onCreateRenewalRequest(contract)}
+                            onClick={() => onCreateRenewalRequest(contract.id)}
                             className="flex items-center px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                         >
                             <RefreshCwIcon className="w-4 h-4 mr-2" />
@@ -956,7 +984,7 @@ export default function ContractDetail({ contract: initialContract, contracts, p
                     </div>
                  ) : (
                     <>
-                        <AiAnalysis onSummary={handleSummarizeRisk} onExtract={handleExtractClauses} riskSummary={contract.riskSummary} extractedClauses={contract.extractedClauses} isLoadingSummary={isLoadingSummary} isLoadingClauses={isLoadingClauses} aiError={aiError} />
+                        <AiAnalysis onSummary={handleSummarizeRisk} onExtract={handleExtractClauses} riskSummary={riskSummary} extractedClauses={extractedClauses} isLoadingSummary={isLoadingSummary} isLoadingClauses={isLoadingClauses} aiError={aiError} />
                         <FinancialsAndAllocationCard contract={contract} viewedVersion={viewedVersion} properties={properties} />
                         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
                             <div className="flex justify-between items-center mb-4">
@@ -1001,18 +1029,18 @@ export default function ContractDetail({ contract: initialContract, contracts, p
         {isMakingDecision && contract.renewalRequest && (
             <RenewalDecisionModal
                 contract={contract}
-                contracts={contracts}
+                contracts={[]}
                 onClose={() => setIsMakingDecision(false)}
                 onConfirm={(mode, notes) => {
                     onRenewalDecision(contract.renewalRequest!.id, mode, notes);
                     setIsMakingDecision(false);
                 }}
                 onStartRenegotiation={(notes) => {
-                    onStartRenegotiation(contract, notes);
+                    onStartRenegotiation(contract.id, notes);
                     setIsMakingDecision(false);
                 }}
                 onFinalizeRenewAsIs={(notes) => {
-                    onRenewAsIs(contract, notes);
+                    onRenewAsIs(contract.id, notes);
                     setIsMakingDecision(false);
                 }}
                 currentUser={currentUser}

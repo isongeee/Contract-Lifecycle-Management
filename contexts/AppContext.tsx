@@ -3,27 +3,15 @@ import type { Contract, ContractTemplate, Counterparty, Property, ContractStatus
 import { ContractStatus, RiskLevel, ApprovalStatus, RenewalStatus as RenewalStatusEnum, RenewalMode, SigningStatus as SigningStatusEnum } from '../types';
 import { MOCK_NOTIFICATION_SETTINGS, MOCK_USER_NOTIFICATION_SETTINGS, requestorPermissions } from '../constants';
 import { supabase } from '../lib/supabaseClient';
-import { Session } from '@supabase/supabase-js';
-import { getUserProfile, signOut, adminCreateUser } from '../lib/auth';
+import { useAuth } from './AuthContext';
+import { fetchContractDetail } from '../lib/contractsApi';
 
 type ContractAction = ContractStatus | 'APPROVE_STEP' | 'REJECT_STEP';
 
 export interface AppContextType {
-    // Auth State
-    session: Session | null;
+    // Derived from AuthContext (Re-exported for convenience in data components)
     currentUser: UserProfile | null;
     company: { id: string; name: string; slug: string; } | null;
-    isAuthenticated: boolean;
-    authView: 'login' | 'org-signup' | 'user-signup';
-    setAuthView: React.Dispatch<React.SetStateAction<'login' | 'org-signup' | 'user-signup'>>;
-    handleLogin: () => void;
-    handleLogout: () => Promise<void>;
-    mfaFactors: any[];
-    handleAvatarUpload: (file: File) => Promise<void>;
-    handleChangePassword: (newPassword: string) => Promise<{ error: Error | null }>;
-    handleEnrollMFA: () => Promise<any>;
-    handleVerifyMFA: (factorId: string, code: string) => Promise<any>;
-    handleUnenrollMFA: (factorId: string) => Promise<any>;
 
     // UI State
     isLoading: boolean;
@@ -45,6 +33,7 @@ export interface AppContextType {
     notificationSettings: NotificationSetting[];
     userNotificationSettings: UserNotificationSettings;
     unreadCount: number;
+    lastUpdated: number;
 
     // Page/Selection State
     selectedContract: Contract | null;
@@ -75,7 +64,6 @@ export interface AppContextType {
     handleUseTemplate: (template: ContractTemplate) => void;
 
     // Data Mutation Handlers
-    // FIX: Add 'content' to the type definition for newContractData to match the data passed from the creation workflow.
     handleFinalizeCreate: (newContractData: Partial<Contract> & { propertyAllocations?: any[], file?: File | null, fileName?: string, content?: string; }) => Promise<void>;
     handleFinalizeCreateCounterparty: (newCounterpartyData: Omit<Counterparty, "id">) => Promise<void>;
     handleFinalizeEditCounterparty: (data: Partial<Counterparty>) => Promise<void>;
@@ -85,10 +73,10 @@ export interface AppContextType {
     handleSigningStatusUpdate: (contractId: string, newStatus: SigningStatus) => Promise<void>;
     handleMarkAsExecuted: (contractId: string) => void;
     handleRenewalDecision: (renewalRequestId: string, mode: RenewalMode, notes?: string) => Promise<void>;
-    handleStartRenegotiation: (originalContract: Contract, notes?: string) => Promise<void>;
-    handleCreateRenewalRequest: (contract: Contract) => Promise<void>;
+    handleStartRenegotiation: (contractId: string, notes?: string) => Promise<void>;
+    handleCreateRenewalRequest: (contractId: string) => Promise<void>;
     handleUpdateRenewalTerms: (renewalRequestId: string, updatedTerms: { renewalTermMonths: number; noticePeriodDays: number; upliftPercent: number; }) => Promise<void>;
-    handleRenewAsIs: (contract: Contract, notes?: string) => Promise<void>;
+    handleRenewAsIs: (contractId: string, notes?: string) => Promise<void>;
     handleCreateNewVersion: (contractId: string,newVersionData: Omit<ContractVersion, "id" | "versionNumber" | "createdAt" | "author"> & {file?: File | null;fileName?: string;}) => Promise<void>;
     handleUpdateRolePermissions: (roleId: string, newPermissions: PermissionSet) => Promise<void>;
     handleCreateRole: (name: string, description: string) => Promise<void>;
@@ -100,7 +88,6 @@ export interface AppContextType {
     handleMarkOneAsRead: (notificationId: string) => Promise<void>;
     handleNotificationClick: (notification: Notification) => void;
     handleCreateUser: (userData: any) => Promise<void>;
-    handleUpdateUserProfile: (userId: string, updates: Partial<UserProfile>) => Promise<boolean>;
     
     // Selection Handlers
     handleSelectContract: (contract: Contract) => void;
@@ -128,14 +115,8 @@ export interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
-  /*
-   * DEVELOPER NOTE: Monolithic Context
-   * This AppContext has grown to manage a large amount of global state, which can lead to performance issues
-   * and unnecessary re-renders. A future architectural improvement would be to split this into smaller,
-   * more focused contexts (e.g., AuthContext, ContractsContext, UIStateContext). This would improve
-   * performance, maintainability, and separation of concerns. Data fetching could also be moved to a
-   * per-view basis to improve initial load times. For now, optimizations are focused on specific functions.
-   */
+  const { currentUser, company, handleCreateUser: authHandleCreateUser } = useAuth();
+
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [templates, setTemplates] = useState<ContractTemplate[]>([]);
   const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
@@ -145,6 +126,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   const [notificationSettings, setNotificationSettings] = useState<NotificationSetting[]>(MOCK_NOTIFICATION_SETTINGS);
   const [userNotificationSettings, setUserNotificationSettingsState] = useState<UserNotificationSettings>(MOCK_USER_NOTIFICATION_SETTINGS);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [lastUpdated, setLastUpdated] = useState(Date.now());
 
   const [isLoading, setIsLoading] = useState(true);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
@@ -162,14 +144,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   const [initialFilters, setInitialFilters] = useState<{ status?: ContractStatusType; riskLevels?: RiskLevel[]; ownerId?: string }>({});
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
   
-  // Auth State
-  const [session, setSession] = useState<Session | null>(null);
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [company, setCompany] = useState<{ id: string; name: string; slug: string; } | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authView, setAuthView] = useState<'login' | 'org-signup' | 'user-signup'>('login');
-  const [mfaFactors, setMfaFactors] = useState<any[]>([]);
-
   // Global Search State
   const [isPerformingGlobalSearch, setIsPerformingGlobalSearch] = useState(false);
   const [globalSearchResults, setGlobalSearchResults] = useState<SearchResult[]>([]);
@@ -201,59 +175,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     }
   }, [userNotificationSettings]);
 
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-        setSession(session);
-        setIsAuthenticated(!!session);
-        if (session?.user) {
-            const profile = await getUserProfile(session.user.id);
-            setCurrentUser(profile);
-            if (!profile) {
-              await signOut();
-            }
-        } else {
-            setCurrentUser(null);
-            setCompany(null);
-            setContracts([]);
-            setCounterparties([]);
-            setProperties([]);
-            setUsers([]);
-            setRoles([]);
-            setNotifications([]);
-            setTemplates([]);
-        }
-    });
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-        setSession(session);
-        setIsAuthenticated(!!session);
-        if (session?.user) {
-            const profile = await getUserProfile(session.user.id);
-            setCurrentUser(profile);
-            if (!profile) {
-                setIsLoading(false);
-            }
-        } else {
-            setIsLoading(false);
-        }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-  
-  useEffect(() => {
-    const fetchMfaStatus = async () => {
-        if (currentUser) {
-            const { data: mfaData } = await supabase.auth.mfa.listFactors();
-            if (mfaData) {
-                setMfaFactors(mfaData.all);
-            }
-        }
-    };
-    fetchMfaStatus();
-  }, [currentUser]);
-
-
   const fetchData = useCallback(async (user: UserProfile) => {
     if (!user || !user.companyId) {
         setContracts([]);
@@ -268,9 +189,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     }
     setIsLoading(true);
     const companyId = user.companyId;
-
-    const { data: companyData } = await supabase.from('companies').select('id, name, slug').eq('id', companyId).single();
-    setCompany(companyData);
 
     const { data: usersData } = await supabase.from('users').select('*').eq('company_id', companyId);
     const userCountsByRole = (usersData || []).reduce((acc, user) => {
@@ -319,7 +237,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
         .from('user_notification_settings')
         .select('*')
         .eq('user_id', user.id)
-        .maybeSingle(); // Use maybeSingle to gracefully handle 0 rows
+        .maybeSingle(); 
 
     if (userSettingsData) {
         setUserNotificationSettingsState({
@@ -331,10 +249,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     } else if (settingsError) {
         console.error("Error fetching user settings:", settingsError);
     } else {
-        // Data is null and there was no error, meaning settings don't exist.
-        // We warn about this but do not attempt to create from the client-side
-        // to avoid RLS violations. Creation is handled by backend functions.
-        // Existing users without settings may need a manual data backfill.
         console.warn(`No notification settings found for user ${user.id}. Using default settings as a fallback.`);
     }
 
@@ -419,7 +333,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     for (const renewal of (renewalsRes.data || [])) {
         const contract = contractsById.get(renewal.contract_id);
         if (contract) {
-            // Map backend 'path'/'decision' to client-side 'mode' for compatibility
             let mode: RenewalMode;
             if (renewal.decision === 'non_renew') {
                 mode = RenewalMode.TERMINATE;
@@ -429,7 +342,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
                     case 'amend': mode = RenewalMode.AMENDMENT; break;
                     case 'renegotiate': mode = RenewalMode.NEW_CONTRACT; break;
                     default: 
-                        // If path is null, it could be a new request or one based on the old 'mode' column
                         mode = renewal.mode ? renewal.mode as RenewalMode : RenewalMode.PENDING;
                         break;
                 }
@@ -465,6 +377,15 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   useEffect(() => {
     if(currentUser) {
         fetchData(currentUser);
+    } else {
+        setContracts([]);
+        setCounterparties([]);
+        setProperties([]);
+        setUsers([]);
+        setRoles([]);
+        setNotifications([]);
+        setTemplates([]);
+        setIsLoading(false);
     }
   }, [currentUser, fetchData]);
 
@@ -475,68 +396,23 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   const fetchAndMergeContract = useCallback(async (contractId: string): Promise<Contract | null> => {
     if (!currentUser || !usersMap.size || !counterpartiesMap.size || !propertiesMap.size) return null;
 
-    const { data: contractData } = await supabase.from('contracts').select('*').eq('id', contractId).single();
-
-    if (!contractData) {
+    const fullContract = await fetchContractDetail(contractId);
+    if (!fullContract) {
         setContracts(prev => prev.filter(c => c.id !== contractId));
         return null;
     }
-
-    const [versionsRes, approvalsRes, allocationsRes, renewalsRes, auditsRes] = await Promise.all([
-        supabase.from('contract_versions').select('*').eq('contract_id', contractId),
-        supabase.from('approval_steps').select('*').eq('contract_id', contractId),
-        supabase.from('contract_property_allocations').select('*').eq('contract_id', contractId),
-        supabase.from('renewal_requests').select('*').eq('contract_id', contractId).not('status', 'in', `("${RenewalStatusEnum.COMPLETED}","${RenewalStatusEnum.CANCELLED}")`),
-        supabase.from('audit_logs').select('*').eq('related_entity_id', contractId).eq('related_entity_type', 'renewal_request')
-    ]);
-
-    const versionIds = (versionsRes.data || []).map(v => v.id);
-    const { data: commentsData } = versionIds.length > 0 ? await supabase.from('comments').select('*').in('version_id', versionIds) : { data: [] };
-    const commentsByVersionId = (commentsData || []).reduce((acc, comment) => {
-        const items = acc.get(comment.version_id) || [];
-        items.push({ ...comment, author: usersMap.get(comment.author_id)!, resolvedAt: comment.resolved_at, versionId: comment.version_id, createdAt: comment.created_at });
-        acc.set(comment.version_id, items);
-        return acc;
-    }, new Map<string, Comment[]>());
-
-    const renewalRequestIds = (renewalsRes.data || []).map(r => r.id);
-    const { data: feedbackData } = renewalRequestIds.length > 0 ? await supabase.from('renewal_feedback').select('*').in('renewal_request_id', renewalRequestIds) : { data: [] };
-    const feedbackByRenewalId = (feedbackData || []).reduce((acc, feedback) => {
-        const items = acc.get(feedback.renewal_request_id) || [];
-        items.push({ ...feedback, user: usersMap.get(feedback.user_id)! });
-        acc.set(feedback.renewal_request_id, items);
-        return acc;
-    }, new Map<string, RenewalFeedback[]>());
-    
-    const newContract: Contract = {
-        id: contractData.id, title: contractData.title, type: contractData.type, status: contractData.status,
-        riskLevel: contractData.risk_level, effectiveDate: contractData.effective_date,
-        endDate: contractData.end_date, value: contractData.value, frequency: contractData.frequency, allocation: contractData.allocation,
-        seasonalMonths: contractData.seasonal_months, owner: usersMap.get(contractData.owner_id)!,
-        counterparty: counterpartiesMap.get(contractData.counterparty_id)!,
-        property: propertiesMap.get(contractData.property_id),
-        versions: (versionsRes.data || []).map(v => ({...v, versionNumber: v.version_number, createdAt: v.created_at, fileName: v.file_name, storagePath: v.storage_path, effectiveDate: v.effective_date, endDate: v.end_date, seasonalMonths: v.seasonal_months, author: usersMap.get(v.author_id)!, property: propertiesMap.get(v.property_id), comments: commentsByVersionId.get(v.id) || []})).sort((a,b) => a.versionNumber - b.versionNumber),
-        approvalSteps: (approvalsRes.data || []).map(a => ({...a, approvedAt: a.approved_at, approver: usersMap.get(a.approver_id)!})),
-        propertyAllocations: (allocationsRes.data || []).map(a => ({...a, propertyId: a.property_id, allocatedValue: a.allocated_value, monthlyValues: a.monthly_values, manualEdits: a.manual_edits})),
-        renewalRequest: (renewalsRes.data && renewalsRes.data[0]) ? { ...renewalsRes.data[0], renewalOwner: usersMap.get(renewalsRes.data[0].renewal_owner_id), contractId: renewalsRes.data[0].contract_id, companyId: renewalsRes.data[0].company_id, feedback: feedbackByRenewalId.get(renewalsRes.data[0].id) || [] } : undefined,
-        auditLogs: (auditsRes.data || []).map(a => ({...a, relatedEntityType: 'renewal_request', changeType: a.change_type, oldValue: a.old_value, newValue: a.new_value, user: usersMap.get(a.user_id)})),
-        submittedAt: contractData.submitted_at, reviewStartedAt: contractData.review_started_at, approvalStartedAt: contractData.approval_started_at, approvalCompletedAt: contractData.approval_completed_at,
-        sentForSignatureAt: contractData.sent_for_signature_at, executedAt: contractData.executed_at, activeAt: contractData.active_at, expiredAt: contractData.expired_at, archivedAt: contractData.archived_at,
-        updatedAt: contractData.updated_at, draftVersionId: contractData.draft_version_id, executedVersionId: contractData.executed_version_id, startDate: contractData.start_date, autoRenew: contractData.auto_renew, noticePeriodDays: contractData.notice_period_days,
-        renewalTermMonths: contractData.renewal_term_months, upliftPercent: contractData.uplift_percent, parentContractId: contractData.parent_contract_id, signingStatus: contractData.signing_status, signingStatusUpdatedAt: contractData.signing_status_updated_at,
-    };
     
     setContracts(prev => {
         const index = prev.findIndex(c => c.id === contractId);
         if (index > -1) {
             const newContracts = [...prev];
-            newContracts[index] = newContract;
+            newContracts[index] = fullContract;
             return newContracts;
         }
-        return [...prev, newContract];
+        return [...prev, fullContract];
     });
 
-    return newContract;
+    return fullContract;
 }, [currentUser, usersMap, counterpartiesMap, propertiesMap]);
 
   useEffect(() => {
@@ -552,11 +428,9 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     }
   }, [contracts, selectedContract]);
 
-  // Consolidated real-time subscriptions
   useEffect(() => {
     if (!currentUser || !currentUser.companyId) return;
 
-    // --- Subscription for user-specific notifications ---
     const fetchNotifications = async () => {
       const { data: notificationsData, error } = await supabase
         .from('notifications')
@@ -576,12 +450,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
       .channel(`notifications:${currentUser.id}`)
       .on<Notification>(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${currentUser.id}`,
-        },
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${currentUser.id}` },
         (payload) => {
           setNotifications((currentNotifications) => [payload.new as Notification, ...currentNotifications]);
         }
@@ -592,8 +461,8 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
         }
       });
       
-    // --- Subscription for all other company-wide DB changes ---
     const handleDbChange = async (payload: any) => {
+      setLastUpdated(Date.now());
       let contractId: string | null = payload.new?.contract_id || payload.old?.contract_id || null;
 
       if (!contractId) {
@@ -637,7 +506,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'renewal_feedback', filter: companyFilter }, handleDbChange)
       .subscribe();
 
-    // --- Cleanup ---
     return () => {
       supabase.removeChannel(notificationsChannel);
       supabase.removeChannel(companyDbChannel);
@@ -655,16 +523,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
 
   const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
     setTheme(newTheme);
-  };
-
-  const handleLogin = () => {
-    setActiveView('dashboard');
-  };
-
-  const handleLogout = async () => {
-    await signOut();
-    setActiveView('dashboard'); 
-    setAuthView('login');
   };
 
   const handleSelectContract = (contract: Contract) => {
@@ -1087,9 +945,9 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     }
   };
   
-  const handleStartRenegotiation = async (originalContract: Contract, notes?: string) => {
+  const handleStartRenegotiation = async (contractId: string, notes?: string) => {
     const { error } = await supabase.rpc('contract_transition', {
-        p_contract_id: originalContract.id,
+        p_contract_id: contractId,
         p_action: 'RENEW_RENEGOTIATE_START',
         p_payload: { notes: notes },
     });
@@ -1100,8 +958,8 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     } else {
         alert('New renewal contract draft created successfully. You will now be taken to the new draft.');
         // The subscription will handle the UI update, but we can optimistically fetch
-        await fetchAndMergeContract(originalContract.id);
-        const { data: newContract } = await supabase.from('contracts').select('id').eq('parent_contract_id', originalContract.id).order('created_at', { ascending: false }).limit(1).single();
+        await fetchAndMergeContract(contractId);
+        const { data: newContract } = await supabase.from('contracts').select('id').eq('parent_contract_id', contractId).order('created_at', { ascending: false }).limit(1).single();
         if (newContract) {
             const fullNewContract = await fetchAndMergeContract(newContract.id);
             if(fullNewContract) handleSelectContract(fullNewContract);
@@ -1109,17 +967,18 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     }
   };
 
-  const handleCreateRenewalRequest = async (contract: Contract) => {
+  const handleCreateRenewalRequest = async (contractId: string) => {
     const { error } = await supabase.rpc('contract_transition', { 
-        p_contract_id: contract.id, 
-        p_action: 'START_RENEWAL' 
+        p_contract_id: contractId, 
+        p_action: 'START_RENEWAL',
+        p_payload: {} // Explicitly pass empty payload to avoid PGRST202 errors with some PostgREST versions/configs
     });
 
     if (error) {
         console.error("Error creating renewal request:", error);
         alert(`Failed to create renewal request: ${error.message}`);
     } else {
-        await fetchAndMergeContract(contract.id);
+        await fetchAndMergeContract(contractId);
     }
   };
 
@@ -1143,8 +1002,9 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     }
   };
 
-  const handleRenewAsIs = async (contract: Contract, notes?: string) => {
-    if (!currentUser || !contract.renewalRequest) return;
+  const handleRenewAsIs = async (contractId: string, notes?: string) => {
+    const contract = contracts.find(c => c.id === contractId);
+    if (!contract || !currentUser || !contract.renewalRequest) return;
 
     const termMonths = contract.renewalRequest.renewalTermMonths ?? contract.renewalTermMonths ?? 12;
     const originalEndDate = new Date(contract.endDate + 'T00:00:00Z');
@@ -1403,112 +1263,11 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   };
 
   const handleCreateUser = async (userData: any) => {
-    if (!currentUser || !company) {
-        alert("Cannot create user: missing current user or company context.");
-        return;
-    }
-    const { error } = await adminCreateUser({
-        ...userData,
-        companyId: company.id,
-        appId: currentUser.appId,
-    });
-    if (error) {
-        alert(`Failed to create user: ${error.message}`);
-    } else {
-        alert("User created successfully! They will receive an email to verify their account.");
-        setIsAddingUser(false);
-        const { data: usersData } = await supabase.from('users').select('*').eq('company_id', currentUser.companyId);
-        const rolesMap = new Map((roles).map(r => [r.id, r.name]));
-        const mappedUsers: UserProfile[] = (usersData || []).map(u => ({ id: u.id, firstName: u.first_name, lastName: u.last_name, email: u.email, phone: u.phone, jobTitle: u.job_title, department: u.department, avatarUrl: u.avatar_url, role: rolesMap.get(u.role_id) || 'Unknown', roleId: u.role_id, status: u.status as any, lastLogin: u.last_login, companyId: u.company_id, appId: u.app_id }));
-        setUsers(mappedUsers);
+    await authHandleCreateUser(userData);
+    if (currentUser) {
+       await fetchData(currentUser);
     }
   };
-  
-  const handleAvatarUpload = useCallback(async (file: File) => {
-    if (!currentUser) return;
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${currentUser.id}.${fileExt}`;
-    const filePath = `avatars/${fileName}`;
-    
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, file, { upsert: true });
-
-    if (uploadError) {
-      console.error('Error uploading avatar:', uploadError);
-      alert('Failed to upload avatar.');
-      return;
-    }
-
-    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
-    const publicUrl = data.publicUrl;
-
-    const { error: updateError } = await supabase
-      .from('users')
-      .update({ avatar_url: `${publicUrl}?t=${new Date().getTime()}` }) // Add timestamp to bust cache
-      .eq('id', currentUser.id);
-
-    if (updateError) {
-      console.error('Error updating user avatar URL:', updateError);
-    } else {
-      setCurrentUser(prev => prev ? { ...prev, avatarUrl: `${publicUrl}?t=${new Date().getTime()}` } : null);
-    }
-  }, [currentUser]);
-
-  const handleUpdateUserProfile = useCallback(async (userId: string, updates: Partial<UserProfile>): Promise<boolean> => {
-    const dbUpdates = {
-        first_name: updates.firstName,
-        last_name: updates.lastName,
-        phone: updates.phone,
-        job_title: updates.jobTitle,
-    };
-
-    const { error } = await supabase.from('users').update(dbUpdates).eq('id', userId);
-    if (error) {
-        console.error("Error updating user profile:", error);
-        alert(`Failed to update profile: ${error.message}`);
-        return false;
-    }
-    
-    // Optimistically update local state
-    const updater = (user: UserProfile) => user.id === userId ? { ...user, ...updates } : user;
-    setUsers(prev => prev.map(updater));
-    if(currentUser?.id === userId) {
-        setCurrentUser(prev => prev ? { ...prev, ...updates } : null);
-    }
-    return true;
-  }, [currentUser?.id]);
-
-  const handleChangePassword = useCallback(async (newPassword: string) => {
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    return { error };
-  }, []);
-
-  const handleEnrollMFA = useCallback(async () => {
-    const { data, error: enrollError } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
-    if (!enrollError) {
-        const { data: mfaData } = await supabase.auth.mfa.listFactors();
-        if (mfaData) setMfaFactors(mfaData.all);
-    }
-    return { data, error: enrollError };
-  }, []);
-
-  const handleVerifyMFA = useCallback(async (factorId: string, code: string) => {
-    const { data, error: verifyError } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
-     if (!verifyError) {
-        const { data: mfaData } = await supabase.auth.mfa.listFactors();
-        if (mfaData) setMfaFactors(mfaData.all);
-    }
-    return { data, error: verifyError };
-  }, []);
-
-  const handleUnenrollMFA = useCallback(async (factorId: string) => {
-    const { data, error } = await supabase.auth.mfa.unenroll({ factorId });
-    if (!error) {
-      setMfaFactors(prev => prev.filter(f => f.id !== factorId));
-    }
-    return { data, error };
-  }, []);
   
   const handleGlobalSearch = useCallback(async (term: string) => {
     if (!term.trim() || !currentUser?.companyId) {
@@ -1520,7 +1279,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     setIsPerformingGlobalSearch(true);
     setGlobalSearchTerm(term);
     
-    // Navigate to search results view and clear other states
     setActiveView('search');
     setSelectedContract(null);
     setSelectedTemplate(null);
@@ -1568,20 +1326,8 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   }, []);
 
   const contextValue: AppContextType = {
-    session,
     currentUser,
     company,
-    isAuthenticated,
-    authView,
-    setAuthView,
-    handleLogin,
-    handleLogout,
-    mfaFactors,
-    handleAvatarUpload,
-    handleChangePassword,
-    handleEnrollMFA,
-    handleVerifyMFA,
-    handleUnenrollMFA,
     isLoading,
     activeView,
     theme,
@@ -1599,6 +1345,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     notificationSettings,
     userNotificationSettings,
     unreadCount,
+    lastUpdated,
     selectedContract,
     selectedTemplate,
     selectedCounterparty,
@@ -1647,7 +1394,6 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     handleMarkOneAsRead,
     handleNotificationClick,
     handleCreateUser,
-    handleUpdateUserProfile,
     handleSelectContract,
     handleBackToList,
     handleSelectTemplate,

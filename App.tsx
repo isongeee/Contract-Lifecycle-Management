@@ -24,15 +24,26 @@ import SigningPage from './components/SigningPage';
 import { LoaderIcon, AlertTriangleIcon } from './components/icons';
 import AddUserModal from './components/AddUserModal';
 import { useAppContext } from './contexts/AppContext';
+import { useAuth } from './contexts/AuthContext';
 import SearchResultsPage from './components/SearchResultsPage';
 import ReportingPage from './components/ReportingPage';
 import RenewalWorkspace from './components/RenewalWorkspace';
 
 
 export default function App() {
+  // Use AuthContext for auth state
+  const { 
+    isAuthenticated, 
+    currentUser, 
+    isLoading: isAuthLoading,
+    handleLogout, 
+    authView
+  } = useAuth();
+
+  // Use AppContext for app data and UI state
   const {
-    isLoading, isAuthenticated, currentUser, handleLogout, activeView,
-    authView,
+    isLoading: isDataLoading,
+    activeView,
     isCreatingContract, isCreatingCounterparty, editingCounterparty,
     isCreatingProperty, editingProperty, isAddingUser,
     contracts,
@@ -53,7 +64,6 @@ export default function App() {
     handleDeleteRole,
     setNotificationSettings,
     setIsAddingUser,
-    // FIX: Use selectedContract object from context instead of non-existent selectedContractId
     selectedContract,
     properties,
     handleBackToList,
@@ -84,6 +94,8 @@ export default function App() {
     handleDownloadFile,
   } = useAppContext();
 
+  const isLoading = isAuthLoading || (isAuthenticated && isDataLoading);
+
   const renderContent = () => {
     if (isLoading) {
         return ( <div className="flex items-center justify-center h-full"> <LoaderIcon className="w-12 h-12 text-primary" /> <span className="ml-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Loading Data...</span> </div> )
@@ -107,9 +119,7 @@ export default function App() {
       case 'contracts': return <ContractsList />;
       case 'renewals': return <RenewalsPage 
         contracts={contracts}
-        // FIX: Pass the handleSelectContract function directly, as it expects the full contract object.
         onSelectContract={handleSelectContract}
-        // FIX: Pass the handleNavigateToRenewalWorkspace function directly.
         onNavigateToWorkspace={handleNavigateToRenewalWorkspace}
         users={users}
       />;
@@ -118,7 +128,6 @@ export default function App() {
       case 'approvals': return <ApprovalsPage />;
       case 'signing': return <SigningPage
         contracts={contracts}
-        // FIX: Pass the handleSelectContract function directly.
         onSelectContract={handleSelectContract}
         onUpdateSigningStatus={handleSigningStatusUpdate}
         onMarkAsExecuted={handleMarkAsExecuted}
@@ -152,10 +161,8 @@ export default function App() {
   };
 
   const renderActiveView = () => {
-    // FIX: Use the selectedContract object and pass it as the 'contract' prop. Also pass the 'contracts' array as expected by ContractDetail.
     if (activeView === 'contracts' && selectedContract) return <ContractDetail
-      contract={selectedContract}
-      contracts={contracts}
+      contractId={selectedContract.id}
       properties={properties}
       users={users}
       currentUser={currentUser!}
@@ -164,7 +171,10 @@ export default function App() {
       onCreateNewVersion={handleCreateNewVersion}
       onRenewalDecision={handleRenewalDecision}
       onCreateRenewalRequest={handleCreateRenewalRequest}
-      onSelectContract={handleSelectContract}
+      onSelectContract={(cId) => {
+        const contract = contracts.find(con => con.id === cId);
+        if (contract) handleSelectContract(contract);
+      }}
       onRenewAsIs={handleRenewAsIs}
       onStartRenegotiation={handleStartRenegotiation}
       onUpdateSigningStatus={handleSigningStatusUpdate}
@@ -184,7 +194,6 @@ export default function App() {
         (c.propertyAllocations || []).some(a => a.propertyId === selectedProperty.id)
       )}
       onBack={handleBackToPropertiesList}
-      // FIX: Pass the handleSelectContract function directly.
       onSelectContract={handleSelectContract}
       onStartEdit={handleStartEditProperty}
       currentUser={currentUser!}
@@ -193,7 +202,7 @@ export default function App() {
     return renderContent();
   }
 
-  if (!isAuthenticated && !isLoading) {
+  if (!isAuthenticated && !isAuthLoading) {
     const renderAuthContent = () => {
         switch (authView) {
             case 'login': return <LoginPage />;

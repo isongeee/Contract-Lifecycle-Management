@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { XIcon, LoaderIcon, CheckCircleIcon, CopyIcon } from './icons';
-import { useAppContext } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface TwoFactorAuthModalProps {
   onClose: () => void;
@@ -9,7 +9,7 @@ interface TwoFactorAuthModalProps {
 type Step = 'loading' | 'enroll' | 'verify' | 'success';
 
 export default function TwoFactorAuthModal({ onClose }: TwoFactorAuthModalProps) {
-  const { handleEnrollMFA, handleVerifyMFA } = useAppContext();
+  const { handleEnrollMFA, handleVerifyMFA } = useAuth();
   const [step, setStep] = useState<Step>('loading');
   const [enrollData, setEnrollData] = useState<any>(null);
   const [verificationCode, setVerificationCode] = useState('');
