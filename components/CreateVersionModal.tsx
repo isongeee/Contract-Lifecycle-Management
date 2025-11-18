@@ -21,17 +21,20 @@ const SelectInput = (props: React.ComponentProps<'select'>) => <select {...props
 const TextArea = (props: React.ComponentProps<'textarea'>) => <textarea {...props} rows={5} className="block w-full rounded-md border-0 py-1.5 px-2 bg-white text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-[#9ca3af] focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6" />
 
 export default function CreateVersionModal({ contract, properties, onClose, onSave }: CreateVersionModalProps) {
-    const latestVersion = contract.versions[contract.versions.length - 1];
+    const latestVersion = contract.versions.length > 0 
+        ? contract.versions[contract.versions.length - 1] 
+        : null;
+
     const [formData, setFormData] = useState({
-        content: latestVersion.content,
+        content: latestVersion?.content || '',
         fileName: '',
         file: null as File | null,
-        value: latestVersion.value,
-        effectiveDate: latestVersion.effectiveDate,
-        endDate: latestVersion.endDate,
-        renewalDate: latestVersion.renewalDate,
-        frequency: latestVersion.frequency,
-        property: latestVersion.property,
+        value: latestVersion?.value ?? contract.value,
+        effectiveDate: latestVersion?.effectiveDate ?? contract.effectiveDate,
+        endDate: latestVersion?.endDate ?? contract.endDate,
+        renewalDate: latestVersion?.renewalDate ?? '',
+        frequency: latestVersion?.frequency ?? contract.frequency,
+        property: latestVersion?.property ?? contract.property,
     });
 
     const handleChange = (field: keyof typeof formData, value: any) => {
@@ -48,9 +51,11 @@ export default function CreateVersionModal({ contract, properties, onClose, onSa
 
     const handleSave = () => {
         const { file, ...restOfData } = formData;
+        const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+        
         onSave({
             ...restOfData,
-            content: formData.content || `Content for Version ${latestVersion.versionNumber + 1}`,
+            content: formData.content || `Content for Version ${nextVersionNumber}`,
             file: file,
         });
     };

@@ -14,7 +14,7 @@ import VersionComparisonView from './VersionComparisonView';
 import CommentsPanel from './CommentsPanel';
 import UpdateStatusModal from './UpdateStatusModal';
 import { jsPDF } from 'jspdf';
-import { useAppContext } from '../contexts/AppContext';
+import { fetchContractDetail } from '../lib/contractsApi';
 
 type ContractAction = ContractStatus | 'APPROVE_STEP' | 'REJECT_STEP';
 
@@ -610,11 +610,8 @@ const daysUntil = (dateStr: string) => {
 
 
 export default function ContractDetail({ contractId, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalDecision, onCreateRenewalRequest, onSelectContract, onRenewAsIs, onStartRenegotiation, onUpdateSigningStatus, onCreateComment, onResolveComment, onCreateRenewalFeedback, onUpdateRenewalTerms, onNavigate, onDownloadFile }: ContractDetailProps) {
-  const { contracts, isLoading: isContextLoading } = useAppContext();
-  
-  // Get contract from context for real-time updates
-  const contract = useMemo(() => contracts.find(c => c.id === contractId) || null, [contracts, contractId]);
-
+  const [contract, setContract] = useState<Contract | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
@@ -627,25 +624,24 @@ export default function ContractDetail({ contractId, properties, users, currentU
   const [confirmModalState, setConfirmModalState] = useState<{ isOpen: boolean; action: ContractAction | null; payload?: any; }>({ isOpen: false, action: null, payload: undefined });
   const [compareSelection, setCompareSelection] = useState<string[]>([]);
   const [comparingVersions, setComparingVersions] = useState<{v1: ContractVersion, v2: ContractVersion} | null>(null);
-  
-  // Local state for AI analysis results (ephemeral)
-  const [riskSummary, setRiskSummary] = useState<string | undefined>();
-  const [extractedClauses, setExtractedClauses] = useState<Clause[] | undefined>();
 
   const [viewedVersionId, setViewedVersionId] = useState<string | null>(null);
   
-  // Initialize viewed version on contract load or change
   useEffect(() => {
-    if (contract && !viewedVersionId) {
-         const newLatestVersion = contract.versions.length > 0 ? contract.versions[contract.versions.length - 1] : null;
-         setViewedVersionId(newLatestVersion?.id || null);
-    }
-  }, [contract, viewedVersionId]);
-
-  // Reset analysis when contract changes significantly (e.g. navigated away and back)
-  useEffect(() => {
-      setRiskSummary(undefined);
-      setExtractedClauses(undefined);
+    setIsLoading(true);
+    setError(null);
+    fetchContractDetail(contractId)
+        .then(c => {
+            if (c) {
+                setContract(c);
+                const newLatestVersion = c.versions.length > 0 ? c.versions[c.versions.length - 1] : null;
+                setViewedVersionId(newLatestVersion?.id || null);
+            } else {
+                setError("Contract not found.");
+            }
+        })
+        .catch(err => setError(err.message ?? "Failed to load contract."))
+        .finally(() => setIsLoading(false));
   }, [contractId]);
   
   const latestVersion = useMemo(() => 
@@ -656,9 +652,45 @@ export default function ContractDetail({ contractId, properties, users, currentU
     contract?.versions.find(v => v.id === viewedVersionId) || latestVersion
   , [contract?.versions, viewedVersionId, latestVersion]);
 
-  const [editedContent, setEditedContent] = useState('');
+  const [editedContent, setEditedContent] = useState(viewedVersion?.content || '');
   const [isDirty, setIsDirty] = useState(false);
   const [parentContractTitle, setParentContractTitle] = useState<string | null>(null);
+
+  // HOOKS MOVED TO TOP LEVEL TO PREVENT CONDITIONAL EXECUTION ERRORS
+  const myPendingApprovalStep = useMemo(() => {
+      if (!contract || contract.status !== ContractStatus.PENDING_APPROVAL) return null;
+      return contract.approvalSteps.find(step => step.approver.id === currentUser.id && step.status === ApprovalStatus.PENDING);
+  }, [contract, currentUser]);
+
+  const handleSummarizeRisk = useCallback(async () => {
+    setIsLoadingSummary(true);
+    setAiError(null);
+    try {
+        const summary = await summarizeContractRisk(editedContent);
+        setContract(c => c ? ({...c, riskSummary: summary, extractedClauses: undefined }) : null);
+    } catch (error) {
+        console.error("Error summarizing contract risk:", error);
+        setAiError(error instanceof Error ? error.message : "An unknown error occurred during risk analysis.");
+        setContract(c => c ? ({...c, riskSummary: undefined }) : null);
+    } finally {
+        setIsLoadingSummary(false);
+    }
+  }, [editedContent]);
+
+  const handleExtractClauses = useCallback(async () => {
+    setIsLoadingClauses(true);
+    setAiError(null);
+    try {
+        const clauses = await extractClauses(editedContent);
+        setContract(c => c ? ({...c, extractedClauses: clauses, riskSummary: undefined }) : null);
+    } catch (error) {
+        console.error("Error extracting clauses:", error);
+        setAiError(error instanceof Error ? error.message : "An unknown error occurred during clause extraction.");
+        setContract(c => c ? ({...c, extractedClauses: undefined }) : null);
+    } finally {
+        setIsLoadingClauses(false);
+    }
+  }, [editedContent]);
 
   useEffect(() => {
     if (contract?.parentContractId) {
@@ -688,12 +720,121 @@ export default function ContractDetail({ contractId, properties, users, currentU
     setIsCreatingVersion(false);
   };
 
-  if (isContextLoading) {
+  const handleCancelEdit = () => {
+    if (viewedVersion) {
+        setEditedContent(viewedVersion.content);
+    }
+    setIsDirty(false);
+  };
+
+  const handleSaveChanges = () => {
+    if (!isDirty || !contract || !viewedVersion) return;
+    
+    const { id, versionNumber, createdAt, author, comments, ...baseVersionData } = viewedVersion;
+    
+    const newVersionData = {
+      ...baseVersionData,
+      content: editedContent,
+    };
+
+    onCreateNewVersion(contract.id, newVersionData);
+    setIsDirty(false);
+  };
+
+  const handleRequestTransition = (action: ContractAction, payload?: any) => {
+    setConfirmModalState({ isOpen: true, action, payload });
+  };
+
+  const handleApprove = () => myPendingApprovalStep && handleRequestTransition('APPROVE_STEP', { stepId: myPendingApprovalStep.id });
+  const handleReject = () => myPendingApprovalStep && handleRequestTransition('REJECT_STEP', { stepId: myPendingApprovalStep.id });
+
+  const handleSelectVersion = (id: string) => {
+    if (isDirty) {
+        if (!window.confirm("You have unsaved changes. Are you sure you want to discard them and switch versions?")) {
+            return;
+        }
+    }
+    setViewedVersionId(id);
+    setContract(c => c ? ({ ...c, riskSummary: undefined, extractedClauses: undefined }) : null);
+  };
+  
+  const handleRequestApproval = (approvers: UserProfile[], versionId: string) => {
+    if (!contract) return;
+    onTransition(contract.id, ContractStatus.PENDING_APPROVAL, { approvers, draft_version_id: versionId });
+    setIsRequestingApproval(false);
+  };
+  
+  const handleToggleCompareSelection = (versionId: string) => {
+    setCompareSelection(prev => 
+        prev.includes(versionId)
+            ? prev.filter(id => id !== versionId)
+            : [...prev, versionId].slice(-2)
+    );
+  };
+
+  const handleCompare = () => {
+      if (compareSelection.length === 2 && contract) {
+          const v1 = contract.versions.find(v => v.id === compareSelection[0]);
+          const v2 = contract.versions.find(v => v.id === compareSelection[1]);
+          if (v1 && v2) {
+              setComparingVersions(v1.versionNumber < v2.versionNumber ? { v1, v2 } : { v1: v2, v2: v1 });
+          }
+      }
+  };
+  
+  const handleGeneratePdf = () => {
+    if (!editedContent || !contract || !viewedVersion) return;
+  
+    const doc = new jsPDF({
+      orientation: 'p',
+      unit: 'pt',
+      format: 'a4',
+    });
+  
+    doc.setProperties({
+      title: `${contract.title} - v${viewedVersion.versionNumber}`,
+      author: `${currentUser.firstName} ${currentUser.lastName}`,
+    });
+  
+    const margin = 40; // points
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const usableWidth = pageWidth - margin * 2;
+  
+    // Base font + simple line height
+    doc.setFontSize(10);
+    const lineHeight = doc.getFontSize() * 1.2; // 20% extra spacing for readability
+  
+    // Wrap the entire contract text to fit within the usable width
+    const textLines = doc.splitTextToSize(editedContent, usableWidth);
+  
+    let y = margin;
+  
+    for (const line of textLines) {
+      // If the next line doesn't fit on the current page, add a new page
+      if (y + lineHeight > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+  
+      // Guard against any weird falsy values (just in case)
+      doc.text(line || '', margin, y);
+      y += lineHeight;
+    }
+  
+    doc.save(
+      `${(contract.title).replace(/\s+/g, '_')}_v${viewedVersion.versionNumber}.pdf`
+    );
+  };
+
+  // END OF HOOKS AND HANDLERS
+
+  if (isLoading) {
     return <div className="flex items-center justify-center h-full"><LoaderIcon className="w-12 h-12 text-primary" /></div>;
   }
 
-  if (!contract) {
-    return <div className="text-center py-10 text-red-500">{error || "Contract not found or access denied."}</div>;
+  if (error || !contract) {
+    return <div className="text-center py-10 text-red-500">{error || "Could not load contract."}</div>;
   }
 
   if (!viewedVersion) {
@@ -725,150 +866,6 @@ export default function ContractDetail({ contractId, properties, users, currentU
   }
   
   const canEditContent = [ContractStatus.DRAFT, ContractStatus.IN_REVIEW].includes(contract.status);
-
-  const handleCancelEdit = () => {
-    setEditedContent(viewedVersion.content);
-    setIsDirty(false);
-  };
-
-  const handleSaveChanges = () => {
-    if (!isDirty || !canEditContent) return;
-    
-    const { id, versionNumber, createdAt, author, comments, ...baseVersionData } = viewedVersion;
-    
-    const newVersionData = {
-      ...baseVersionData,
-      content: editedContent,
-    };
-
-    onCreateNewVersion(contract.id, newVersionData);
-    setIsDirty(false);
-  };
-
-
-  const handleRequestTransition = (action: ContractAction, payload?: any) => {
-    setConfirmModalState({ isOpen: true, action, payload });
-  };
-
-  const myPendingApprovalStep = useMemo(() => {
-      if (contract.status !== ContractStatus.PENDING_APPROVAL) return null;
-      return contract.approvalSteps.find(step => step.approver.id === currentUser.id && step.status === ApprovalStatus.PENDING);
-  }, [contract, currentUser]);
-
-  const handleApprove = () => myPendingApprovalStep && handleRequestTransition('APPROVE_STEP', { stepId: myPendingApprovalStep.id });
-  const handleReject = () => myPendingApprovalStep && handleRequestTransition('REJECT_STEP', { stepId: myPendingApprovalStep.id });
-
-  const handleSummarizeRisk = useCallback(async () => {
-    setIsLoadingSummary(true);
-    setAiError(null);
-    try {
-        const summary = await summarizeContractRisk(editedContent);
-        setRiskSummary(summary);
-        setExtractedClauses(undefined);
-    } catch (error) {
-        console.error("Error summarizing contract risk:", error);
-        setAiError(error instanceof Error ? error.message : "An unknown error occurred during risk analysis.");
-        setRiskSummary(undefined);
-    } finally {
-        setIsLoadingSummary(false);
-    }
-  }, [editedContent]);
-
-  const handleExtractClauses = useCallback(async () => {
-    setIsLoadingClauses(true);
-    setAiError(null);
-    try {
-        const clauses = await extractClauses(editedContent);
-        setExtractedClauses(clauses);
-        setRiskSummary(undefined);
-    } catch (error) {
-        console.error("Error extracting clauses:", error);
-        setAiError(error instanceof Error ? error.message : "An unknown error occurred during clause extraction.");
-        setExtractedClauses(undefined);
-    } finally {
-        setIsLoadingClauses(false);
-    }
-  }, [editedContent]);
-
-  const handleSelectVersion = (id: string) => {
-    if (isDirty) {
-        if (!window.confirm("You have unsaved changes. Are you sure you want to discard them and switch versions?")) {
-            return;
-        }
-    }
-    setViewedVersionId(id);
-    setRiskSummary(undefined);
-    setExtractedClauses(undefined);
-  };
-  
-  const handleRequestApproval = (approvers: UserProfile[], versionId: string) => {
-    onTransition(contract.id, ContractStatus.PENDING_APPROVAL, { approvers, draft_version_id: versionId });
-    setIsRequestingApproval(false);
-  };
-  
-  const handleToggleCompareSelection = (versionId: string) => {
-    setCompareSelection(prev => 
-        prev.includes(versionId)
-            ? prev.filter(id => id !== versionId)
-            : [...prev, versionId].slice(-2)
-    );
-  };
-
-  const handleCompare = () => {
-      if (compareSelection.length === 2) {
-          const v1 = contract.versions.find(v => v.id === compareSelection[0]);
-          const v2 = contract.versions.find(v => v.id === compareSelection[1]);
-          if (v1 && v2) {
-              setComparingVersions(v1.versionNumber < v2.versionNumber ? { v1, v2 } : { v1: v2, v2: v1 });
-          }
-      }
-  };
-  
-  const handleGeneratePdf = () => {
-    if (!editedContent) return;
-  
-    const doc = new jsPDF({
-      orientation: 'p',
-      unit: 'pt',
-      format: 'a4',
-    });
-  
-    doc.setProperties({
-      title: `${contract?.title || 'Contract'} - v${viewedVersion.versionNumber}`,
-      author: `${currentUser.firstName} ${currentUser.lastName}`,
-    });
-  
-    const margin = 40; // points
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const usableWidth = pageWidth - margin * 2;
-  
-    // Base font + simple line height
-    doc.setFontSize(10);
-    const lineHeight = doc.getFontSize() * 1.2; // 20% extra spacing for readability
-  
-    // Wrap the entire contract text to fit within the usable width
-    const textLines = doc.splitTextToSize(editedContent, usableWidth);
-  
-    let y = margin;
-  
-    for (const line of textLines) {
-      // If the next line doesn't fit on the current page, add a new page
-      if (y + lineHeight > pageHeight - margin) {
-        doc.addPage();
-        y = margin;
-      }
-  
-      // Guard against any weird falsy values (just in case)
-      doc.text(line || '', margin, y);
-      y += lineHeight;
-    }
-  
-    doc.save(
-      `${(contract?.title || 'contract').replace(/\s+/g, '_')}_v${viewedVersion.versionNumber}.pdf`
-    );
-  };
-
 
   return (
     <div>
@@ -984,7 +981,7 @@ export default function ContractDetail({ contractId, properties, users, currentU
                     </div>
                  ) : (
                     <>
-                        <AiAnalysis onSummary={handleSummarizeRisk} onExtract={handleExtractClauses} riskSummary={riskSummary} extractedClauses={extractedClauses} isLoadingSummary={isLoadingSummary} isLoadingClauses={isLoadingClauses} aiError={aiError} />
+                        <AiAnalysis onSummary={handleSummarizeRisk} onExtract={handleExtractClauses} riskSummary={contract.riskSummary} extractedClauses={contract.extractedClauses} isLoadingSummary={isLoadingSummary} isLoadingClauses={isLoadingClauses} aiError={aiError} />
                         <FinancialsAndAllocationCard contract={contract} viewedVersion={viewedVersion} properties={properties} />
                         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
                             <div className="flex justify-between items-center mb-4">
