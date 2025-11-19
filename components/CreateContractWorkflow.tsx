@@ -674,7 +674,7 @@ const SummaryItem = ({ label, value }: { label: string; value: React.ReactNode }
 );
 
 
-const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & { propertyAllocations?: any[], fileName?: string }, onBack: () => void, onFinish: () => void }) => {
+const Stage4_Summary = ({ data, onBack, onFinish, isSubmitting }: { data: Partial<Contract> & { propertyAllocations?: any[], fileName?: string }, onBack: () => void, onFinish: () => Promise<void>, isSubmitting: boolean }) => {
     const frequencyDisplay = data.frequency === ContractFrequency.SEASONAL
         ? `Seasonal (${(data.seasonalMonths || []).length} active months)`
         : data.frequency;
@@ -709,7 +709,14 @@ const Stage4_Summary = ({ data, onBack, onFinish }: { data: Partial<Contract> & 
             </dl>
             <div className="mt-8 flex justify-between">
                 <button onClick={onBack} type="button" className="rounded-md bg-white dark:bg-gray-700 px-3.5 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-200 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600">Back</button>
-                <button onClick={onFinish} type="button" className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">Create Contract</button>
+                <button
+                    onClick={onFinish}
+                    type="button"
+                    disabled={isSubmitting}
+                    className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {isSubmitting ? 'Creating...' : 'Create Contract'}
+                </button>
             </div>
         </div>
     );
@@ -737,6 +744,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
       fileName: '',
       file: null,
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     // Auto-calculate end date based on frequency
@@ -834,7 +842,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
     });
   };
   
-  const handleFinalize = () => {
+  const handleFinalize = async () => {
     let finalContent = newContractData.content || `This contract for ${newContractData.title || 'a new matter'} was created via the wizard.`;
     const isSeasonal = newContractData.frequency === ContractFrequency.SEASONAL && newContractData.seasonalMonths && newContractData.seasonalMonths.length > 0;
     
@@ -880,7 +888,15 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
         property: newContractData.property,
     }];
 
-    onFinish(finalContractData);
+    try {
+        setIsSubmitting(true);
+        await onFinish(finalContractData);
+    } catch (error) {
+        console.error('Error finalizing contract creation:', error);
+        alert('Failed to create contract. Please try again.');
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
 
@@ -893,7 +909,7 @@ export default function CreateContractWorkflow({ onCancel, onFinish, properties,
           case 3:
               return <Stage3_PropertyAndCost data={newContractData} setData={updateData} properties={properties} onBack={handleBack} onNext={handleNext} />;
           case 4:
-              return <Stage4_Summary data={newContractData} onBack={handleBack} onFinish={handleFinalize} />;
+              return <Stage4_Summary data={newContractData} onBack={handleBack} onFinish={handleFinalize} isSubmitting={isSubmitting} />;
           default:
               return null;
       }
