@@ -394,7 +394,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
   const propertiesMap = useMemo(() => new Map(properties.map(p => [p.id, p])), [properties]);
 
   const fetchAndMergeContract = useCallback(async (contractId: string): Promise<Contract | null> => {
-    if (!currentUser || !usersMap.size || !counterpartiesMap.size || !propertiesMap.size) return null;
+    if (!currentUser) return null;
 
     const fullContract = await fetchContractDetail(contractId);
     if (!fullContract) {
