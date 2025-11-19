@@ -610,6 +610,7 @@ const daysUntil = (dateStr: string) => {
 
 
 export default function ContractDetail({ contractId, properties, users, currentUser, onBack, onTransition, onCreateNewVersion, onRenewalDecision, onCreateRenewalRequest, onSelectContract, onRenewAsIs, onStartRenegotiation, onUpdateSigningStatus, onCreateComment, onResolveComment, onCreateRenewalFeedback, onUpdateRenewalTerms, onNavigate, onDownloadFile }: ContractDetailProps) {
+  // 1. State Hooks
   const [contract, setContract] = useState<Contract | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -627,23 +628,10 @@ export default function ContractDetail({ contractId, properties, users, currentU
 
   const [viewedVersionId, setViewedVersionId] = useState<string | null>(null);
   
-  useEffect(() => {
-    setIsLoading(true);
-    setError(null);
-    fetchContractDetail(contractId)
-        .then(c => {
-            if (c) {
-                setContract(c);
-                const newLatestVersion = c.versions.length > 0 ? c.versions[c.versions.length - 1] : null;
-                setViewedVersionId(newLatestVersion?.id || null);
-            } else {
-                setError("Contract not found.");
-            }
-        })
-        .catch(err => setError(err.message ?? "Failed to load contract."))
-        .finally(() => setIsLoading(false));
-  }, [contractId]);
-  
+  const [isDirty, setIsDirty] = useState(false);
+  const [parentContractTitle, setParentContractTitle] = useState<string | null>(null);
+
+  // 2. Derived State (Memos) - Safe to run even if contract is null (optional chaining)
   const latestVersion = useMemo(() => 
     contract?.versions.length ? contract.versions[contract.versions.length - 1] : null
   , [contract?.versions]);
@@ -652,11 +640,54 @@ export default function ContractDetail({ contractId, properties, users, currentU
     contract?.versions.find(v => v.id === viewedVersionId) || latestVersion
   , [contract?.versions, viewedVersionId, latestVersion]);
 
+  // 3. Dependent State
   const [editedContent, setEditedContent] = useState(viewedVersion?.content || '');
-  const [isDirty, setIsDirty] = useState(false);
-  const [parentContractTitle, setParentContractTitle] = useState<string | null>(null);
 
-  // HOOKS MOVED TO TOP LEVEL TO PREVENT CONDITIONAL EXECUTION ERRORS
+  // 4. Effects
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoading(true);
+    setError(null);
+    fetchContractDetail(contractId)
+        .then(c => {
+            if (isMounted) {
+                if (c) {
+                    setContract(c);
+                    const newLatestVersion = c.versions.length > 0 ? c.versions[c.versions.length - 1] : null;
+                    setViewedVersionId(newLatestVersion?.id || null);
+                } else {
+                    setError("Contract not found.");
+                }
+                setIsLoading(false);
+            }
+        })
+        .catch(err => {
+            if (isMounted) {
+                setError(err.message ?? "Failed to load contract.");
+                setIsLoading(false);
+            }
+        });
+    return () => { isMounted = false; };
+  }, [contractId]);
+
+  useEffect(() => {
+    if (contract?.parentContractId) {
+        supabase.from('contracts').select('title').eq('id', contract.parentContractId).single().then(({ data }) => {
+            if (data) setParentContractTitle(data.title);
+        });
+    } else {
+        setParentContractTitle(null);
+    }
+  }, [contract?.parentContractId]);
+
+  useEffect(() => {
+    if (viewedVersion) {
+        setEditedContent(viewedVersion.content);
+        setIsDirty(false);
+    }
+  }, [viewedVersion]);
+
+  // 5. Callbacks & Memos (Moved to top level)
   const myPendingApprovalStep = useMemo(() => {
       if (!contract || contract.status !== ContractStatus.PENDING_APPROVAL) return null;
       return contract.approvalSteps.find(step => step.approver.id === currentUser.id && step.status === ApprovalStatus.PENDING);
@@ -692,43 +723,65 @@ export default function ContractDetail({ contractId, properties, users, currentU
     }
   }, [editedContent]);
 
-  useEffect(() => {
-    if (contract?.parentContractId) {
-        supabase.from('contracts').select('title').eq('id', contract.parentContractId).single().then(({ data }) => {
-            if (data) setParentContractTitle(data.title);
-        });
-    } else {
-        setParentContractTitle(null);
-    }
-  }, [contract?.parentContractId]);
-
+  // 6. Helper Functions
   const canInitiateRenewal = (
     contract && (contract.status === ContractStatus.EXPIRED || 
     (contract.status === ContractStatus.ACTIVE && daysUntil(contract.endDate) <= 90)) 
     && !contract.renewalRequest
   );
 
-  useEffect(() => {
-    if (viewedVersion) {
-        setEditedContent(viewedVersion.content);
-        setIsDirty(false);
-    }
-  }, [viewedVersion]);
-
   const handleSaveNewVersion = (newVersionData: Omit<ContractVersion, 'id' | 'versionNumber' | 'createdAt' | 'author'> & { file?: File | null }) => {
     onCreateNewVersion(contractId, newVersionData);
     setIsCreatingVersion(false);
   };
 
+  // 7. Early Returns (Logic)
+  if (isLoading) {
+    return <div className="flex items-center justify-center h-full"><LoaderIcon className="w-12 h-12 text-primary" /></div>;
+  }
+
+  if (error || !contract) {
+    return <div className="text-center py-10 text-red-500">{error || "Could not load contract."}</div>;
+  }
+
+  if (!viewedVersion) {
+    return (
+        <div>
+            <button onClick={onBack} className="flex items-center text-sm font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 mb-4">
+                <ArrowLeftIcon className="w-4 h-4 mr-2" />
+                Back to all contracts
+            </button>
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm mb-6">
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{contract.title}</h1>
+                 <div className="mt-4 text-center py-10">
+                    <FileTextIcon className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-gray-100">No Versions Available</h3>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">This contract currently has no versions. Please create one to proceed.</p>
+                    <div className="mt-6">
+                        <button
+                            onClick={() => setIsCreatingVersion(true)}
+                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                        >
+                            Create New Version
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {isCreatingVersion && ( <CreateVersionModal contract={contract} properties={properties} onClose={() => setIsCreatingVersion(false)} onSave={handleSaveNewVersion} /> )}
+        </div>
+    );
+  }
+  
+  // 8. More Helpers (safe to access contract and viewedVersion now)
+  const canEditContent = [ContractStatus.DRAFT, ContractStatus.IN_REVIEW].includes(contract.status);
+
   const handleCancelEdit = () => {
-    if (viewedVersion) {
-        setEditedContent(viewedVersion.content);
-    }
+    setEditedContent(viewedVersion.content);
     setIsDirty(false);
   };
 
   const handleSaveChanges = () => {
-    if (!isDirty || !contract || !viewedVersion) return;
+    if (!isDirty || !canEditContent) return;
     
     const { id, versionNumber, createdAt, author, comments, ...baseVersionData } = viewedVersion;
     
@@ -759,7 +812,6 @@ export default function ContractDetail({ contractId, properties, users, currentU
   };
   
   const handleRequestApproval = (approvers: UserProfile[], versionId: string) => {
-    if (!contract) return;
     onTransition(contract.id, ContractStatus.PENDING_APPROVAL, { approvers, draft_version_id: versionId });
     setIsRequestingApproval(false);
   };
@@ -773,7 +825,7 @@ export default function ContractDetail({ contractId, properties, users, currentU
   };
 
   const handleCompare = () => {
-      if (compareSelection.length === 2 && contract) {
+      if (compareSelection.length === 2) {
           const v1 = contract.versions.find(v => v.id === compareSelection[0]);
           const v2 = contract.versions.find(v => v.id === compareSelection[1]);
           if (v1 && v2) {
@@ -827,45 +879,6 @@ export default function ContractDetail({ contractId, properties, users, currentU
     );
   };
 
-  // END OF HOOKS AND HANDLERS
-
-  if (isLoading) {
-    return <div className="flex items-center justify-center h-full"><LoaderIcon className="w-12 h-12 text-primary" /></div>;
-  }
-
-  if (error || !contract) {
-    return <div className="text-center py-10 text-red-500">{error || "Could not load contract."}</div>;
-  }
-
-  if (!viewedVersion) {
-    return (
-        <div>
-            <button onClick={onBack} className="flex items-center text-sm font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 mb-4">
-                <ArrowLeftIcon className="w-4 h-4 mr-2" />
-                Back to all contracts
-            </button>
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm mb-6">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{contract.title}</h1>
-                 <div className="mt-4 text-center py-10">
-                    <FileTextIcon className="mx-auto h-12 w-12 text-gray-400" />
-                    <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-gray-100">No Versions Available</h3>
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">This contract currently has no versions. Please create one to proceed.</p>
-                    <div className="mt-6">
-                        <button
-                            onClick={() => setIsCreatingVersion(true)}
-                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                        >
-                            Create New Version
-                        </button>
-                    </div>
-                </div>
-            </div>
-            {isCreatingVersion && ( <CreateVersionModal contract={contract} properties={properties} onClose={() => setIsCreatingVersion(false)} onSave={handleSaveNewVersion} /> )}
-        </div>
-    );
-  }
-  
-  const canEditContent = [ContractStatus.DRAFT, ContractStatus.IN_REVIEW].includes(contract.status);
 
   return (
     <div>

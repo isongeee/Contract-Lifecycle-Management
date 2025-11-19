@@ -525,10 +525,10 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     setTheme(newTheme);
   };
 
-  const handleSelectContract = (contract: Contract) => {
+  const handleSelectContract = useCallback((contract: Contract) => {
     setSelectedContract(contract);
     setActiveView('contracts');
-  };
+  }, []);
 
   const handleBackToList = () => {
     setSelectedContract(null);

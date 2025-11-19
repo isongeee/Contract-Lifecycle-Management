@@ -1,34 +1,47 @@
-import React from 'react';
+
+import React, { Suspense } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import ContractsList from './components/ContractsList';
-import ContractDetail from './components/ContractDetail';
-import Dashboard from './components/Dashboard';
-import ApprovalsPage from './components/ApprovalsPage';
-import TemplatesList from './components/TemplatesList';
-import TemplateDetail from './components/TemplateDetail';
-import CounterpartiesList from './components/CounterpartiesList';
-import CounterpartyDetail from './components/CounterpartyDetail';
-import CreateContractWorkflow from './components/CreateContractWorkflow';
-import CreateCounterpartyWorkflow from './components/CreateCounterpartyWorkflow';
-import PropertiesList from './components/PropertiesList';
-import CreatePropertyWorkflow from './components/CreatePropertyWorkflow';
-import PropertyDetail from './components/PropertyDetail';
-import ProfilePage from './components/ProfilePage';
-import LoginPage from './components/LoginPage';
-import OrgSignUpPage from './components/OrgSignUpPage';
-import UserSignUpPage from './components/UserSignUpPage';
-import CompanySettingsPage from './components/CompanySettingsPage';
-import RenewalsPage from './components/RenewalsPage';
-import SigningPage from './components/SigningPage';
 import { LoaderIcon, AlertTriangleIcon } from './components/icons';
-import AddUserModal from './components/AddUserModal';
 import { useAppContext } from './contexts/AppContext';
 import { useAuth } from './contexts/AuthContext';
-import SearchResultsPage from './components/SearchResultsPage';
-import ReportingPage from './components/ReportingPage';
-import RenewalWorkspace from './components/RenewalWorkspace';
 
+// Lazy load page components to improve initial bundle size
+const ContractsList = React.lazy(() => import('./components/ContractsList'));
+const ContractDetail = React.lazy(() => import('./components/ContractDetail'));
+const Dashboard = React.lazy(() => import('./components/Dashboard'));
+const ApprovalsPage = React.lazy(() => import('./components/ApprovalsPage'));
+const TemplatesList = React.lazy(() => import('./components/TemplatesList'));
+const TemplateDetail = React.lazy(() => import('./components/TemplateDetail'));
+const CounterpartiesList = React.lazy(() => import('./components/CounterpartiesList'));
+const CounterpartyDetail = React.lazy(() => import('./components/CounterpartyDetail'));
+const PropertiesList = React.lazy(() => import('./components/PropertiesList'));
+const PropertyDetail = React.lazy(() => import('./components/PropertyDetail'));
+const ProfilePage = React.lazy(() => import('./components/ProfilePage'));
+const CompanySettingsPage = React.lazy(() => import('./components/CompanySettingsPage'));
+const RenewalsPage = React.lazy(() => import('./components/RenewalsPage'));
+const SigningPage = React.lazy(() => import('./components/SigningPage'));
+const SearchResultsPage = React.lazy(() => import('./components/SearchResultsPage'));
+const ReportingPage = React.lazy(() => import('./components/ReportingPage'));
+const RenewalWorkspace = React.lazy(() => import('./components/RenewalWorkspace'));
+
+// Lazy load auth pages
+const LoginPage = React.lazy(() => import('./components/LoginPage'));
+const OrgSignUpPage = React.lazy(() => import('./components/OrgSignUpPage'));
+const UserSignUpPage = React.lazy(() => import('./components/UserSignUpPage'));
+
+// Lazy load heavy modals/workflows
+const CreateContractWorkflow = React.lazy(() => import('./components/CreateContractWorkflow'));
+const CreateCounterpartyWorkflow = React.lazy(() => import('./components/CreateCounterpartyWorkflow'));
+const CreatePropertyWorkflow = React.lazy(() => import('./components/CreatePropertyWorkflow'));
+const AddUserModal = React.lazy(() => import('./components/AddUserModal'));
+
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center h-full w-full min-h-[200px]">
+    <LoaderIcon className="w-12 h-12 text-primary" />
+    <span className="ml-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Loading...</span>
+  </div>
+);
 
 export default function App() {
   // Use AuthContext for auth state
@@ -98,7 +111,7 @@ export default function App() {
 
   const renderContent = () => {
     if (isLoading) {
-        return ( <div className="flex items-center justify-center h-full"> <LoaderIcon className="w-12 h-12 text-primary" /> <span className="ml-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Loading Data...</span> </div> )
+        return <LoadingFallback />;
     }
     if (isAuthenticated && !currentUser) {
         return (
@@ -211,7 +224,13 @@ export default function App() {
             default: return <LoginPage />;
         }
     }
-    return ( <div className="bg-gray-50 dark:bg-gray-900 min-h-screen font-sans text-gray-900 dark:text-gray-100 flex items-center justify-center p-4"> {renderAuthContent()} </div> );
+    return ( 
+      <div className="bg-gray-50 dark:bg-gray-900 min-h-screen font-sans text-gray-900 dark:text-gray-100 flex items-center justify-center p-4"> 
+        <Suspense fallback={<LoadingFallback />}>
+          {renderAuthContent()} 
+        </Suspense>
+      </div> 
+    );
   }
 
   return (
@@ -220,23 +239,27 @@ export default function App() {
       <div className="flex-1 flex flex-col">
         <Header />
         <main className="flex-1 p-6 lg:p-8 overflow-y-auto">
-          {renderActiveView()}
+          <Suspense fallback={<LoadingFallback />}>
+            {renderActiveView()}
+          </Suspense>
         </main>
       </div>
-      {isCreatingContract && <CreateContractWorkflow
-        properties={properties}
-        counterparties={counterparties}
-        users={users}
-        onCancel={handleCancelCreate}
-        onFinish={handleFinalizeCreate}
-        currentUser={currentUser!}
-        initialData={initialCreateData}
-      />}
-      {isCreatingCounterparty && <CreateCounterpartyWorkflow />}
-      {editingCounterparty && <CreateCounterpartyWorkflow />}
-      {isCreatingProperty && <CreatePropertyWorkflow />}
-      {editingProperty && <CreatePropertyWorkflow />}
-      {isAddingUser && <AddUserModal />}
+      <Suspense fallback={null}>
+        {isCreatingContract && <CreateContractWorkflow
+            properties={properties}
+            counterparties={counterparties}
+            users={users}
+            onCancel={handleCancelCreate}
+            onFinish={handleFinalizeCreate}
+            currentUser={currentUser!}
+            initialData={initialCreateData}
+        />}
+        {isCreatingCounterparty && <CreateCounterpartyWorkflow />}
+        {editingCounterparty && <CreateCounterpartyWorkflow />}
+        {isCreatingProperty && <CreatePropertyWorkflow />}
+        {editingProperty && <CreatePropertyWorkflow />}
+        {isAddingUser && <AddUserModal />}
+      </Suspense>
     </div>
   );
 }

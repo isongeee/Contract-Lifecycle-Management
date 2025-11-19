@@ -42,7 +42,8 @@ export async function fetchContractsPage(
     query = query.in('status', Array.from(filters.status));
   }
   if (filters.search) {
-    query = query.or(`title.ilike.%${filters.search}%,counterparty.name.ilike.%${filters.search}%`);
+    // Using actual table name 'counterparties' for safer filtering on joined tables, rather than alias
+    query = query.or(`title.ilike.%${filters.search}%,counterparties.name.ilike.%${filters.search}%`);
   }
   if (filters.type) {
     query = query.eq('type', filters.type);

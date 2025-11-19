@@ -97,9 +97,36 @@ const StatusFilterDropdown = ({ selected, onChange }: { selected: Set<ContractSt
     );
 };
 
+const specialRiskOptions = [
+    ...riskOptions,
+    { value: 'HighAndCritical', label: 'High / Critical' }
+];
+
+interface SortableHeaderProps {
+    label: React.ReactNode;
+    columnKey: string;
+    sortConfig: { key: string; direction: 'asc' | 'desc' };
+    onSort: (key: string) => void;
+}
+
+const SortableHeader = ({ label, columnKey, sortConfig, onSort }: SortableHeaderProps) => {
+    const isActive = sortConfig.key === columnKey;
+    return (
+        <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+            <button onClick={() => onSort(columnKey)} className="flex items-center space-x-1 group">
+                <span>{label}</span>
+                <span className={`transition-opacity ${isActive ? 'opacity-100' : 'opacity-20 group-hover:opacity-100'}`}>
+                    {isActive && sortConfig.direction === 'asc' && <ArrowUpIcon className="h-4 w-4" />}
+                    {isActive && sortConfig.direction === 'desc' && <ArrowDownIcon className="h-4 w-4" />}
+                    {!isActive && <ArrowUpIcon className="h-4 w-4" />}
+                </span>
+            </button>
+        </th>
+    );
+};
 
 export default function ContractsList() {
-  const { handleSelectContract, handleStartCreate, initialFilters, currentUser, lastUpdated } = useAppContext();
+  const { handleSelectContract, handleStartCreate, initialFilters, currentUser, contracts: allContracts, lastUpdated } = useAppContext();
   
   const [contracts, setContracts] = useState<Partial<Contract>[]>([]);
   const [total, setTotal] = useState(0);
@@ -139,6 +166,7 @@ export default function ContractsList() {
   }, [searchTerm, visibleStatuses, typeFilter, riskFilter, frequencyFilter, ownerFilter]);
 
   useEffect(() => {
+    let isMounted = true;
     if (!currentUser?.companyId) return;
 
     setIsLoading(true);
@@ -155,12 +183,25 @@ export default function ContractsList() {
 
     fetchContractsPage(currentUser.companyId, currentPage, ITEMS_PER_PAGE, filters, sortConfig)
       .then(res => {
-        setContracts(res.items);
-        setTotal(res.total);
+        if (isMounted) {
+            setContracts(res.items);
+            setTotal(res.total);
+        }
       })
-      .catch(err => setError(err.message ?? 'Failed to load contracts'))
-      .finally(() => setIsLoading(false));
+      .catch(err => {
+        if (isMounted) {
+            setError(err.message ?? 'Failed to load contracts');
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+            setIsLoading(false);
+        }
+      });
 
+    return () => {
+        isMounted = false;
+    };
   }, [currentUser?.companyId, currentPage, searchTerm, visibleStatuses, typeFilter, riskFilter, frequencyFilter, ownerFilter, sortConfig, lastUpdated]);
 
   
@@ -178,27 +219,6 @@ export default function ContractsList() {
     setRiskFilter('');
     setFrequencyFilter('');
     setOwnerFilter('');
-  };
-
-  const specialRiskOptions = [
-      ...riskOptions,
-      { value: 'HighAndCritical', label: 'High / Critical' }
-  ];
-
-  const SortableHeader = ({ label, columnKey }: { label: React.ReactNode; columnKey: string }) => {
-    const isActive = sortConfig.key === columnKey;
-    return (
-        <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
-            <button onClick={() => handleSort(columnKey)} className="flex items-center space-x-1 group">
-                <span>{label}</span>
-                <span className={`transition-opacity ${isActive ? 'opacity-100' : 'opacity-20 group-hover:opacity-100'}`}>
-                    {isActive && sortConfig.direction === 'asc' && <ArrowUpIcon className="h-4 w-4" />}
-                    {isActive && sortConfig.direction === 'desc' && <ArrowDownIcon className="h-4 w-4" />}
-                    {!isActive && <ArrowUpIcon className="h-4 w-4" />}
-                </span>
-            </button>
-        </th>
-    );
   };
   
   if (!currentUser) return null;
@@ -251,11 +271,11 @@ export default function ContractsList() {
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
             <tr>
-              <SortableHeader columnKey="title" label="Title" />
-              <SortableHeader columnKey="counterparty" label="Counterparty" />
-              <SortableHeader columnKey="status" label="Status" />
-              <SortableHeader columnKey="value" label="Value" />
-              <SortableHeader columnKey="endDate" label="End Date" />
+              <SortableHeader columnKey="title" label="Title" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader columnKey="counterparty" label="Counterparty" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader columnKey="status" label="Status" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader columnKey="value" label="Value" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader columnKey="endDate" label="End Date" sortConfig={sortConfig} onSort={handleSort} />
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -264,7 +284,10 @@ export default function ContractsList() {
             ) : error ? (
                 <tr><td colSpan={5} className="text-center py-10 text-red-500">{error}</td></tr>
             ) : contracts.map((contract) => (
-              <tr key={contract.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => handleSelectContract(contract as Contract)}>
+              <tr key={contract.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => {
+                  const fullContract = allContracts.find(c => c.id === contract.id);
+                  handleSelectContract(fullContract || (contract as Contract));
+              }}>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{contract.title}</div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">{contract.type}</div>

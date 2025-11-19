@@ -99,7 +99,7 @@ const StatusFilterDropdown = ({ selected, onChange }: { selected: Set<ContractSt
 
 
 export default function ContractsList() {
-  const { handleSelectContract, handleStartCreate, initialFilters, currentUser } = useAppContext();
+  const { handleSelectContract, handleStartCreate, initialFilters, currentUser, contracts: allContracts } = useAppContext();
   
   const [contracts, setContracts] = useState<Partial<Contract>[]>([]);
   const [total, setTotal] = useState(0);
@@ -264,7 +264,10 @@ export default function ContractsList() {
             ) : error ? (
                 <tr><td colSpan={5} className="text-center py-10 text-red-500">{error}</td></tr>
             ) : contracts.map((contract) => (
-              <tr key={contract.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => handleSelectContract(contract.id!)}>
+              <tr key={contract.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => {
+                  const fullContract = allContracts.find(c => c.id === contract.id);
+                  handleSelectContract(fullContract || (contract as Contract));
+              }}>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{contract.title}</div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">{contract.type}</div>
