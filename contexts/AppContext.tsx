@@ -691,7 +691,7 @@ export const AppProvider = ({ children }: { children?: React.ReactNode }) => {
     if (newContractData.propertyAllocations && newContractData.propertyAllocations.length > 0) {
       const allocationRecords = newContractData.propertyAllocations.map((alloc: any) => ({
         contract_id: insertedContract.id,
-        property_id: alloc.propertyId === 'portfolio' ? null : alloc.propertyId,
+        property_id: (alloc.propertyId && typeof alloc.propertyId === 'string' && alloc.propertyId !== 'portfolio') ? alloc.propertyId : null,
         allocated_value: alloc.allocatedValue,
         monthly_values: alloc.monthlyValues,
         manual_edits: alloc.manualEdits,

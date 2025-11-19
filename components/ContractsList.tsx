@@ -126,7 +126,14 @@ const SortableHeader = ({ label, columnKey, sortConfig, onSort }: SortableHeader
 };
 
 export default function ContractsList() {
-  const { handleSelectContract, handleStartCreate, initialFilters, currentUser, contracts: allContracts, lastUpdated } = useAppContext();
+  const { 
+    handleSelectContract, 
+    handleStartCreate, 
+    initialFilters, 
+    currentUser, 
+    contracts: globalContracts, // Import global cache to perform optimistic updates
+    lastUpdated 
+  } = useAppContext();
   
   const [contracts, setContracts] = useState<Partial<Contract>[]>([]);
   const [total, setTotal] = useState(0);
@@ -165,6 +172,7 @@ export default function ContractsList() {
     setCurrentPage(1);
   }, [searchTerm, visibleStatuses, typeFilter, riskFilter, frequencyFilter, ownerFilter]);
 
+  // 1. Main Fetch Effect: Triggered by page change, filters, or 'lastUpdated' (hard refetch)
   useEffect(() => {
     let isMounted = true;
     if (!currentUser?.companyId) return;
@@ -203,6 +211,39 @@ export default function ContractsList() {
         isMounted = false;
     };
   }, [currentUser?.companyId, currentPage, searchTerm, visibleStatuses, typeFilter, riskFilter, frequencyFilter, ownerFilter, sortConfig, lastUpdated]);
+
+  // 2. Reactive Patch Effect: 
+  // Updates the currently visible list items instantly if their data changes in the global cache.
+  // This avoids the flickering of a full loading spinner for minor status updates.
+  useEffect(() => {
+    if (contracts.length === 0) return;
+
+    setContracts(currentList => {
+      let hasChanges = false;
+      const updatedList = currentList.map(localContract => {
+        const freshContract = globalContracts.find(gc => gc.id === localContract.id);
+        
+        // If we find a newer version in global state with different status/value, update locally
+        if (freshContract && (
+            freshContract.status !== localContract.status || 
+            freshContract.value !== localContract.value ||
+            freshContract.endDate !== localContract.endDate
+        )) {
+           hasChanges = true;
+           return {
+             ...localContract,
+             status: freshContract.status,
+             endDate: freshContract.endDate,
+             value: freshContract.value,
+             // We don't replace the whole object to preserve specific list-view fields if any
+           };
+        }
+        return localContract;
+      });
+
+      return hasChanges ? updatedList : currentList;
+    });
+  }, [globalContracts, contracts.length]);
 
   
   const handleSort = (key: string) => {
@@ -285,7 +326,7 @@ export default function ContractsList() {
                 <tr><td colSpan={5} className="text-center py-10 text-red-500">{error}</td></tr>
             ) : contracts.map((contract) => (
               <tr key={contract.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => {
-                  const fullContract = allContracts.find(c => c.id === contract.id);
+                  const fullContract = globalContracts.find(c => c.id === contract.id);
                   handleSelectContract(fullContract || (contract as Contract));
               }}>
                 <td className="px-6 py-4 whitespace-nowrap">

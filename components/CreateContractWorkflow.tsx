@@ -389,7 +389,10 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                 updates.propertyAllocations = [];
             }
         } else if (allocationType === 'multi') {
-            updates.property = properties.find((p: Property) => p.id === (isSeasonal ? seasonalAllocations[0]?.propertyId : multiAllocations[0]?.propertyId));
+            // Determine main property based on the first allocation in the list
+            const primaryPropertyId = isSeasonal ? seasonalAllocations[0]?.propertyId : multiAllocations[0]?.propertyId;
+            updates.property = properties.find((p: Property) => p.id === primaryPropertyId);
+            
             if (isSeasonal) {
                 updates.propertyAllocations = seasonalAllocations.map(({ id, propertyId, ...rest }, index) => ({
                     id: `alloc-${Date.now()}-${index}`,
@@ -398,8 +401,9 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                     allocatedValue: (Object.values(rest.monthlyValues) as number[]).reduce((sum, v) => sum + (v || 0), 0)
                 }));
             } else {
-                 updates.propertyAllocations = multiAllocations.map(({ id, manualEdits, ...rest }: MultiPropertyAllocation, index) => ({
+                 updates.propertyAllocations = multiAllocations.map(({ id, manualEdits, propertyId, ...rest }: MultiPropertyAllocation, index) => ({
                     id: `alloc-${Date.now()}-${index}`,
+                    propertyId,
                     ...rest,
                  }));
             }
@@ -534,6 +538,17 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
     const remainingValue = (data.value || 0) - totalAllocated;
     const isAllocationValid = Math.abs(remainingValue) < 0.01;
 
+    // Validation for Property Selections
+    const isPropertySelectionValid = () => {
+        if (allocationType === 'single') return !!singlePropertyId;
+        if (allocationType === 'multi') {
+            if (isSeasonal) return seasonalAllocations.every(row => !!row.propertyId);
+            return multiAllocations.every(row => !!row.propertyId);
+        }
+        // portfolio doesn't require propertyId
+        return true;
+    };
+
     return (
         <div>
             <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Property & Cost Allocation</h2>
@@ -619,7 +634,7 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                                                         {properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}
                                                     </SelectInput>) :
                                                 allocationType === 'multi' ?
-                                                    (<SelectInput value={alloc.propertyId} onChange={e => handleAllocationChange(alloc.id, 'propertyId', e.target.value)}>{properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}</SelectInput>) :
+                                                    (<SelectInput value={alloc.propertyId} onChange={e => handleAllocationChange(alloc.id, 'propertyId', e.target.value)}><option value="">Select property...</option>{properties.map((p: Property) => <option key={p.id} value={p.id}>{p.name}</option>)}</SelectInput>) :
                                                     (<span className="text-sm font-medium text-gray-700 dark:text-gray-300">Portfolio-wide</span>)
                                                 }
                                             </td>
@@ -658,8 +673,8 @@ const Stage3_PropertyAndCost = ({ data, properties, onBack, onNext, setData }: a
                     onClick={handleProceed} 
                     type="button" 
                     className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-900 shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={!isAllocationValid}
-                    title={!isAllocationValid ? 'Total allocated value must equal total contract value.' : ''}
+                    disabled={!isAllocationValid || !isPropertySelectionValid()}
+                    title={!isAllocationValid ? 'Total allocated value must equal total contract value.' : !isPropertySelectionValid() ? 'Please select a property for all allocation rows.' : ''}
                 >Next</button>
             </div>
         </div>
